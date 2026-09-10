@@ -4,7 +4,8 @@
 
 - Repository: `sirvan0010-alt/load2`
 - Branch: `main`
-- Commit audited: `811d424497435be94bbae34df96c7cfbf8eec453`
+- Audit baseline commit: `811d424497435be94bbae34df96c7cfbf8eec453`
+- Latest audit-ledger commit: maintained on `main`
 - Audit method: static source inspection against the actual repository tree and code; no claim of successful local `dotnet test`/`dotnet build` unless CI evidence exists.
 - `load2` structure is confirmed as a normal solution layout: `src/MailLoadTester.Core`, `src/MailLoadTester.Gui`, `tests/MailLoadTester.Tests`, `installer`, and root `MailLoadTester.sln`.
 - `Load-tester-` remains the historical/source-of-truth reference for reconciliation; `load2` is now the correctly structured audit target.
@@ -77,13 +78,24 @@ In Direct MX mode the code resolves MX only for `options.Recipients[0]` and then
 
 **Status:** OPEN
 
+## Audit round — concurrency / circuit breaker
+
+### SmtpConnectionPool
+The current `load2` implementation was inspected for permit ownership, lease/return/discard transitions, shutdown races, and in-flight connection handling. No additional confirmed defect was added in this pass. The implementation explicitly protects lease state and the shutdown hand-off with lifecycle synchronization.
+
+### AdaptiveConcurrencyLimiter
+Inspected acquire/cancel/release/reset behavior. The waiter cancellation path and permit hand-off are synchronized under the same lock, and `Reset()` intentionally preserves `_active`. No additional confirmed defect was established in this pass.
+
+### CircuitBreaker
+Inspected sliding-window state, cooldown reset, per-category openings, and conditional removal of cooldown entries. The implementation uses conditional removal to avoid erasing a newer opening. No additional confirmed defect was established in this pass.
+
 ## Verification blockers
 
 The repository structure is now confirmed, but source inspection alone cannot establish a clean build/test result. The next verification step on Windows is:
 
 ```text
 dotnet test
- dotnet build -c Release
+dotnet build -c Release
 ```
 
 Recommended smoke coverage:
