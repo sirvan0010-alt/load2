@@ -44,7 +44,6 @@ public sealed class SmartPaceControllerTests
     [Fact]
     public async Task GlobalSpacing_WithConcurrency_RespectsInterval()
     {
-        // 5 paralelních workerů, interval 50 ms → 8 zpráv by mělo trvat ≥ ~7*50 ms
         const int intervalMs = 50;
         const int messages = 8;
         var pace = new SmartPaceController(BaseOptions(intervalMs));
@@ -58,7 +57,6 @@ public sealed class SmartPaceControllerTests
         await Task.WhenAll(tasks);
         sw.Stop();
 
-        // Dolní bound: (messages-1) * interval * 0.7 (tolerance na scheduler)
         var minExpected = TimeSpan.FromMilliseconds((messages - 1) * intervalMs * 0.7);
         Assert.True(sw.Elapsed >= minExpected,
             $"Elapsed {sw.Elapsed.TotalMilliseconds:F0} ms < expected min {minExpected.TotalMilliseconds:F0} ms — spacing není globální?");
@@ -83,6 +81,7 @@ public sealed class SmartPaceControllerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => pace.WaitBeforeSendAsync("x@test.local", cts.Token));
     }
+
     [Fact]
     public async Task Cancellation_RemovesOnlyItsOwnReservation()
     {
@@ -102,8 +101,6 @@ public sealed class SmartPaceControllerTests
         firstCts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
 
-        // The second worker must keep its reservation. The buggy RemoveLast()
-        // implementation removed the second worker's slot here.
         Assert.Equal(1, pace.ScheduledReservationCount);
 
         secondCts.Cancel();
@@ -115,12 +112,9 @@ public sealed class SmartPaceControllerTests
     public async Task SuccessfulReservation_IsRemovedAfterWait()
     {
         var pace = new SmartPaceController(BaseOptions(20));
-
         await pace.WaitBeforeSendAsync("success@test.local", CancellationToken.None);
-
         Assert.Equal(0, pace.ScheduledReservationCount);
     }
-
 
     [Fact]
     public async Task PerRecipientLimit_DoesNotConsumeGlobalSlotWhileBlocked()
@@ -133,9 +127,6 @@ public sealed class SmartPaceControllerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => pace.WaitBeforeSendAsync("same@test.local", cts.Token));
 
-        // The recipient was blocked before global pacing. No global slot may
-        // be consumed merely by waiting for the recipient window.
         Assert.Equal(0, pace.ScheduledReservationCount);
     }
-
 }
