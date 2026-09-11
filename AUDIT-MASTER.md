@@ -15,9 +15,8 @@ Confirmed:
 - **BUG-002 HIGH:** auto-restart repeats the complete message set and can duplicate successful deliveries because no per-message delivery ledger exists.
 - **BUG-007 HIGH:** retry delay does not reserve a new global `SmartPaceController` slot.
 - **BUG-008:** runner-level Direct MX logic resolves the first recipient domain only. Current `Validation.Validate()` rejects mixed-domain Direct MX configurations, so the unsafe mixed-domain path is currently blocked at the public validation boundary; structural hardening remains required.
-- **BUG-003 MEDIUM:** first pacing reservation remains pending targeted runtime verification.
-
-No additional Phase-1 defect was confirmed during this pass beyond the registered findings.
+- **BUG-003 MEDIUM:** first global pacing reservation is statically confirmed to wait one full interval when the schedule is initially empty.
+- **BUG-009 HIGH:** global pacing is reserved before adaptive/pool admission, so it does not strictly guarantee spacing between actual `SendAsync` operations under downstream contention.
 
 ## Phase 2 — Networking / configuration correctness — AUDITED
 
@@ -44,9 +43,10 @@ Positive evidence: custom header values reject CR/LF; validation rejects `..` se
 
 ## Phase 4 — Concurrency / state machines — AUDITED STATICALLY
 
-Checked the interaction model among `CircuitBreaker`, `RateLimiter`, `SmartPaceController`, `AdaptiveConcurrencyLimiter`, `PerRecipientLimiter` and `SmtpConnectionPool`, including permit ownership and shutdown/cancellation transitions. Historical focused inspections of `SmtpConnectionPool`, `AdaptiveConcurrencyLimiter` and `CircuitBreaker` found no additional confirmed race.
+Checked the interaction model among `CircuitBreaker`, `RateLimiter`, `SmartPaceController`, `AdaptiveConcurrencyLimiter`, `PerRecipientLimiter` and `SmtpConnectionPool`, including permit ownership and shutdown/cancellation transitions. Individual limiter/pool inspections found no additional confirmed primitive race.
 
-Primary composition defect remains **BUG-001**: the runner's task scheduling model is not a strict worker model even though the pool itself has bounded lease permits.
+Composition defect confirmed:
+- **BUG-009 HIGH:** pacing slot reservation occurs before adaptive concurrency and SMTP pool admission. Internal pacing state is synchronized, but the end-to-end execution path does not preserve the promised actual-send spacing when later admission is delayed.
 
 Not runtime-verified: full cross-component stress/cancellation matrix.
 
@@ -54,6 +54,9 @@ Not runtime-verified: full cross-component stress/cancellation matrix.
 
 Confirmed primary performance defect:
 - **BUG-001 / PERF-AUDIT-001:** task-per-message scheduling can create excessive task/state pressure for high `MessageCount`.
+
+Additional correctness/performance interaction:
+- **BUG-009:** unnecessary queued pacing reservations plus downstream admission can create schedule churn and out-of-order actual sends.
 
 Reviewed attachment preloading/safety, progress throttling, session-log buffering, connection reuse and dry-run paths. No additional confirmed defect was established from static inspection.
 
@@ -83,9 +86,9 @@ Feature opportunities remain separate in `FEATURE-BACKLOG.md`. Safe candidates i
 
 ## Phase 1–7 conclusion
 
-**AUDIT COMPLETE (static/source level).** The confirmed defect ledger remains BUG-001 through BUG-008. No new confirmed bug was promoted solely from suspicion. Several security/network/concurrency items require runtime/integration evidence and remain `NOT VERIFIED`.
+**TARGETED DEEP AUDIT COMPLETE.** The audit found two additional source-confirmed defects beyond the previous ledger: **BUG-003** (first pacing slot) and **BUG-009** (pacing reservation does not compose correctly with downstream admission). The confirmed ledger is now BUG-001 through BUG-009.
 
-The next action is **Phase 8 — final verification and regression execution**, not another audit phase. Required evidence is listed in `FIX-PLAN.md`.
+The audit should now stop. Next is **repair of the registered defects**, followed by Phase 8 verification. No PASS/FIXED claim without execution evidence or trustworthy CI evidence.
 
 ## Phase 8 — Final verification — NOT STARTED
 
@@ -105,5 +108,3 @@ Required evidence:
 13. path/security tests
 14. profile round-trip
 15. final repository-integrity review
-
-No PASS claim without execution evidence or trustworthy CI evidence.
