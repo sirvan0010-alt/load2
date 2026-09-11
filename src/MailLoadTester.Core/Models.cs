@@ -30,38 +30,28 @@ public sealed record MailTestOptions(
     bool IgnoreCertificateErrors,
     int MaxRetries,
     bool DryRun,
-    // Tier 2/3
     bool UseSocks5Proxy = false,
     string ProxyHost = "",
     int ProxyPort = 1080,
     string ProxyUsername = "",
     string ProxyPassword = "",
-    /// <summary>Seznam proxy pro rotaci (řádky/středník). Formát socks5://host:1080 nebo http://user:pass@host:8080.</summary>
     string ProxyList = "",
     bool ProxyListRandom = false,
-    /// <summary>Minuty vyřazení proxy/IP po detekci banu.</summary>
     int ProxyBanMinutes = 15,
     bool DirectMxDelivery = false,
     bool PreWarmConnections = false,
     bool UseAdaptiveConcurrency = false,
     bool UseCircuitBreaker = false,
     int CircuitBreakerThreshold = 5,
-    /// <summary>Velikost sliding okna pro % chybovost (0 = jen klasický consecutive režim).</summary>
     int CircuitBreakerWindowSize = 100,
-    /// <summary>Práh chybovosti v okně v % (např. 90 = otevřít při ≥90 % selhání).</summary>
     double CircuitBreakerFailurePercent = 90.0,
     bool EnableDashboard = false,
     int DashboardPort = 5000,
-    // Max brutal
     SmtpAuthMethod AuthMethod = SmtpAuthMethod.Auto,
     string SourceIp = "",
-    /// <summary>Volitelný IPv6 prefix pro rotaci source adres (např. 2001:db8:85a3:0::). Prázdné = vypnuto.</summary>
     string Ipv6Prefix = "",
-    /// <summary>Délka IPv6 prefixu v bitech (typicky 64).</summary>
     int Ipv6PrefixLength = 64,
-    /// <summary>Rotace IPv4 source: seznam IP nebo CIDR (192.0.2.10,192.0.2.11 nebo 192.0.2.0/28). Prázdné = vypnuto.</summary>
     string Ipv4Rotation = "",
-    /// <summary>true = náhodný výběr z poolu, false = round-robin.</summary>
     bool Ipv4RotationRandom = false,
     string ClientCertificatePath = "",
     string ClientCertificatePassword = "",
@@ -80,16 +70,12 @@ public sealed record MailTestOptions(
     int AutoRestartMaxAttempts = 3,
     string? EmlTemplatePath = null,
     int IdleConnectionHealthCheckSeconds = 30,
-    // Randomized message-content test options. Defaults preserve legacy behavior.
     bool UseBogusData = false,
     bool GenerateRandomHtml = false,
     bool GenerateRandomAttachments = false,
     int MaxRandomAttachments = 2,
     bool VarySubjectBodyPerMessage = false,
-    // 0 = automatic safe size based on available memory and MaxConcurrency.
     int RandomAttachmentSizeMb = 0,
-    // ========== Tempo a ochrana (2.9.x) ==========
-    // Aggressive | Standard | Gentle | Custom (nebo Id z ProviderPresets)
     string PaceProfile = "Standard",
     bool EnableJitter = true,
     int JitterPercent = 15,
@@ -182,11 +168,10 @@ public static class Validation
     public static bool ContainsPathTraversal(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
-        var normalized = path.Replace('\', '/');
+        var normalized = path.Replace('\\', '/');
         var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return parts.Any(part => part == "..");
     }
-
 
     public static void Validate(MailTestOptions o)
     {
@@ -332,7 +317,6 @@ public static class Validation
         if (o.RandomAttachmentSizeMb is < 0 or > 128)
             throw new ArgumentException("Velikost náhodné přílohy musí být 0 (Auto) až 128 MB.");
 
-        // Tempo a ochrana
         if (o.JitterPercent is < 0 or > 50)
             throw new ArgumentException("Jitter musí být 0–50 %.");
         if (o.BurstSize is < 1 or > 100)
@@ -400,13 +384,9 @@ public static class Validation
                 ? $"SMTP {code}: {sce.Message}"
                 : $"SMTP {code}: {sce.Message} — {hint}";
         }
-        if (ex is MailKit.Security.AuthenticationException)
-            return "Autentizace selhala: " + ex.Message;
-        if (ex is MailKit.Net.Smtp.SmtpProtocolException)
-            return "Chyba SMTP protokolu: " + ex.Message;
         if (ex is TimeoutException)
-            return "Vypršel časový limit spojení se SMTP serverem.";
-        if (ex is IOException)
+            return "Vypršel časový limit spojení se serverem.";
+        if (ex is System.Net.Sockets.SocketException)
             return "Síťová chyba: " + ex.Message;
         return ex.Message;
     }
