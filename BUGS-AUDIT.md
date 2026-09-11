@@ -4,11 +4,14 @@
 
 - Repository: `sirvan0010-alt/load2`
 - Branch: `main`
-- Audit baseline commit: `811d424497435be94bbae34df96c7cfbf8eec453`
-- Latest audit-ledger commit: maintained on `main`
+- Latest audit baseline: current `main`
 - Audit method: static source inspection against the actual repository tree and code; no claim of successful local `dotnet test`/`dotnet build` unless CI evidence exists.
-- `load2` structure is confirmed as a normal solution layout: `src/MailLoadTester.Core`, `src/MailLoadTester.Gui`, `tests/MailLoadTester.Tests`, `installer`, and root `MailLoadTester.sln`.
-- `Load-tester-` remains the historical/source-of-truth reference for reconciliation; `load2` is now the correctly structured audit target.
+- `load2` is the **sole source of truth**.
+- `load` is a secondary/parallel copy only.
+- `Load-tester-` is legacy and must not be used for new implementation.
+- Master audit register: `AUDIT-MASTER.md`.
+- Master repair plan: `FIX-PLAN.md`.
+- Proposed features: `FEATURE-BACKLOG.md`.
 
 ## Confirmed findings
 
@@ -56,7 +59,7 @@ CIDR expansion needs explicit handling for `/31`. Under RFC 3021 semantics both 
 ### BUG-006 — MEDIUM — Repository integrity/build layout must stay protected
 **Location:** repository structure
 
-The historical `load` repository contained flattened source files and Git-internal artifacts. `load2` has now been verified to contain the intended project structure and a solution referencing the structured project paths. This finding remains as a repository-integrity control item: future changes must not reintroduce flattened source files or Git-internal files.
+The historical `load` repository contained flattened source files and Git-internal artifacts. `load2` has the intended structured solution layout. This finding remains as a repository-integrity control item: future changes must not reintroduce flattened source files or Git-internal files.
 
 **Status:** OPEN as preventive/integrity item; `load2` structure itself is currently CORRECT.
 
@@ -89,27 +92,18 @@ Inspected acquire/cancel/release/reset behavior. The waiter cancellation path an
 ### CircuitBreaker
 Inspected sliding-window state, cooldown reset, per-category openings, and conditional removal of cooldown entries. The implementation uses conditional removal to avoid erasing a newer opening. No additional confirmed defect was established in this pass.
 
+## Audit-first rule
+
+The repository is audited phase-by-phase before interconnected repairs are implemented. New confirmed defects go here and into `AUDIT-MASTER.md`. New ideas go into `FEATURE-BACKLOG.md`. A finding is not marked FIXED until source, callers, regression tests and verification evidence support that status.
+
 ## Verification blockers
 
-The repository structure is now confirmed, but source inspection alone cannot establish a clean build/test result. The next verification step on Windows is:
+Source inspection alone cannot establish a clean build/test result. Required final evidence:
 
 ```text
-dotnet test
+dotnet restore
 dotnet build -c Release
+dotnet test -c Release
 ```
 
-Recommended smoke coverage:
-
-- Start → Stop during SMTP connect
-- Direct MX with one domain
-- Direct MX with multiple recipient domains
-- proxy list with partially blocked endpoints
-- `/31` and `/32` IPv4 rotation
-- AutoRestart after partial failure
-- retry pacing with `IntervalMs > 0`
-- dry-run with high `MessageCount` and `MaxConcurrency`
-- profile round-trip
-
-## Audit rule
-
-Only confirmed defects are added here. Suspicions remain outside the confirmed list until source/caller/test evidence establishes the failure mode.
+Recommended smoke coverage is maintained in `AUDIT-MASTER.md` and `FIX-PLAN.md`.
