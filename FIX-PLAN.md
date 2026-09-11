@@ -2,106 +2,155 @@
 
 > **SOURCE OF TRUTH: `sirvan0010-alt/load2`, branch `main`.**
 >
-> This document consolidates the repair ledger and audit-progress documents previously maintained in the parallel `load` repository. Historical copies remain secondary references only.
+> This is the master execution plan. The workflow is now audit-first: inspect all eight phases, register all confirmed defects and feature opportunities, then repair interconnected items as groups and finish with a release verification gate.
+
+## Repository authority
+
+- `sirvan0010-alt/load2` / `main` = sole source of truth.
+- `sirvan0010-alt/load` = secondary/parallel copy only.
+- `sirvan0010-alt/Load-tester-` = legacy; do not use for new implementation.
 
 ## Rules
 
 - Verify every item against the current `load2/main` source before changing code.
-- A finding is not FIXED because a comment claims it is fixed; source + callers + regression test must support the status.
-- Do not copy implementation from `load` or `Load-tester-` merely because it exists there. Reconcile against `load2/main` first.
+- A finding is not FIXED because a comment claims it is fixed; source + callers + regression test + verification evidence must support the status.
+- Do not copy implementation from secondary/legacy repositories merely because it exists there.
 - Keep network/SMTP transport separate from message/payload generation.
 - Preserve asynchronous/thread-safe behavior, `SemaphoreSlim`, `Volatile`, and `CancellationToken` semantics.
 - Security/load-testing behavior remains explicitly authorized and bounded.
 - Build/test results must not be claimed unless actually executed or supported by CI evidence.
+- New feature ideas are recorded separately from bugs and are not treated as implemented.
 
-## Current open repair backlog
+## Master audit register
 
-| ID | Severity | Area | Status | Next action |
-|---|---|---|---|---|
-| BUG-001 | High | SmtpTestRunner / global concurrency | OPEN | Replace unbounded per-message task creation with bounded worker/channel model; add regression test. |
-| BUG-002 | High | SmtpTestRunner / auto-restart | OPEN | Resume only unfinished message indexes, or explicitly define whole-test rerun semantics; add duplicate-delivery regression test. |
-| BUG-003 | Medium | SmartPaceController / first send | OPEN | Verify first reservation is immediate; add timing/regression test. |
-| BUG-004 | Medium | ProxyRotator / random selection | OPEN | Select only currently unblocked endpoints without replacement; add repeated-selection test. |
-| BUG-005 | Medium | IpV4Rotator / /31 | OPEN | Handle `/31` as two addresses and `/32` as one; add regression tests. |
-| BUG-006 | Medium | Repository integrity | OPEN-preventive | Protect canonical `src/`, `tests/`, `installer/` layout and prevent Git-internal artifacts from returning. |
-| BUG-007 | High | Retry pacing | OPEN | Re-enter global pacing before each retry; add concurrent retry timing test. |
-| BUG-008 | High | Direct MX multi-domain routing | OPEN | Resolve/cache MX per recipient domain or reject mixed-domain input explicitly; add multi-domain regression test. |
+`AUDIT-MASTER.md` is the canonical phase-by-phase audit register.
 
-## Completed deep-audit findings
+`BUGS-AUDIT.md` is the confirmed defect ledger.
 
-The previous deep audit recorded 10 concrete findings as fixed. These are historical completed items and must remain traceable, but should not be reimplemented blindly:
+`FEATURE-BACKLOG.md` contains proposed improvements.
 
-1. `EmlTemplateParser`: avoid duplicate `HtmlBody` read; dispose `MimeMessage`; improve `MemoryStream` capacity handling.
-2. `RandomTestData.CreatePaddedPng`: protect small buffer sizes; regression coverage added.
-3. `AdaptiveConcurrencyLimiter`: fix grant/cancellation race that could leak permits; stress test added.
-4. `SmartPaceController`: cache parsed warm-up phases.
-5. `IpV4Rotator`: enforce CIDR expansion limit during enumeration to prevent explosive allocation/OOM risk.
-6. `IpBindingHelper`: derive socket address family from the actual source endpoint when `IpVersion=Any` and a source IP is supplied.
-7. `MxResolver`: distinguish confirmed negative DNS results from transient query failure; use short failure caching instead of poisoning the full negative cache period.
-8. `CircuitBreaker`: preserve the previously added sticky `EverOpened` behavior.
-9. `SmtpConnectionPool`: lifecycle/permit/shutdown race fixes, including in-flight TLS certificate protection.
-10. `SmtpSessionLogger`: preserve buffered diagnostics when disk write fails, with a bounded retry buffer.
+## Phase 1 — Correctness / execution model
 
-These historical fixes are documented in the source audit material and should be re-verified when touching the affected components.
+Audit first:
+- full message scheduling and worker lifecycle;
+- MaxConcurrency semantics;
+- retries and delivery accounting;
+- auto-restart semantics;
+- pacing and retry pacing;
+- direct-MX recipient routing;
+- result/statistics correctness;
+- exception classification.
 
-## Round 4 / next audit backlog
+Known findings: BUG-001, BUG-002, BUG-007, BUG-008.
 
-### Completed in the previous round
+Repair after phase-wide audit: bounded worker/channel execution, unique-message accounting, retry pacing and per-domain MX routing.
 
-- Full `SmtpConnectionPool` pass: no additional confirmed race found.
-- Silent `catch {}` occurrences classified; idle reconnect logging improved.
-- `SmtpSessionLogger` failed-write buffer handling fixed.
-- `MainForm` lifecycle shutdown issue fixed with cancellation/waiting and defensive UI invocation checks.
-- Integer/size overflow paths in attachment planning checked; no confirmed issue.
+## Phase 2 — Networking / configuration correctness
 
-### Explicitly NOT VERIFIED yet
+Audit:
+- SMTP connection pool;
+- proxy rotation/ban state;
+- IPv4/IPv6 binding and rotation;
+- DNS/MX resolution;
+- TLS modes and certificate validation;
+- source-IP and proxy interactions;
+- connection reuse/health checks.
 
-1. **AUTH secret redaction end-to-end test** — fake SMTP AUTH LOGIN/PLAIN flow must prove neither plaintext password nor its base64 representation reaches protocol/session logs.
-2. **Path validation audit** — EML templates, attachments, inline attachments, profiles, exports and webhook-related paths; examine UNC, junction/symlink and invalid-access behavior where applicable.
-3. **Cross-component concurrency audit** — `CircuitBreaker` ↔ `RateLimiter` ↔ `SmartPaceController` ↔ `AdaptiveConcurrencyLimiter` ↔ `PerRecipientLimiter` ↔ `SmtpConnectionPool` as one state machine.
-4. **Cancellation audit of Core** — systematically inspect awaits and verify correct propagation/handling of `CancellationToken`.
-5. **Build/test verification** — run from a clean checkout:
+Known findings: BUG-004, BUG-005.
 
-```text
-dotnet restore
-dotnet build -c Release
-dotnet test -c Release
-```
+Pending verification: BUG-003 and TLS/network interaction matrix.
 
-## Recommended execution order
+## Phase 3 — Security / robustness
 
-### Phase A — correctness blockers
-1. Run clean `dotnet restore`, `dotnet build -c Release`, `dotnet test -c Release` on Windows/CI.
-2. Fix BUG-001 global worker bound.
-3. Fix BUG-002 auto-restart semantics.
-4. Fix BUG-007 retry pacing.
-5. Fix BUG-008 direct-MX multi-domain routing.
+Audit:
+- AUTH secret redaction;
+- credential/configuration sources;
+- `--unauthorized` safety gate;
+- path traversal/UNC/junction/symlink handling;
+- EML and attachment quotas;
+- webhook/export paths;
+- logging of sensitive protocol data;
+- cancellation during network and filesystem operations.
 
-### Phase B — networking/configuration correctness
-6. Fix BUG-004 proxy selection.
-7. Fix BUG-005 `/31` handling.
-8. Verify BUG-003 first pacing slot.
+Required evidence: fake-SMTP AUTH integration test and targeted path/security tests.
 
-### Phase C — security and robustness verification
-9. AUTH secret redaction integration test.
-10. Full cancellation audit.
-11. Cross-component concurrency/state-machine audit.
-12. Path/UNC/symlink audit.
+## Phase 4 — Concurrency / state machines
 
-### Phase D — final release gate
-13. Full test suite.
-14. Release build.
-15. Smoke tests:
-   - Start → Stop during SMTP connect
-   - Direct MX, one domain
-   - Direct MX, multiple domains
-   - partially blocked proxy list
-   - `/31` and `/32` source rotation
-   - auto-restart after partial failure
-   - retry pacing with `IntervalMs > 0`
-   - high `MessageCount` with low `MaxConcurrency` in dry-run
-   - profile round-trip
-16. Update `BUGS-AUDIT.md` and this plan only from verified evidence.
+Audit the combined state machine:
+
+`CircuitBreaker ↔ RateLimiter ↔ SmartPaceController ↔ AdaptiveConcurrencyLimiter ↔ PerRecipientLimiter ↔ SmtpConnectionPool`
+
+Check permit ownership, reservation rollback, cancellation, shutdown, fairness, deadlocks, starvation and duplicate release. Re-run concurrency tests after any runner/pool changes.
+
+## Phase 5 — Performance / resource lifecycle
+
+Audit:
+- task allocation under large MessageCount;
+- MIME allocation and disposal;
+- attachment memory/file handles;
+- progress-report pressure;
+- observed-response collection;
+- session logging backpressure;
+- connection reuse;
+- CPU and memory behavior in dry-run and real SMTP modes.
+
+Optimize only after correctness semantics are established.
+
+## Phase 6 — GUI / UX / operability
+
+Audit:
+- Start/Stop lifecycle;
+- UI cancellation and shutdown;
+- progress/ETA/statistics consistency;
+- dashboard lifecycle;
+- profile handling;
+- error presentation;
+- safe defaults and minimal configuration.
+
+Historical MainForm shutdown fix must be reverified after runner changes.
+
+## Phase 7 — Architecture / maintainability / feature opportunities
+
+Audit:
+- `IMailPayloadPlugin` lifecycle/discovery/thread safety;
+- transport vs payload separation;
+- options/default/validation duplication;
+- test coverage mapping;
+- observability model;
+- opportunities for automation and diagnostics.
+
+Proposals go to `FEATURE-BACKLOG.md`. Defensive diagnostics such as SPF/DKIM/DMARC, TLS capability checks and bounded open-relay verification may be considered. Flooding, mailbombing, spam, DoS/DDoS behavior is outside the implementation target.
+
+## Phase 8 — Final verification / release gate
+
+Only after phases 1–7 and grouped repairs:
+
+1. clean `dotnet restore`;
+2. `dotnet build -c Release`;
+3. `dotnet test -c Release`;
+4. targeted regression tests for every fixed finding;
+5. cancellation/start-stop smoke tests;
+6. direct-MX one-domain and multi-domain tests;
+7. proxy partial-ban tests;
+8. IPv4 `/31` and `/32` tests;
+9. retry pacing tests;
+10. auto-restart partial-failure/duplicate-delivery test;
+11. high MessageCount + low MaxConcurrency dry-run test;
+12. AUTH log-redaction test;
+13. path/security tests;
+14. profile round-trip;
+15. final repository-tree/integrity review.
+
+## Current status
+
+- Phase 1 audit: IN PROGRESS; BUG-001/002/007/008 confirmed from current source.
+- Phase 2 audit: IN PROGRESS; BUG-004/005 carried forward; broader network/TLS matrix pending.
+- Phase 3: NOT VERIFIED.
+- Phase 4: partial historical review completed; full cross-component audit pending.
+- Phase 5: NOT VERIFIED.
+- Phase 6: historical lifecycle fix exists; post-refactor verification pending.
+- Phase 7: feature backlog initialized; architecture audit pending.
+- Phase 8: BLOCKED until phases 1–7 and repair verification are complete.
 
 ## Status semantics
 
@@ -113,4 +162,4 @@ dotnet test -c Release
 
 ## Provenance
 
-Consolidated from the audit/repair records found in the parallel `load` repository, including `BUGS-AUDIT.md`, `AUDIT-FIXES-DEEP-PHASE1-3.md`, and `AUDIT-ROUND4-PROGRESS.md`, then reconciled with the current `load2/main` audit ledger. `load2/main` remains authoritative.
+This plan consolidates the previous audit/repair records while treating the current `load2/main` tree as authoritative. Historical audit documents remain evidence/history, not implementation authority.
