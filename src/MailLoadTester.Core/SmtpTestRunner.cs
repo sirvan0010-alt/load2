@@ -669,7 +669,6 @@ public sealed class SmtpTestRunner
                             DeliveryStepKind.Error, false,
                             includeObserved: true);
                     }
-                    }
                     finally
                     {
                         if (!recipientCommitted)
