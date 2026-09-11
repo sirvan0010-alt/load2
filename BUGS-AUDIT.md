@@ -4,106 +4,108 @@
 
 - Repository: `sirvan0010-alt/load2`
 - Branch: `main`
-- Latest audit baseline: current `main`
-- Audit method: static source inspection against the actual repository tree and code; no claim of successful local `dotnet test`/`dotnet build` unless CI evidence exists.
-- `load2` is the **sole source of truth**.
-- `load` is a secondary/parallel copy only.
+- `load2` is the sole source of truth.
+- `load` is secondary/parallel only.
 - `Load-tester-` is legacy and must not be used for new implementation.
-- Master audit register: `AUDIT-MASTER.md`.
-- Master repair plan: `FIX-PLAN.md`.
-- Proposed features: `FEATURE-BACKLOG.md`.
+- Phase 1–7 source audit is complete; Phase 8 verification is still pending.
+- A defect is marked fixed only with source evidence, caller review, regression coverage and verification evidence.
 
-## Confirmed findings
+## Confirmed / registered findings
 
 ### BUG-001 — HIGH — MaxConcurrency is not a global execution bound
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
 
-`RunSingleAsync` creates one asynchronous task for every message in each batch. When adaptive concurrency is disabled, there is no global worker limiter around the full message pipeline. The SMTP pool limits leased SMTP clients, but it does not limit queued tasks, MIME generation, pacing, dry-run work, or other per-message processing. In particular, dry-run execution can run all batch tasks concurrently despite `MaxConcurrency`.
+`RunSingleAsync` creates one asynchronous task for every message in a batch. The SMTP pool limits leased SMTP clients but does not bound queued tasks, MIME generation, pacing, dry-run work or other per-message processing. `MaxConcurrency` is therefore not a strict global worker bound.
 
-**Impact:** high `MessageCount` can create excessive task/state overhead and CPU/memory pressure; `MaxConcurrency` does not mean a strict global worker limit.
+**Impact:** high `MessageCount` can create excessive task/state/CPU/memory pressure.
 
 **Status:** OPEN
 
 ### BUG-002 — HIGH — Auto-restart can duplicate successful deliveries
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
 
-When `AutoRestartOnFailure` is enabled and a run has more failures than successes, `RunAsync` starts the whole message set again with reduced concurrency. Messages already accepted successfully by the SMTP server can therefore be sent again. The returned aggregate counts both attempts, but there is no per-message durable delivery ledger that prevents duplicates.
+`RunAsync` reruns the complete message set after a mostly-failed attempt. There is no per-message delivery ledger, so messages already accepted by the SMTP server can be sent again.
 
-**Impact:** duplicate deliveries and ambiguous load-test results.
+**Impact:** duplicate deliveries and ambiguous unique-message accounting.
 
 **Status:** OPEN
 
-### BUG-003 — MEDIUM — First global pacing reservation can unnecessarily wait one full interval
-**Location:** `src/MailLoadTester.Core/SmartPaceController.cs` / global pacing path
+### BUG-003 — MEDIUM — First global pacing reservation may wait one full interval
+**Location:** `src/MailLoadTester.Core/SmartPaceController.cs`
 
-The global pacing implementation reserves future slots. The first reservation must be verified to start immediately when no prior reservation exists; otherwise the first send is delayed by one complete interval. This is a latency/throughput correctness issue for configured interval pacing.
+The first global reservation must start immediately when no prior reservation exists. This remains a targeted runtime verification item; static inspection alone is insufficient to promote it beyond pending verification.
 
-**Status:** OPEN pending targeted runtime/test verification.
+**Status:** OPEN — pending targeted verification
 
 ### BUG-004 — MEDIUM — Proxy rotation can sample blocked endpoints repeatedly
 **Location:** `src/MailLoadTester.Core/ProxyRotator.cs`
 
-Random proxy selection can select from the full collection with replacement while blocked entries remain eligible for the random draw. Under partial bans this can repeatedly sample blocked proxies and can report no usable proxy even though an unblocked endpoint exists.
+Random selection can draw from the full collection while blocked entries remain eligible. Under partial bans this can repeatedly choose blocked endpoints or falsely exhaust the pool.
 
-**Impact:** avoidable connection failures and false exhaustion of the proxy pool.
+**Impact:** avoidable connection failures and false proxy exhaustion.
 
 **Status:** OPEN
 
 ### BUG-005 — MEDIUM — IPv4 `/31` handling can lose one usable address
 **Location:** `src/MailLoadTester.Core/IpV4Rotator.cs`
 
-CIDR expansion needs explicit handling for `/31`. Under RFC 3021 semantics both addresses in a point-to-point `/31` are usable. Treating the network/broadcast pair using ordinary subnet rules can return only one address. `/32` remains a single address.
+`/31` needs explicit RFC 3021 point-to-point semantics: both addresses are usable. Ordinary network/broadcast handling can otherwise discard one address. `/32` remains one address.
 
 **Status:** OPEN
 
 ### BUG-006 — MEDIUM — Repository integrity/build layout must stay protected
 **Location:** repository structure
 
-The historical `load` repository contained flattened source files and Git-internal artifacts. `load2` has the intended structured solution layout. This finding remains as a repository-integrity control item: future changes must not reintroduce flattened source files or Git-internal files.
+`load2` currently has the intended structured solution layout. The finding is retained as a preventive control against reintroducing flattened source files or Git-internal artifacts.
 
-**Status:** OPEN as preventive/integrity item; `load2` structure itself is currently CORRECT.
+**Status:** OPEN — preventive/integrity control
 
 ### BUG-007 — HIGH — Retry delay bypasses global pacing
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
 
-The initial send reserves the pacing slot through `SmartPaceController.WaitBeforeSendAsync`, but a transient failure enters the retry loop and waits only through exponential `Task.Delay(GetRetryDelay(...))`. The retry does not acquire a new global pacing slot before the next SMTP send.
+Initial sends reserve a slot through `SmartPaceController.WaitBeforeSendAsync`, while retry attempts wait only through exponential `Task.Delay(...)`. A retry therefore does not reserve a new global pacing slot.
 
-**Impact:** retries can create bursts and violate the configured global send spacing even though normal sends respect the pacing controller.
+**Impact:** retries can burst and violate configured global spacing.
 
 **Status:** OPEN
 
-### BUG-008 — HIGH — Direct MX delivery resolves only the first recipient domain
+### BUG-008 — HIGH — Direct MX implementation resolves only the first recipient domain
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
 
-In Direct MX mode the code resolves MX only for `options.Recipients[0]` and then replaces `options.SmtpHost` with that MX host. The normal message loop subsequently selects recipients independently from the recipient list. Therefore a mixed-domain recipient list can send messages for other domains to the MX selected for the first domain.
+The runner's Direct MX path resolves the first recipient's domain and replaces `SmtpHost` with that MX. However, current `Validation.Validate()` rejects a Direct MX configuration containing more than one recipient domain before the runner proceeds. Therefore the mixed-domain defect is currently blocked at the public validation boundary, but the runner logic remains structurally unsafe if validation is bypassed or reused differently in future code.
 
-**Impact:** incorrect SMTP routing for multi-domain test sets; results do not represent the actual destination MX path and messages may be rejected or misrouted.
+**Impact:** without the validation guard, mixed-domain messages could be routed to the first domain's MX.
 
-**Status:** OPEN
+**Status:** OPEN — validation mitigation present; runner hardening still required
 
-## Audit round — concurrency / circuit breaker
+## Investigation items — not promoted to confirmed bugs
 
-### SmtpConnectionPool
-The current `load2` implementation was inspected for permit ownership, lease/return/discard transitions, shutdown races, and in-flight connection handling. No additional confirmed defect was added in this pass. The implementation explicitly protects lease state and the shutdown hand-off with lifecycle synchronization.
+### SEC-AUDIT-001 — AUTH secret redaction — NOT VERIFIED
+`SessionProtocolLogger` receives SMTP client protocol bytes and exposes `AuthenticationSecretDetector`, but source inspection alone does not establish end-to-end masking for the custom logger. A fake-SMTP AUTH LOGIN/PLAIN integration test must prove that plaintext and encoded credentials never reach the session log. Do not label this a confirmed leak until the runtime evidence exists.
 
-### AdaptiveConcurrencyLimiter
-Inspected acquire/cancel/release/reset behavior. The waiter cancellation path and permit hand-off are synchronized under the same lock, and `Reset()` intentionally preserves `_active`. No additional confirmed defect was established in this pass.
+### SEC-AUDIT-002 — Filesystem path boundary — NOT VERIFIED
+Complete audit still requires UNC, junction/symlink and canonical-path behavior across EML templates, attachments, inline attachments, profiles, exports and webhook-related paths.
 
-### CircuitBreaker
-Inspected sliding-window state, cooldown reset, per-category openings, and conditional removal of cooldown entries. The implementation uses conditional removal to avoid erasing a newer opening. No additional confirmed defect was established in this pass.
+### SEC-AUDIT-003 — Secret provenance — NOT VERIFIED
+Verify all credential/password inputs and configuration paths; source comments are not sufficient evidence that no hardcoded secret exists elsewhere in the application.
 
-## Audit-first rule
+### SEC-AUDIT-004 — `--unauthorized` gate — NOT VERIFIED
+Verify the CLI/network execution gate end-to-end and prove DryRun performs no network send.
 
-The repository is audited phase-by-phase before interconnected repairs are implemented. New confirmed defects go here and into `AUDIT-MASTER.md`. New ideas go into `FEATURE-BACKLOG.md`. A finding is not marked FIXED until source, callers, regression tests and verification evidence support that status.
+### CONC-AUDIT-001 — Cross-component concurrency — NOT VERIFIED
+The individual limiter/pool inspections found no additional confirmed race, but the complete combined state machine requires runtime stress/cancellation evidence.
 
-## Verification blockers
+### CONC-AUDIT-002 — Core cancellation — NOT VERIFIED
+Complete token propagation and cleanup verification remains part of Phase 8 regression execution.
 
-Source inspection alone cannot establish a clean build/test result. Required final evidence:
+### NET-AUDIT-001 — Network interaction matrix — NOT VERIFIED
+Source-IP rotation, proxy selection and IPv4/IPv6 socket-family combinations require integration coverage.
 
-```text
-dotnet restore
-dotnet build -c Release
-dotnet test -c Release
-```
+### NET-AUDIT-002 — TLS matrix — NOT VERIFIED
+Plain/STARTTLS/implicit TLS, certificate validation, client certificates, timeout and cancellation transitions require runtime coverage.
 
-Recommended smoke coverage is maintained in `AUDIT-MASTER.md` and `FIX-PLAN.md`.
+## Phase 1–7 conclusion
+
+No new confirmed defect was promoted from suspicion during the final audit pass. The authoritative confirmed/registered ledger remains BUG-001 through BUG-008, with BUG-008 explicitly mitigated at the validation boundary.
+
+Phase 8 is the next step: build/test execution plus targeted integration and smoke verification. No item is marked FIXED merely because a code comment claims it is fixed.
