@@ -53,8 +53,8 @@ public sealed class SmtpTestRunner
 
             // Restart only from the current attempt's unresolved failures. The ledger
             // keeps previously accepted logical messages out of the retry population.
-            var mostlyFailed = result.Requested > 0 && result.Failed > result.Sent;
-            if (!mostlyFailed || attempt > options.AutoRestartMaxAttempts) break;
+            var hasRecoverableFailures = result.Failed > 0;
+            if (!hasRecoverableFailures || attempt > options.AutoRestartMaxAttempts) break;
 
             var newConcurrency = Math.Max(1, current.MaxConcurrency / 2);
             progress.Report(new ProgressUpdate(
@@ -179,10 +179,10 @@ public sealed class SmtpTestRunner
             UpdateDashboard(s, f, status, eta, fsm.Phase.ToString());
         }
 
-        void ReportPathEvents(int s, int f, int? i, int? workerId, SmtpClient client)
+        void ReportPathEvents(int s, int f, int? i, int? workerId, SmtpClient client, SmtpConnectionPool pathPool)
         {
             // Path: only publish failure or final success colors, not every intermediate C:/S: line under load
-            foreach (var (step, ok, detail) in pool!.DrainPathEvents(client))
+            foreach (var (step, ok, detail) in pathPool.DrainPathEvents(client))
             {
                 if (ok == true && step is not (DeliveryStepKind.Data or DeliveryStepKind.Quit or DeliveryStepKind.Error))
                 {
@@ -533,7 +533,7 @@ public sealed class SmtpTestRunner
                                         MessageStep.RentingConnection, i, workerId,
                                         DeliveryStepKind.TcpConnect, null);
                                     client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
-                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
+                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
 
                                     // Po úspěšném Rent: TCP + EHLO (+ STARTTLS + AUTH podle konfigurace) proběhly
                                     // TCP/EHLO/STARTTLS/AUTH barvy z ProtocolPathObserver (skutečné C:/S: řádky)
@@ -574,7 +574,7 @@ public sealed class SmtpTestRunner
                                             await client.SendAsync(message, workerCt).ConfigureAwait(false);
                                     }
 
-                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
+                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
                                     pool.Return(client);
                                     client = null;
                                 }
@@ -830,7 +830,7 @@ public sealed class SmtpTestRunner
 
         return new MailTestResult(options.MessageCount, sent, failed, sw.Elapsed, lastError,
             avg, min, max, p50, p95, p99, throughput, cancelled, activeThroughput, retries, smtp4xx, smtp5xx, timeouts, poolConnections,
-            adaptiveConcurrency, circuitOpen, mxRecords?.Select(r => r.Host).ToList() ?? Array.Empty<string>());
+            adaptiveConcurrency, circuitOpen, (IReadOnlyList<string>)(mxRecords?.Select(r => r.Host).ToList() ?? new List<string>()));
     }
 
     static MimeMessage BuildMessage(
