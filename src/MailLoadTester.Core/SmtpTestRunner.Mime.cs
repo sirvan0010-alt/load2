@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using MailKit.Net.Smtp;
 using MimeKit;
 
 namespace MailLoadTester;
@@ -36,9 +37,7 @@ public sealed partial class SmtpTestRunner
         foreach (var attachment in attachments)
         {
             if (attachment.PreloadedContent is not null)
-            {
                 builder.Attachments.Add(attachment.FileName, attachment.PreloadedContent);
-            }
             else
             {
                 var mimePart = new MimePart("application", "octet-stream")
