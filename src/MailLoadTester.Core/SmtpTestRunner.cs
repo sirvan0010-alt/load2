@@ -12,23 +12,23 @@ public sealed class SmtpTestRunner
     /// Spustí test. Pokud je zapnutý AutoRestartOnFailure, celý test se po
     /// "většinovém selhání" (víc zpráv selhalo než uspělo, a nebylo to STOPnuté
     /// uživatelem) automaticky zopakuje s napůl sníženým paralelismem, max.
-    /// AutoRestartMaxAttempts-krát. Vrací výsledek posledního pokusu.
+    /// AutoRestartMaxAttempts-krát. Delivery ledger zajišťuje, že již přijaté
+    /// zprávy se při restartu nikdy neposílají znovu.
     /// </summary>
     public async Task<MailTestResult> RunAsync(
         MailTestOptions options,
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
+        var ledger = new DeliveryLedger(options.MessageCount);
+
         if (!options.AutoRestartOnFailure)
-            return await RunSingleAsync(options, progress, ct, attemptIndex: 0).ConfigureAwait(false);
+            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger).ConfigureAwait(false);
 
         var current = options;
         MailTestResult result;
         int attempt = 0;
 
-        // Aggregate across restarts — last-run-only under-reports Sent/throughput.
-        var sumSent = 0;
-        var sumFailed = 0;
         var sumRetries = 0;
         var sumSmtp4xx = 0;
         var sumSmtp5xx = 0;
@@ -38,11 +38,9 @@ public sealed class SmtpTestRunner
 
         while (true)
         {
-            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt).ConfigureAwait(false);
+            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger).ConfigureAwait(false);
             attempt++;
 
-            sumSent += result.Sent;
-            sumFailed += result.Failed;
             sumRetries += result.Retries;
             sumSmtp4xx += result.Smtp4xx;
             sumSmtp5xx += result.Smtp5xx;
@@ -53,11 +51,15 @@ public sealed class SmtpTestRunner
 
             if (result.Cancelled) break;
 
+            // Restart only from the current attempt's unresolved failures. The ledger
+            // keeps previously accepted logical messages out of the retry population.
             var mostlyFailed = result.Requested > 0 && result.Failed > result.Sent;
             if (!mostlyFailed || attempt > options.AutoRestartMaxAttempts) break;
 
             var newConcurrency = Math.Max(1, current.MaxConcurrency / 2);
-            progress.Report(new ProgressUpdate(sumSent, sumFailed,
+            progress.Report(new ProgressUpdate(
+                ledger.CountAccepted(),
+                ledger.CountFailed(),
                 $"Auto-restart {attempt}/{options.AutoRestartMaxAttempts}: poslední běh {result.Failed}/{result.Requested} selhalo — " +
                 $"snižuji paralelismus {current.MaxConcurrency}→{newConcurrency} a zkouším znovu za 3 s…",
                 null, 0, "Auto-restart", ""));
@@ -77,15 +79,17 @@ public sealed class SmtpTestRunner
         var elapsedSec = totalElapsed.TotalSeconds;
         return result with
         {
-            Sent = sumSent,
-            Failed = sumFailed,
+            // Final delivery counters are unique logical message counts, never the
+            // sum of attempts. An Accepted message is terminal and is never retried.
+            Sent = ledger.CountAccepted(),
+            Failed = ledger.CountFailed(),
             Retries = sumRetries,
             Smtp4xx = sumSmtp4xx,
             Smtp5xx = sumSmtp5xx,
             Timeouts = sumTimeouts,
             Elapsed = totalElapsed,
             LastError = lastError,
-            ThroughputPerSec = elapsedSec > 0 ? sumSent / elapsedSec : 0,
+            ThroughputPerSec = elapsedSec > 0 ? ledger.CountAccepted() / elapsedSec : 0,
             AutoRestartAttempts = Math.Max(0, attempt - 1)
         };
     }
@@ -94,7 +98,8 @@ public sealed class SmtpTestRunner
         MailTestOptions options,
         IProgress<ProgressUpdate> progress,
         CancellationToken ct,
-        int attemptIndex)
+        int attemptIndex,
+        DeliveryLedger ledger)
     {
         var fsm = new TestStateMachine();
         var pace = new SmartPaceController(options);
@@ -395,6 +400,12 @@ public sealed class SmtpTestRunner
 
                 async Task ProcessMessageAsync(int i, int workerId)
                 {
+                    // Stable logical identity = existing message index (1..MessageCount).
+                    // Accepted messages are terminal and are skipped on every AutoRestart.
+                    // Failed messages become claimable again on the next attempt.
+                    if (!ledger.TryClaim(i))
+                        return;
+
                     Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"QUEUE #{i} · W{workerId}", null, 3,
                         $"Zpráva #{i} ve frontě · W{workerId}", "Rate limit",
                         MessageStep.Queued, i, workerId);
@@ -412,6 +423,7 @@ public sealed class SmtpTestRunner
                     var recipient = options.Recipients[(i - 1) % options.Recipients.Count];
                     var recipientCommitted = false;
                     var adaptiveAcquired = false;
+                    var ledgerAccepted = false;
 
                     try
                     {
@@ -425,6 +437,7 @@ public sealed class SmtpTestRunner
                     catch
                     {
                         pace.ReleaseRecipient(recipient);
+                        ledger.MarkFailed(i);
                         throw;
                     }
 
@@ -651,25 +664,32 @@ public sealed class SmtpTestRunner
                         var explained = lastEx != null ? Validation.ExplainSmtpError(lastEx) : "";
                         if (success)
                         {
-                            var s = Interlocked.Increment(ref sent);
-                            latencies.Add(msgSw.Elapsed.TotalMilliseconds);
-                            var done = s + Volatile.Read(ref failed);
-                            var eta = EstimateEta(done, options.MessageCount, startTime, sw);
-                            var label = options.DryRun ? "DRY-RUN OK" : "OK";
-                            var remain = options.MessageCount - done;
-                            // Snapshot observed každých 10 OK nebo vždy při chybě (níže)
-                            Report(s, Volatile.Read(ref failed),
-                                $"{label} #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms)", eta, 3,
-                                $"Hotovo #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms) · celkem OK {s}",
-                                remain > 0
-                                    ? $"Zbývá odeslat ~{remain} zpráv" + (options.MaxConcurrency > 1 ? $" (až {options.MaxConcurrency} najednou)" : "")
-                                    : "Souhrn a statistiky",
-                                MessageStep.Succeeded, i, workerId,
-                                DeliveryStepKind.Quit, true,
-                                includeObserved: s % 10 == 0 || remain == 0);
+                            // SMTP SendAsync returning successfully means the logical message
+                            // was accepted. Commit it exactly once in the shared ledger.
+                            if (ledger.TryMarkAccepted(i))
+                            {
+                                ledgerAccepted = true;
+                                var s = Interlocked.Increment(ref sent);
+                                latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                                var done = s + Volatile.Read(ref failed);
+                                var eta = EstimateEta(done, options.MessageCount, startTime, sw);
+                                var label = options.DryRun ? "DRY-RUN OK" : "OK";
+                                var remain = options.MessageCount - ledger.CountAccepted() - ledger.CountFailed();
+                                // Snapshot observed každých 10 OK nebo vždy při chybě (níže)
+                                Report(s, Volatile.Read(ref failed),
+                                    $"{label} #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms)", eta, 3,
+                                    $"Hotovo #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms) · celkem OK {ledger.CountAccepted()}",
+                                    remain > 0
+                                        ? $"Zbývá odeslat ~{remain} zpráv" + (options.MaxConcurrency > 1 ? $" (až {options.MaxConcurrency} najednou)" : "")
+                                        : "Souhrn a statistiky",
+                                    MessageStep.Succeeded, i, workerId,
+                                    DeliveryStepKind.Quit, true,
+                                    includeObserved: s % 10 == 0 || remain == 0);
+                            }
                         }
                         else
                         {
+                            ledger.MarkFailed(i);
                             var f = Interlocked.Increment(ref failed);
                             Interlocked.Exchange(ref lastError, explained);
                             var done = Volatile.Read(ref sent) + f;
@@ -686,6 +706,11 @@ public sealed class SmtpTestRunner
                     }
                     finally
                     {
+                        // If cancellation/exception happened after the logical claim but
+                        // before acceptance, leave the message retryable for AutoRestart.
+                        if (!ledgerAccepted)
+                            ledger.MarkFailed(i);
+
                         if (!recipientCommitted)
                             pace.ReleaseRecipient(recipient);
 
