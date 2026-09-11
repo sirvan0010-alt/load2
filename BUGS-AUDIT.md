@@ -30,12 +30,14 @@
 
 **Status:** OPEN
 
-### BUG-003 — MEDIUM — First global pacing reservation may wait one full interval
+### BUG-003 — MEDIUM — First global pacing reservation waits one full interval
 **Location:** `src/MailLoadTester.Core/SmartPaceController.cs`
 
-The first global reservation must start immediately when no prior reservation exists. This remains a targeted runtime verification item; static inspection alone is insufficient to promote it beyond pending verification.
+`ReserveGlobalSlot()` sets the first slot to `now + intervalTicks` because `_schedule.Last?.Value ?? now` is followed unconditionally by `reservedSlot = nextAvailable + intervalTicks`. With an empty schedule and a positive interval, the very first message therefore waits a full configured interval instead of starting immediately.
 
-**Status:** OPEN — pending targeted verification
+**Impact:** unnecessary startup latency and lower measured throughput for short tests.
+
+**Status:** CONFIRMED — OPEN
 
 ### BUG-004 — MEDIUM — Proxy rotation can sample blocked endpoints repeatedly
 **Location:** `src/MailLoadTester.Core/ProxyRotator.cs`
@@ -78,6 +80,17 @@ The runner's Direct MX path resolves the first recipient's domain and replaces `
 
 **Status:** OPEN — validation mitigation present; runner hardening still required
 
+### BUG-009 — HIGH — Global pacing reserves time before concurrency/pool admission, so actual SEND spacing is not guaranteed
+**Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs` + `src/MailLoadTester.Core/SmartPaceController.cs`
+
+The runner calls `WaitBeforeSendAsync()` first. That method reserves and waits for a global schedule slot, then the worker separately waits for `RateLimiter`/`AdaptiveConcurrencyLimiter` and, for real SMTP, `SmtpConnectionPool.RentAsync()`. A worker can therefore receive an earlier pacing slot, become delayed behind adaptive concurrency or SMTP connection admission, while a later worker reaches `SendAsync()` first. The configured global interval is consequently a reservation spacing, not a guaranteed spacing between actual SMTP sends.
+
+**Impact:** under contention or connection churn, observed SMTP SEND timestamps can violate the configured global spacing even though the pacing controller itself is internally synchronized.
+
+**Required regression:** deterministic test with a controlled second-stage delay proving actual send order/timestamps cannot collapse below the configured spacing.
+
+**Status:** CONFIRMED — OPEN
+
 ## Investigation items — not promoted to confirmed bugs
 
 ### SEC-AUDIT-001 — AUTH secret redaction — NOT VERIFIED
@@ -106,6 +119,6 @@ Plain/STARTTLS/implicit TLS, certificate validation, client certificates, timeou
 
 ## Phase 1–7 conclusion
 
-No new confirmed defect was promoted from suspicion during the final audit pass. The authoritative confirmed/registered ledger remains BUG-001 through BUG-008, with BUG-008 explicitly mitigated at the validation boundary.
+The targeted deep audit promoted two additional source-confirmed defects: **BUG-003** (first pacing slot) and **BUG-009** (pacing composition with downstream admission). The confirmed ledger is now BUG-001 through BUG-009.
 
 Phase 8 is the next step: build/test execution plus targeted integration and smoke verification. No item is marked FIXED merely because a code comment claims it is fixed.
