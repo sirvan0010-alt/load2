@@ -25,6 +25,7 @@ public sealed class SmtpTestRunner
         var current = options;
         MailTestResult result;
         int attempt = 0;
+
         // Aggregate across restarts — last-run-only under-reports Sent/throughput.
         var sumSent = 0;
         var sumFailed = 0;
@@ -60,8 +61,8 @@ public sealed class SmtpTestRunner
                 $"Auto-restart {attempt}/{options.AutoRestartMaxAttempts}: poslední běh {result.Failed}/{result.Requested} selhalo — " +
                 $"snižuji paralelismus {current.MaxConcurrency}→{newConcurrency} a zkouším znovu za 3 s…",
                 null, 0, "Auto-restart", ""));
-            current = current with { MaxConcurrency = newConcurrency };
 
+            current = current with { MaxConcurrency = newConcurrency };
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
@@ -118,8 +119,8 @@ public sealed class SmtpTestRunner
                 dashboard = null;
             }
         }
-        var dashboardSw = Stopwatch.StartNew();
 
+        var dashboardSw = Stopwatch.StartNew();
         void UpdateDashboard(int s, int f, string status, double? eta, string phase)
         {
             if (dashboard is null) return;
@@ -148,7 +149,6 @@ public sealed class SmtpTestRunner
             var setup = phase <= 2;
             var pathFail = pathOk == false;
             var milestone = terminal && s > 0 && s % 25 == 0;
-
             if (!setup && !terminal && !pathFail && !includeObserved)
             {
                 var now = Environment.TickCount64;
@@ -171,7 +171,6 @@ public sealed class SmtpTestRunner
                 fsm.Phase, step, messageIndex, workerId, options.MaxConcurrency,
                 pathStep, pathOk, pace.StatusText, pace.CurrentIntervalMs,
                 includeObserved ? observed?.Snapshot() : null));
-
             UpdateDashboard(s, f, status, eta, fsm.Phase.ToString());
         }
 
@@ -194,6 +193,7 @@ public sealed class SmtpTestRunner
                         lastReportTicks = now;
                     }
                 }
+
                 progress.Report(new ProgressUpdate(s, f,
                     detail, null, 3, detail, "",
                     fsm.Phase, null, i, workerId, options.MaxConcurrency,
@@ -261,6 +261,7 @@ public sealed class SmtpTestRunner
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
         var startTime = DateTime.UtcNow;
+
         // Globální spacing skutečných SMTP SEND operací zajišťuje SmartPaceController.
         // RateLimiter zde nepřidává druhé čekání.
         var rateLimiter = new RateLimiter(0);
@@ -275,6 +276,7 @@ public sealed class SmtpTestRunner
                 failureRatePercent: options.CircuitBreakerFailurePercent)
             : null;
         var bandwidth = options.BandwidthLimitKbps > 0 ? new BandwidthLimiter(options.BandwidthLimitKbps) : null;
+
         MimeKit.FormatOptions? utf8Format = null;
         if (options.SmtpUtf8)
         {
@@ -334,6 +336,7 @@ public sealed class SmtpTestRunner
                 merged.Add(new AttachmentSource(fileName, "", content, content.LongLength));
             attachmentPlan = attachmentPlan with { Sources = merged };
         }
+
         if (attachmentPlan.Sources.Count > 0)
             Report(0, 0, $"Přílohy: {attachmentPlan.Description}", null, 1,
                 "Přílohy připraveny: " + (attachmentPlan.Preloaded ? "v RAM" : "z disku"),
@@ -346,7 +349,6 @@ public sealed class SmtpTestRunner
             "Odesílání zpráv" + (options.MaxConcurrency > 1 ? $" (paralelismus {options.MaxConcurrency})" : ""));
 
         SmtpConnectionPool? pool = null;
-
         try
         {
             if (!options.DryRun)
@@ -376,8 +378,14 @@ public sealed class SmtpTestRunner
                 // the number of active message workers.
                 using var batchCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 var workerCt = batchCts.Token;
+
+                var workerCount = Math.Max(1, options.MaxConcurrency);
+                var channelCapacity = (int)Math.Min(
+                    int.MaxValue,
+                    (long)workerCount * 2);
+
                 var workChannel = Channel.CreateBounded<int>(
-                    new BoundedChannelOptions(Math.Max(1, options.MaxConcurrency) * 2)
+                    new BoundedChannelOptions(channelCapacity)
                     {
                         FullMode = BoundedChannelFullMode.Wait,
                         SingleWriter = true,
@@ -404,10 +412,10 @@ public sealed class SmtpTestRunner
                     var recipient = options.Recipients[(i - 1) % options.Recipients.Count];
                     var recipientCommitted = false;
                     var adaptiveAcquired = false;
+
                     try
                     {
                         await rateLimiter.WaitAsync(workerCt).ConfigureAwait(false);
-
                         if (adaptive != null)
                         {
                             await adaptive.AcquireAsync(workerCt).ConfigureAwait(false);
@@ -422,258 +430,268 @@ public sealed class SmtpTestRunner
 
                     try
                     {
-                    if (options.GenerateRandomAttachments)
-                    {
-                        // The initial preflight can become stale if another application
-                        // consumes RAM during a long test. Re-check immediately before
-                        // generating each message's large random payload.
-                        var runtimeSafety = AttachmentPlanner.EstimateRandomAttachments(
-                            randomAttachmentSizeMb, options.MaxRandomAttachments, options.MaxConcurrency);
-                        if (!runtimeSafety.IsSafe)
-                            throw new InvalidOperationException(
-                                "RAM safety re-check rejected random attachment generation before allocation. " +
-                                runtimeSafety.Explanation);
-                    }
-
-                    var data = options.RandomTestData || options.UseBogusData ||
-                               options.GenerateRandomHtml || options.GenerateRandomAttachments ||
-                               options.VarySubjectBodyPerMessage
-                        ? RandomTestData.CreateContent(
-                            i,
-                            options.UseBogusData,
-                            options.GenerateRandomHtml,
-                            options.GenerateRandomAttachments,
-                            options.MaxRandomAttachments,
-                            options.VarySubjectBodyPerMessage,
-                            randomAttachmentSizeMb)
-                        : new RandomTestData.GeneratedMessageContent(
-                            options.DisplayName,
-                            emlSubject ?? options.Subject,
-                            emlBody ?? options.Body,
-                            emlIsHtml || options.HtmlBody,
-                            Array.Empty<RandomTestData.GeneratedAttachment>());
-                    var msgSw = Stopwatch.StartNew();
-                    Exception? lastEx = null;
-                    bool success = false;
-                    bool retryable = false;
-
-                    for (int attempt = 0; attempt <= options.MaxRetries; attempt++)
-                    {
-                        workerCt.ThrowIfCancellationRequested();
-
-                        // Fail-fast i pro ÚPLNĚ NOVÉ zprávy (ne jen retry téže zprávy) —
-                        // jinak jistič nezastaví čerstvé pokusy během výpadku serveru.
-                        if (circuit != null && circuit.IsAnyOpen(out var openCategory))
+                        if (options.GenerateRandomAttachments)
                         {
-                            lastEx = new InvalidOperationException($"Circuit breaker OPEN ({openCategory}) — čekám na cooldown.");
-                            break;
-                        }
-                        if (circuit != null && lastEx != null && circuit.IsOpen(lastEx))
-                        {
-                            lastEx = new InvalidOperationException("Circuit breaker OPEN — too many consecutive failures.");
-                            break;
+                            // The initial preflight can become stale if another application
+                            // consumes RAM during a long test. Re-check immediately before
+                            // generating each message's large random payload.
+                            var runtimeSafety = AttachmentPlanner.EstimateRandomAttachments(
+                                randomAttachmentSizeMb, options.MaxRandomAttachments, options.MaxConcurrency);
+                            if (!runtimeSafety.IsSafe)
+                                throw new InvalidOperationException(
+                                    "RAM safety re-check rejected random attachment generation before allocation. " +
+                                    runtimeSafety.Explanation);
                         }
 
-                        SmtpClient? client = null;
-                        try
+                        var data = options.RandomTestData || options.UseBogusData ||
+                                   options.GenerateRandomHtml || options.GenerateRandomAttachments ||
+                                   options.VarySubjectBodyPerMessage
+                            ? RandomTestData.CreateContent(
+                                i,
+                                options.UseBogusData,
+                                options.GenerateRandomHtml,
+                                options.GenerateRandomAttachments,
+                                options.MaxRandomAttachments,
+                                options.VarySubjectBodyPerMessage,
+                                randomAttachmentSizeMb)
+                            : new RandomTestData.GeneratedMessageContent(
+                                options.DisplayName,
+                                emlSubject ?? options.Subject,
+                                emlBody ?? options.Body,
+                                emlIsHtml || options.HtmlBody,
+                                Array.Empty<RandomTestData.GeneratedAttachment>());
+
+                        var msgSw = Stopwatch.StartNew();
+                        Exception? lastEx = null;
+                        bool success = false;
+                        bool retryable = false;
+
+                        for (int attempt = 0; attempt <= options.MaxRetries; attempt++)
                         {
-                            if (options.DryRun)
+                            workerCt.ThrowIfCancellationRequested();
+
+                            // Fail-fast i pro ÚPLNĚ NOVÉ zprávy (ne jen retry téže zprávy) —
+                            // jinak jistič nezastaví čerstvé pokusy během výpadku serveru.
+                            if (circuit != null && circuit.IsAnyOpen(out var openCategory))
                             {
-                                // Dry-run: simulujeme úspěšnou cestu bez reálného SMTP
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run TCP", "MIME", MessageStep.RentingConnection, i, workerId,
-                                    DeliveryStepKind.TcpConnect, true);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run EHLO/TLS/AUTH", "SEND", MessageStep.BuildingMime, i, workerId,
-                                    DeliveryStepKind.Ehlo, true);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run STARTTLS", "AUTH", null, i, workerId,
-                                    DeliveryStepKind.StartTls, true);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run AUTH", "MAIL FROM", null, i, workerId,
-                                    DeliveryStepKind.Auth, true);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run MAIL FROM", "RCPT TO", null, i, workerId,
-                                    DeliveryStepKind.MailFrom, true);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run RCPT TO", "DATA", null, i, workerId,
-                                    DeliveryStepKind.RcptTo, true);
-                                await Task.Delay(Random.Shared.Next(15, 80), workerCt).ConfigureAwait(false);
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
-                                    "Dry-run DATA", "QUIT", MessageStep.SmtpSend, i, workerId,
-                                    DeliveryStepKind.Data, true);
+                                lastEx = new InvalidOperationException($"Circuit breaker OPEN ({openCategory}) — čekám na cooldown.");
+                                break;
                             }
-                            else
+                            if (circuit != null && lastEx != null && circuit.IsOpen(lastEx))
                             {
-                                // TCP + handshake probíhá uvnitř pool.RentAsync (connect/EHLO/STARTTLS/AUTH)
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"CONNECT #{i} · W{workerId}", null, 3,
-                                    $"SMTP spojení · zpráva #{i} · W{workerId}", "MIME zprávy",
-                                    MessageStep.RentingConnection, i, workerId,
-                                    DeliveryStepKind.TcpConnect, null);
-                                client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
-                                ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
-                                // Po úspěšném Rent: TCP + EHLO (+ STARTTLS + AUTH podle konfigurace) proběhly
-                                // TCP/EHLO/STARTTLS/AUTH barvy z ProtocolPathObserver (skutečné C:/S: řádky)
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"MIME #{i} · W{workerId}", null, 3,
-                                    $"Stavím MIME · zpráva #{i} · W{workerId}", "SMTP SEND",
-                                    MessageStep.BuildingMime, i, workerId);
-                                var messageAttachments = new List<AttachmentSource>(attachmentPlan.Sources);
-                                foreach (var generated in data.Attachments)
-                                    messageAttachments.Add(new AttachmentSource(
-                                        generated.FileName, "", generated.Content, generated.Content.LongLength));
+                                lastEx = new InvalidOperationException("Circuit breaker OPEN — too many consecutive failures.");
+                                break;
+                            }
 
-                                using var message = BuildMessage(
-                                    options, data, recipient, messageAttachments, inlineAttachmentData, i,
-                                    data.IsHtml || emlIsHtml || options.HtmlBody);
-                                if (bandwidth != null)
+                            SmtpClient? client = null;
+                            try
+                            {
+                                if (options.DryRun)
                                 {
-                                    var sizeCounter = new CountingStream();
-                                    message.WriteTo(sizeCounter);
-                                    await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, sizeCounter.BytesWritten), workerCt).ConfigureAwait(false);
+                                    // Dry-run: simulujeme úspěšnou cestu bez reálného SMTP
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run TCP", "MIME", MessageStep.RentingConnection, i, workerId,
+                                        DeliveryStepKind.TcpConnect, true);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run EHLO/TLS/AUTH", "SEND", MessageStep.BuildingMime, i, workerId,
+                                        DeliveryStepKind.Ehlo, true);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run STARTTLS", "AUTH", null, i, workerId,
+                                        DeliveryStepKind.StartTls, true);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run AUTH", "MAIL FROM", null, i, workerId,
+                                        DeliveryStepKind.Auth, true);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run MAIL FROM", "RCPT TO", null, i, workerId,
+                                        DeliveryStepKind.MailFrom, true);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run RCPT TO", "DATA", null, i, workerId,
+                                        DeliveryStepKind.RcptTo, true);
+                                    await Task.Delay(Random.Shared.Next(15, 80), workerCt).ConfigureAwait(false);
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"DRY #{i}", null, 3,
+                                        "Dry-run DATA", "QUIT", MessageStep.SmtpSend, i, workerId,
+                                        DeliveryStepKind.Data, true);
                                 }
-                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"SEND #{i} · W{workerId}", null, 3,
-                                    $"SMTP SEND · zpráva #{i} · W{workerId}", "OK nebo retry",
-                                    MessageStep.SmtpSend, i, workerId);
-
-                                // BUG-009/BUG-007: global pacing is acquired only after
-                                // adaptive concurrency + SMTP pool admission and immediately
-                                // before the actual SMTP SEND. Every retry reaches this gate
-                                // again, so retries cannot bypass global spacing.
-                                await using (var sendLease =
-                                    await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
-                                {
-                                    if (utf8Format != null)
-                                        await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
-                                    else
-                                        await client.SendAsync(message, workerCt).ConfigureAwait(false);
-                                }
-
-                                ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
-                                pool.Return(client);
-                                client = null;
-                            }
-                            success = true;
-                            circuit?.RecordSuccess();
-                            adaptive?.RecordAttempt(true);
-                            pace.CommitRecipient(recipient);
-                            recipientCommitted = true;
-                            pace.RecordSuccess(recipient);
-                            observed?.Record(250, "2.0.0 OK");
-                            break;
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            if (client is not null) pool?.Discard(client);
-                            throw;
-                        }
-                        catch (Exception ex) when (IsTransient(ex) && attempt < options.MaxRetries)
-                        {
-                            if (client is not null)
-                            {
-                                if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
-                                    pool!.ReportProxyBlocked(client);
-                                pool!.Discard(client);
-                                client = null;
-                            }
-                            lastEx = ex;
-                            retryable = true;
-                            Interlocked.Increment(ref retries);
-                            circuit?.RecordFailure(ex);
-                            adaptive?.RecordAttempt(false);
-                            if (ex is SmtpCommandException sce)
-                            {
-                                var code = (int)sce.StatusCode;
-                                if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
-                                observed?.Record(code, sce.Message);
-                                if (ObservedResponseCollector.IsGreylist(code, sce.Message))
-                                    pace.RecordGreylist();
                                 else
-                                    pace.RecordTransientThrottle();
-                            }
-                            else if (ex is TimeoutException)
-                            {
-                                Interlocked.Increment(ref timeouts);
-                            }
-                            Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
-                                $"RETRY #{i} · W{workerId}", null, 3,
-                                $"Dočasná chyba · zpráva #{i} · W{workerId}",
-                                $"Retry {attempt + 1}/{options.MaxRetries}",
-                                MessageStep.FailedTransient, i, workerId,
-                                DeliveryStepKind.Error, false);
-                            await Task.Delay(GetRetryDelay(attempt), workerCt).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            if (client is not null)
-                            {
-                                if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
-                                    pool!.ReportProxyBlocked(client);
-                                pool!.Discard(client);
-                                client = null;
-                            }
-                            lastEx = ex;
-                            circuit?.RecordFailure(ex);
-                            adaptive?.RecordAttempt(false);
-                            if (ex is SmtpCommandException sce)
-                            {
-                                var code = (int)sce.StatusCode;
-                                if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
-                                else if (code >= 500) Interlocked.Increment(ref smtp5xx);
-                                observed?.Record(code, sce.Message);
-                                if (ObservedResponseCollector.IsGreylist(code, sce.Message))
-                                    pace.RecordGreylist();
-                                else if (code >= 400 && code < 500)
-                                    pace.RecordTransientThrottle();
-                            }
-                            else if (ex is TimeoutException)
-                            {
-                                Interlocked.Increment(ref timeouts);
-                            }
-                            break;
-                        }
-                    }
+                                {
+                                    // TCP + handshake probíhá uvnitř pool.RentAsync (connect/EHLO/STARTTLS/AUTH)
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"CONNECT #{i} · W{workerId}", null, 3,
+                                        $"SMTP spojení · zpráva #{i} · W{workerId}", "MIME zprávy",
+                                        MessageStep.RentingConnection, i, workerId,
+                                        DeliveryStepKind.TcpConnect, null);
+                                    client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
+                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
 
-                    msgSw.Stop();
-                    var explained = lastEx != null ? Validation.ExplainSmtpError(lastEx) : "";
-                    if (success)
-                    {
-                        var s = Interlocked.Increment(ref sent);
-                        latencies.Add(msgSw.Elapsed.TotalMilliseconds);
-                        var done = s + Volatile.Read(ref failed);
-                        var eta = EstimateEta(done, options.MessageCount, startTime, sw);
-                        var label = options.DryRun ? "DRY-RUN OK" : "OK";
-                        var remain = options.MessageCount - done;
-                        // Snapshot observed každých 10 OK nebo vždy při chybě (níže)
-                        Report(s, Volatile.Read(ref failed),
-                            $"{label} #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms)", eta, 3,
-                            $"Hotovo #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms) · celkem OK {s}",
-                            remain > 0
-                                ? $"Zbývá odeslat ~{remain} zpráv" + (options.MaxConcurrency > 1 ? $" (až {options.MaxConcurrency} najednou)" : "")
-                                : "Souhrn a statistiky",
-                            MessageStep.Succeeded, i, workerId,
-                            DeliveryStepKind.Quit, true,
-                            includeObserved: s % 10 == 0 || remain == 0);
-                    }
-                    else
-                    {
-                        var f = Interlocked.Increment(ref failed);
-                        Interlocked.Exchange(ref lastError, explained);
-                        var done = Volatile.Read(ref sent) + f;
-                        var eta = EstimateEta(done, options.MessageCount, startTime, sw);
-                        var retryInfo = retryable ? " (po retry)" : "";
-                        Report(Volatile.Read(ref sent), f,
-                            $"FAIL #{i}{retryInfo}: {explained}", eta, 3,
-                            $"Zastaveno na zprávě #{i}: {explained}",
-                            done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
-                            MessageStep.FailedFinal, i, workerId,
-                            DeliveryStepKind.Error, false,
-                            includeObserved: true);
+                                    // Po úspěšném Rent: TCP + EHLO (+ STARTTLS + AUTH podle konfigurace) proběhly
+                                    // TCP/EHLO/STARTTLS/AUTH barvy z ProtocolPathObserver (skutečné C:/S: řádky)
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"MIME #{i} · W{workerId}", null, 3,
+                                        $"Stavím MIME · zpráva #{i} · W{workerId}", "SMTP SEND",
+                                        MessageStep.BuildingMime, i, workerId);
+
+                                    var messageAttachments = new List<AttachmentSource>(attachmentPlan.Sources);
+                                    foreach (var generated in data.Attachments)
+                                        messageAttachments.Add(new AttachmentSource(
+                                            generated.FileName, "", generated.Content, generated.Content.LongLength));
+
+                                    using var message = BuildMessage(
+                                        options, data, recipient, messageAttachments, inlineAttachmentData, i,
+                                        data.IsHtml || emlIsHtml || options.HtmlBody);
+
+                                    if (bandwidth != null)
+                                    {
+                                        var sizeCounter = new CountingStream();
+                                        message.WriteTo(sizeCounter);
+                                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, sizeCounter.BytesWritten), workerCt).ConfigureAwait(false);
+                                    }
+
+                                    Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"SEND #{i} · W{workerId}", null, 3,
+                                        $"SMTP SEND · zpráva #{i} · W{workerId}", "OK nebo retry",
+                                        MessageStep.SmtpSend, i, workerId);
+
+                                    // BUG-009/BUG-007: global pacing is acquired only after
+                                    // adaptive concurrency + SMTP pool admission and immediately
+                                    // before the actual SMTP SEND. Every retry reaches this gate
+                                    // again, so retries cannot bypass global spacing.
+                                    await using (var sendLease =
+                                        await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
+                                    {
+                                        if (utf8Format != null)
+                                            await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
+                                        else
+                                            await client.SendAsync(message, workerCt).ConfigureAwait(false);
+                                    }
+
+                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client);
+                                    pool.Return(client);
+                                    client = null;
+                                }
+
+                                success = true;
+                                circuit?.RecordSuccess();
+                                adaptive?.RecordAttempt(true);
+                                pace.CommitRecipient(recipient);
+                                recipientCommitted = true;
+                                pace.RecordSuccess(recipient);
+                                observed?.Record(250, "2.0.0 OK");
+                                break;
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                if (client is not null) pool?.Discard(client);
+                                throw;
+                            }
+                            catch (Exception ex) when (IsTransient(ex) && attempt < options.MaxRetries)
+                            {
+                                if (client is not null)
+                                {
+                                    if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
+                                        pool!.ReportProxyBlocked(client);
+                                    pool!.Discard(client);
+                                    client = null;
+                                }
+                                lastEx = ex;
+                                retryable = true;
+                                Interlocked.Increment(ref retries);
+                                circuit?.RecordFailure(ex);
+                                adaptive?.RecordAttempt(false);
+                                if (ex is SmtpCommandException sce)
+                                {
+                                    var code = (int)sce.StatusCode;
+                                    if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                                    observed?.Record(code, sce.Message);
+                                    if (ObservedResponseCollector.IsGreylist(code, sce.Message))
+                                        pace.RecordGreylist();
+                                    else
+                                        pace.RecordTransientThrottle();
+                                }
+                                else if (ex is TimeoutException)
+                                {
+                                    Interlocked.Increment(ref timeouts);
+                                }
+                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
+                                    $"RETRY #{i} · W{workerId}", null, 3,
+                                    $"Dočasná chyba · zpráva #{i} · W{workerId}",
+                                    $"Retry {attempt + 1}/{options.MaxRetries}",
+                                    MessageStep.FailedTransient, i, workerId,
+                                    DeliveryStepKind.Error, false);
+                                await Task.Delay(GetRetryDelay(attempt), workerCt).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                if (client is not null)
+                                {
+                                    if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
+                                        pool!.ReportProxyBlocked(client);
+                                    pool!.Discard(client);
+                                    client = null;
+                                }
+                                lastEx = ex;
+                                circuit?.RecordFailure(ex);
+                                adaptive?.RecordAttempt(false);
+                                if (ex is SmtpCommandException sce)
+                                {
+                                    var code = (int)sce.StatusCode;
+                                    if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                                    else if (code >= 500) Interlocked.Increment(ref smtp5xx);
+                                    observed?.Record(code, sce.Message);
+                                    if (ObservedResponseCollector.IsGreylist(code, sce.Message))
+                                        pace.RecordGreylist();
+                                    else if (code >= 400 && code < 500)
+                                        pace.RecordTransientThrottle();
+                                }
+                                else if (ex is TimeoutException)
+                                {
+                                    Interlocked.Increment(ref timeouts);
+                                }
+                                break;
+                            }
+                        }
+
+                        msgSw.Stop();
+                        var explained = lastEx != null ? Validation.ExplainSmtpError(lastEx) : "";
+                        if (success)
+                        {
+                            var s = Interlocked.Increment(ref sent);
+                            latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                            var done = s + Volatile.Read(ref failed);
+                            var eta = EstimateEta(done, options.MessageCount, startTime, sw);
+                            var label = options.DryRun ? "DRY-RUN OK" : "OK";
+                            var remain = options.MessageCount - done;
+                            // Snapshot observed každých 10 OK nebo vždy při chybě (níže)
+                            Report(s, Volatile.Read(ref failed),
+                                $"{label} #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms)", eta, 3,
+                                $"Hotovo #{i} → {recipient} ({msgSw.ElapsedMilliseconds} ms) · celkem OK {s}",
+                                remain > 0
+                                    ? $"Zbývá odeslat ~{remain} zpráv" + (options.MaxConcurrency > 1 ? $" (až {options.MaxConcurrency} najednou)" : "")
+                                    : "Souhrn a statistiky",
+                                MessageStep.Succeeded, i, workerId,
+                                DeliveryStepKind.Quit, true,
+                                includeObserved: s % 10 == 0 || remain == 0);
+                        }
+                        else
+                        {
+                            var f = Interlocked.Increment(ref failed);
+                            Interlocked.Exchange(ref lastError, explained);
+                            var done = Volatile.Read(ref sent) + f;
+                            var eta = EstimateEta(done, options.MessageCount, startTime, sw);
+                            var retryInfo = retryable ? " (po retry)" : "";
+                            Report(Volatile.Read(ref sent), f,
+                                $"FAIL #{i}{retryInfo}: {explained}", eta, 3,
+                                $"Zastaveno na zprávě #{i}: {explained}",
+                                done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
+                                MessageStep.FailedFinal, i, workerId,
+                                DeliveryStepKind.Error, false,
+                                includeObserved: true);
+                        }
                     }
                     finally
                     {
                         if (!recipientCommitted)
                             pace.ReleaseRecipient(recipient);
-                        if (adaptiveAcquired) adaptive!.Release();
+
+                        if (adaptiveAcquired)
+                            adaptive!.Release();
+                    }
                 }
 
                 async Task WorkerAsync(int workerId)
@@ -703,7 +721,6 @@ public sealed class SmtpTestRunner
                 {
                     for (var i = batchStart; i <= batchEnd; i++)
                         await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
-
                     workChannel.Writer.TryComplete();
                     await Task.WhenAll(workers).ConfigureAwait(false);
                 }
@@ -935,27 +952,22 @@ public sealed class SmtpTestRunner
 sealed class CountingStream : Stream
 {
     public long BytesWritten { get; private set; }
-
     public override bool CanRead => false;
     public override bool CanSeek => false;
     public override bool CanWrite => true;
     public override long Length => BytesWritten;
     public override long Position { get => BytesWritten; set => throw new NotSupportedException(); }
-
     public override void Flush() { }
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
-
     public override void Write(byte[] buffer, int offset, int count) => BytesWritten += count;
     public override void Write(ReadOnlySpan<byte> buffer) => BytesWritten += buffer.Length;
-
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         BytesWritten += count;
         return Task.CompletedTask;
     }
-
     public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
         BytesWritten += buffer.Length;
