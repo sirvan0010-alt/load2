@@ -35,7 +35,7 @@ API must continue to work.
    that message/worker; they are not placed into a global unbounded cache.
 7. HTML content must be HTML-encoded where user/generated text is interpolated.
 8. Randomization must be thread-safe under MaxConcurrency 1..20.
-9. Do not add automatic From-domain rotation. If a future feature adds randomized From, it
+9. If a future feature adds randomized From, it
    must be an explicit opt-in and obey Test Mode/AllowedDomains.
 10. Keep `MailTestOptions` optional parameters backward compatible whenever possible.
 11. Never allocate large generated attachment payloads before safety preflight. Call
