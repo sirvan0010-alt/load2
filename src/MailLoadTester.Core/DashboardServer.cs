@@ -12,7 +12,7 @@ public sealed class DashboardServer : IDisposable
 {
     private readonly HttpListener _listener;
     private readonly Thread _thread;
-    private volatile DashboardState _state = new();
+    private volatile DashboardState _state = new(0, 0, 0, 0, 0, null, "Idle");
     private bool _disposed;
 
     public int Port { get; }
