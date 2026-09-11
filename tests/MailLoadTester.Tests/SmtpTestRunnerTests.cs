@@ -59,6 +59,28 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task AutoRestart_DoesNotResendAlreadyAcceptedLogicalMessage()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.AcceptFirstThenTransientThenAccept);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 2, maxRetries: 0);
+        options = options with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 1
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.Equal(2, result.Sent);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal(1, result.AutoRestartAttempts);
+        Assert.True(result.Smtp4xx >= 1);
+        Assert.Equal(2, server.MessagesAccepted);
+        Assert.Equal(3, server.DataAttempts);
+    }
+
+    [Fact]
     public async Task Cancellation_ReturnsPartialResults()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData);
@@ -101,7 +123,14 @@ public sealed class SmtpTestRunnerTests
         MaxRetries: maxRetries,
         DryRun: false);
 
-    private enum SmtpBehavior { Accept, FailPermanent, FailTransient, DelayData }
+    private enum SmtpBehavior
+    {
+        Accept,
+        FailPermanent,
+        FailTransient,
+        AcceptFirstThenTransientThenAccept,
+        DelayData
+    }
 
     private sealed class ScriptedSmtpServer : IAsyncDisposable
     {
@@ -111,10 +140,12 @@ public sealed class SmtpTestRunnerTests
         private readonly SmtpBehavior _behavior;
         private int _connections;
         private int _accepted;
+        private int _dataAttempts;
 
         public int Port { get; }
         public int ConnectionCount => Volatile.Read(ref _connections);
         public int MessagesAccepted => Volatile.Read(ref _accepted);
+        public int DataAttempts => Volatile.Read(ref _dataAttempts);
 
         public ScriptedSmtpServer(SmtpBehavior behavior)
         {
@@ -166,6 +197,7 @@ public sealed class SmtpTestRunnerTests
                     if (line == ".")
                     {
                         inData = false;
+                        var attempt = Interlocked.Increment(ref _dataAttempts);
                         switch (_behavior)
                         {
                             case SmtpBehavior.Accept:
@@ -177,6 +209,17 @@ public sealed class SmtpTestRunnerTests
                                 break;
                             case SmtpBehavior.FailTransient:
                                 await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
+                                break;
+                            case SmtpBehavior.AcceptFirstThenTransientThenAccept:
+                                if (attempt == 2)
+                                {
+                                    await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
+                                }
+                                else
+                                {
+                                    Interlocked.Increment(ref _accepted);
+                                    await writer.WriteLineAsync("250 2.0.0 OK");
+                                }
                                 break;
                             case SmtpBehavior.DelayData:
                                 await Task.Delay(TimeSpan.FromSeconds(10), ct);
