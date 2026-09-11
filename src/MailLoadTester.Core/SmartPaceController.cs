@@ -6,17 +6,16 @@ namespace MailLoadTester;
 /// <summary>
 /// Chytrý kontroler tempa odesílání.
 ///
-/// IntervalMs je GLOBÁLNÍ spacing (jako dřívější RateLimiter):
-/// při 1000 ms a 20 workerech ≈ max 1 msg/s, ne 20 msg/s.
-///
-/// Navíc: jitter, burst+pause, progressive backoff, per-recipient,
-/// časové okno, warm-up, greylist odklad.
-/// Thread-safe.
+/// IntervalMs je GLOBÁLNÍ spacing mezi skutečnými SMTP SEND operacemi.
+/// Actual-send gate serializuje pouze úsek těsně kolem SendAsync; MIME,
+/// adaptive limiter, SMTP pool a retry backoff mimo něj nejsou blokovány.
 /// </summary>
 public sealed class SmartPaceController
 {
     private readonly MailTestOptions _options;
     private readonly object _lock = new();
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
+    private long _lastSendTimestamp;
     private int _successCount;
     private int _messagesInCurrentBurst;
     private int _currentIntervalMs;
@@ -26,28 +25,13 @@ public sealed class SmartPaceController
     private DateTimeOffset _burstPauseUntil = DateTimeOffset.MinValue;
     private DateTimeOffset _greylistPauseUntil = DateTimeOffset.MinValue;
     private int _greylistHits;
-
-    // Globální fronta slotů (Stopwatch ticks) — jeden sdílený schedule pro všechny workery
-    private readonly LinkedList<long> _schedule = new();
     private readonly long _freq = Stopwatch.Frequency;
 
-    // A reservation keeps the exact LinkedList node belonging to one worker.
-    // Cancellation must remove only that reservation, never an unrelated worker's slot.
-    private readonly record struct GlobalReservation(
-        TimeSpan Delay,
-        string Reason,
-        LinkedListNode<long>? Node);
-
-    internal int ScheduledReservationCount
-    {
-        get { lock (_lock) return _schedule.Count; }
-    }
+    internal int ScheduledReservationCount => 0;
 
     private sealed class RecipientWindow
     {
-        /// <summary>Časy úspěšně odeslaných zpráv v aktuálním sliding window.</summary>
         public Queue<DateTimeOffset> Committed = new();
-        /// <summary>Rezervace in-flight (mezi WaitBeforeSend a Commit/Release).</summary>
         public int Reserved;
     }
 
@@ -91,169 +75,124 @@ public sealed class SmartPaceController
         }
     }
 
-    /// <summary>
-    /// Počká před odesláním. Nejdřív absolutní pauzy (greylist/burst/okno),
-    /// pak globální slot pro interval (+ jitter).
-    /// </summary>
     public async Task WaitBeforeSendAsync(string recipient, CancellationToken ct)
     {
-        // 1) Absolutní blokace (sdílené pro všechny workery).
-        //    Per-recipient limit se rezervuje PŘED globálním slotem.
-        //    Jinak by worker mohl spotřebovat globální slot, potom dlouho čekat
-        //    na recipient window a po jejím otevření odeslat bez nového
-        //    globálního spacingu — výsledkem by mohl být burst.
         while (true)
         {
             ct.ThrowIfCancellationRequested();
             TimeSpan block;
-            lock (_lock)
-            {
-                block = ComputeAbsoluteBlock(recipient);
-            }
-            if (block <= TimeSpan.Zero)
-                break;
-
-            var slice = TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds));
-            await Task.Delay(slice, ct).ConfigureAwait(false);
+            lock (_lock) block = ComputeAbsoluteBlock(recipient);
+            if (block <= TimeSpan.Zero) break;
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds)), ct).ConfigureAwait(false);
         }
 
-        var recipientReserved = false;
         if (_options.EnablePerRecipientLimit)
         {
             while (!TryReserveRecipient(recipient))
             {
                 ct.ThrowIfCancellationRequested();
                 TimeSpan block;
-                lock (_lock) { block = ComputeAbsoluteBlock(recipient); }
-                if (block <= TimeSpan.Zero)
-                    block = TimeSpan.FromMilliseconds(50);
-                var slice = TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds));
-                await Task.Delay(slice, ct).ConfigureAwait(false);
+                lock (_lock) block = ComputeAbsoluteBlock(recipient);
+                if (block <= TimeSpan.Zero) block = TimeSpan.FromMilliseconds(50);
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds)), ct).ConfigureAwait(false);
             }
-            recipientReserved = true;
         }
+    }
 
-        // 2) Globální spacing (IntervalMs ± jitter / warm-up).
-        //    Pokud se čekání zruší, musí se vrátit i recipient reservation.
+    public async ValueTask<SendPaceLease> AcquireSendSlotAsync(CancellationToken ct)
+    {
+        await _sendGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var reservation = ReserveGlobalSlot();
-            if (reservation.Delay > TimeSpan.Zero)
+            while (true)
             {
-                try
-                {
-                    var remaining = reservation.Delay;
-                    while (remaining > TimeSpan.Zero)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        var slice = TimeSpan.FromMilliseconds(Math.Min(500, remaining.TotalMilliseconds));
-                        await Task.Delay(slice, ct).ConfigureAwait(false);
-                        remaining -= slice;
-                    }
-                }
-                finally
-                {
-                    // Cancellation i normální dokončení čekání odstraní přesně náš slot.
-                    RemoveReservation(reservation.Node);
-                }
+                ct.ThrowIfCancellationRequested();
+                var delay = GetDelayUntilNextSend();
+                if (delay <= TimeSpan.Zero) break;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
+
+            lock (_lock)
+            {
+                _lastSendTimestamp = Stopwatch.GetTimestamp();
+            }
+
+            return new SendPaceLease(this);
         }
         catch
         {
-            if (recipientReserved)
-                ReleaseRecipient(recipient);
+            _sendGate.Release();
             throw;
         }
     }
 
-    /// <summary>
-    /// Rezervuje další globální časový slot. Vrací zpoždění od teď do slotu
-    /// a přesnou referenci na uzel této rezervace.
-    /// </summary>
-    private GlobalReservation ReserveGlobalSlot()
+    private TimeSpan GetDelayUntilNextSend()
     {
         lock (_lock)
         {
-            var intervalMs = _currentIntervalMs;
+            if (_lastSendTimestamp == 0)
+                return TimeSpan.Zero;
 
-            // Warm-up: dočasně vyšší interval
-            if (_options.EnableWarmup)
-            {
-                var phases = GetWarmupPhases();
-                if (_warmupPhaseIndex < phases.Length && intervalMs > 0)
-                {
-                    // Rané fáze = pomalejší (násobek klesá)
-                    var factor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
-                    intervalMs = (int)(intervalMs * factor);
-                }
-            }
-
+            var intervalMs = GetEffectiveIntervalMs();
             if (intervalMs <= 0)
-                return new GlobalReservation(TimeSpan.Zero, "none", null);
+                return TimeSpan.Zero;
 
-            if (_options.EnableJitter && _options.JitterPercent > 0)
-            {
-                var jitter = _options.JitterPercent / 100.0;
-                var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
-                intervalMs = (int)Math.Max(0, intervalMs * factor);
-            }
-
-            if (intervalMs <= 0)
-                return new GlobalReservation(TimeSpan.Zero, "none", null);
-
-            var intervalTicks = (long)(intervalMs * (double)_freq / 1000.0);
-            var now = Stopwatch.GetTimestamp();
-            var nextAvailable = _schedule.Last?.Value ?? now;
-            if (nextAvailable < now)
-                nextAvailable = now;
-
-            var reservedSlot = nextAvailable + intervalTicks;
-            var reservation = _schedule.AddLast(reservedSlot);
-
-            // Úklid starých slotů
-            while (_schedule.First is { } first && first.Value <= now && _schedule.Count > 1)
-                _schedule.RemoveFirst();
-
-            var waitTicks = reservedSlot - now;
-            if (waitTicks <= 0)
-                return new GlobalReservation(TimeSpan.Zero, "interval", reservation);
-
-            var waitMs = waitTicks * 1000.0 / _freq;
-            return new GlobalReservation(TimeSpan.FromMilliseconds(waitMs), "interval", reservation);
+            var target = _lastSendTimestamp + (long)(intervalMs * (double)_freq / 1000.0);
+            var remaining = target - Stopwatch.GetTimestamp();
+            return remaining > 0
+                ? TimeSpan.FromSeconds(remaining / (double)_freq)
+                : TimeSpan.Zero;
         }
     }
 
-    private void CancelReservation(LinkedListNode<long>? reservation)
+    private int GetEffectiveIntervalMs()
     {
-        if (reservation is null)
-            return;
+        var intervalMs = _currentIntervalMs;
 
-        lock (_lock)
+        if (_options.EnableWarmup)
         {
-            if (reservation.List == _schedule)
-                _schedule.Remove(reservation);
+            var phases = GetWarmupPhases();
+            if (_warmupPhaseIndex < phases.Length && intervalMs > 0)
+            {
+                var factor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
+                intervalMs = (int)(intervalMs * factor);
+            }
         }
+
+        if (_options.EnableJitter && _options.JitterPercent > 0 && intervalMs > 0)
+        {
+            var jitter = _options.JitterPercent / 100.0;
+            var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
+            intervalMs = (int)Math.Max(0, intervalMs * factor);
+        }
+
+        return Math.Max(0, intervalMs);
     }
 
-    private void RemoveReservation(LinkedListNode<long> reservation)
+    public sealed class SendPaceLease : IAsyncDisposable, IDisposable
     {
-        lock (_lock)
+        private SmartPaceController? _owner;
+
+        internal SendPaceLease(SmartPaceController owner) => _owner = owner;
+
+        public ValueTask DisposeAsync()
         {
-            if (reservation.List == _schedule)
-                _schedule.Remove(reservation);
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?._sendGate.Release();
         }
     }
 
     private TimeSpan ComputeAbsoluteBlock(string recipient)
     {
         var now = DateTimeOffset.UtcNow;
-
-        if (now < _greylistPauseUntil)
-            return _greylistPauseUntil - now;
-
-        if (now < _burstPauseUntil)
-            return _burstPauseUntil - now;
-
+        if (now < _greylistPauseUntil) return _greylistPauseUntil - now;
+        if (now < _burstPauseUntil) return _burstPauseUntil - now;
         if (_options.EnableSendingTimeWindow && !IsInsideSendingWindow(now))
             return NextWindowStart(now) - now;
 
@@ -267,14 +206,9 @@ public sealed class SmartPaceController
                     return win.Committed.Peek() + RecipientWindowSpan - now;
             }
         }
-
         return TimeSpan.Zero;
     }
 
-    /// <summary>
-    /// Rezervuje 1 slot pro příjemce (Count+Reserved &lt; Max). Volat po WaitBeforeSendAsync.
-    /// false = limit plný (mělo by být vzácné, WaitBeforeSend už čeká).
-    /// </summary>
     public bool TryReserveRecipient(string recipient)
     {
         if (!_options.EnablePerRecipientLimit) return true;
@@ -291,7 +225,6 @@ public sealed class SmartPaceController
         }
     }
 
-    /// <summary>Úspěšné odeslání: rezervace → commit (Count++).</summary>
     public void CommitRecipient(string recipient)
     {
         if (!_options.EnablePerRecipientLimit) return;
@@ -306,7 +239,6 @@ public sealed class SmartPaceController
         }
     }
 
-    /// <summary>Neúspěch / cancel: uvolní rezervaci bez navýšení Count.</summary>
     public void ReleaseRecipient(string recipient)
     {
         if (!_options.EnablePerRecipientLimit) return;
@@ -324,9 +256,6 @@ public sealed class SmartPaceController
         {
             _successCount++;
             _messagesInCurrentBurst++;
-
-            // Per-recipient: Commit se volá explicitně z runneru (CommitRecipient).
-            // Zde už jen burst/backoff/warmup.
 
             if (_options.EnableWarmup)
             {
@@ -360,7 +289,6 @@ public sealed class SmartPaceController
         if (!_options.DetectGreylist) return;
         lock (_lock)
         {
-            // MaxGreylistRetries: 0 = unlimited; >0 = stop extending global pause after N hits
             if (_options.MaxGreylistRetries > 0 && _greylistHits >= _options.MaxGreylistRetries)
                 return;
             _greylistHits++;
@@ -395,20 +323,13 @@ public sealed class SmartPaceController
         var local = now.ToLocalTime();
         var from = Math.Clamp(_options.SendingWindowFromHour, 0, 23);
         var candidate = new DateTimeOffset(local.Year, local.Month, local.Day, from, 0, 0, local.Offset);
-        if (candidate <= local)
-            candidate = candidate.AddDays(1);
+        if (candidate <= local) candidate = candidate.AddDays(1);
         return candidate.ToUniversalTime();
     }
 
     private int[]? _warmupPhasesCache;
 
-    private int[] GetWarmupPhases()
-    {
-        // _options.WarmupPhases never changes after construction, but this used to
-        // be re-parsed (Split + LINQ) on every single call — and ReserveGlobalSlot()
-        // calls it once per message for the whole warm-up phase. Cache it once.
-        return _warmupPhasesCache ??= ParseWarmupPhases();
-    }
+    private int[] GetWarmupPhases() => _warmupPhasesCache ??= ParseWarmupPhases();
 
     private int[] ParseWarmupPhases()
     {
@@ -421,4 +342,6 @@ public sealed class SmartPaceController
             .DefaultIfEmpty(50)
             .ToArray();
     }
+
+    public void Dispose() => _sendGate.Dispose();
 }
