@@ -1,0 +1,73 @@
+name: Patch SmtpTestRunner
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-runner.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply compile fixes to SmtpTestRunner.cs
+        run: |
+          set -euo pipefail
+          FILE=src/MailLoadTester.Core/SmtpTestRunner.cs
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('src/MailLoadTester.Core/SmtpTestRunner.cs')
+          t = p.read_text(encoding='utf-8')
+
+          # 1) ReportPathEvents: pass pool as parameter (fixes CS0841)
+          old_sig = 'void ReportPathEvents(int s, int f, int? i, int? workerId, SmtpClient client)'
+          new_sig = 'void ReportPathEvents(int s, int f, int? i, int? workerId, SmtpClient client, SmtpConnectionPool pathPool)'
+          if old_sig in t:
+              t = t.replace(old_sig, new_sig, 1)
+              t = t.replace('pool!.DrainPathEvents(client)', 'pathPool.DrainPathEvents(client)', 1)
+              t = t.replace(
+                  'ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client)',
+                  'ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!)'
+              )
+              print('fixed ReportPathEvents')
+          else:
+              print('ReportPathEvents already patched or missing')
+
+          # 2) AutoRestart: restart when any Failed remain
+          old = 'var mostlyFailed = result.Requested > 0 && result.Failed > result.Sent;\n            if (!mostlyFailed || attempt > options.AutoRestartMaxAttempts) break;'
+          new = 'var hasRecoverableFailures = result.Failed > 0;\n            if (!hasRecoverableFailures || attempt > options.AutoRestartMaxAttempts) break;'
+          if old in t:
+              t = t.replace(old, new)
+              print('fixed AutoRestart condition')
+          else:
+              print('AutoRestart already patched or missing')
+
+          # 3) mxHosts type for ?? operator
+          old = "mxRecords?.Select(r => r.Host).ToList() ?? Array.Empty<string>()"
+          new = '(IReadOnlyList<string>)(mxRecords?.Select(r => r.Host).ToList() ?? new List<string>())'
+          if old in t:
+              t = t.replace(old, new)
+              print('fixed mxHosts')
+          else:
+              print('mxHosts already patched or missing')
+
+          p.write_text(t, encoding='utf-8')
+          print('wrote', p, 'bytes', p.stat().st_size)
+          PY
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/MailLoadTester.Core/SmtpTestRunner.cs
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "fix(runner): pathPool ReportPathEvents, AutoRestart on Failed, mxHosts type"
+            git push
+          fi
