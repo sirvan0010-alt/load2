@@ -174,6 +174,7 @@ public sealed class SmtpTestRunnerTests
         private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
         {
             using (client)
+            {
             await using var stream = client.GetStream();
             using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, leaveOpen: true);
             await using var writer = new StreamWriter(stream, Encoding.ASCII, 4096, leaveOpen: true)
@@ -254,6 +255,7 @@ public sealed class SmtpTestRunnerTests
                 else
                     await writer.WriteLineAsync("250 OK");
             }
+        }
         }
 
         public async ValueTask DisposeAsync()

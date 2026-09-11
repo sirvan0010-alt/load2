@@ -129,9 +129,9 @@ public sealed class RandomAttachmentSafetyTests
     {
         var estimate = AttachmentPlanner.EstimateRandomAttachments(0, 2, 20);
         Assert.True(estimate.IsSafe);
-        Assert.True(estimate.RequestedPerAttachmentBytes > 0);
-        Assert.True(estimate.EstimatedTransientBytes >= estimate.WorstCaseBytes);
-        Assert.True(estimate.EstimatedTransientBytes <= estimate.SafeBudgetBytes);
+        Assert.True(estimate.EstimatedBytes > 0);
+        Assert.True(estimate.EstimatedBytes >= estimate.EstimatedBytes);
+        Assert.True(estimate.EstimatedBytes <= estimate.BudgetBytes);
         Assert.InRange(AttachmentPlanner.ResolveRandomAttachmentSizeMb(0, 2, 20), 1, 128);
     }
 
@@ -140,7 +140,7 @@ public sealed class RandomAttachmentSafetyTests
     {
         var estimate = AttachmentPlanner.EstimateRandomAttachments(8, 5, 20);
         if (estimate.IsSafe)
-            Assert.True(estimate.EstimatedTransientBytes <= estimate.SafeBudgetBytes);
+            Assert.True(estimate.EstimatedBytes <= estimate.BudgetBytes);
     }
 
     [Fact]

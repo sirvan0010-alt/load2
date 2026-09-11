@@ -125,7 +125,7 @@ public sealed class SmartPaceControllerTests
     [Fact]
     public async Task PerRecipientLimit_DoesNotConsumeGlobalSlotWhileBlocked()
     {
-        var pace = new SmartPaceController(Opts(1000));
+        var pace = new SmartPaceController(BaseOptions(1000));
         Assert.True(pace.TryReserveRecipient("same@test.local"));
         pace.CommitRecipient("same@test.local");
 
