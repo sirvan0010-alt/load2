@@ -9,6 +9,19 @@
 - `Load-tester-` is legacy and must not be used for new implementation.
 - Phase 1–7 source audit is complete; Phase 8 verification is still pending.
 - A defect is marked fixed only with source evidence, caller review, regression coverage and verification evidence.
+- The repair/audit roadmap is tracked as **9 top-level points**. Subtasks are explicitly numbered `1.1`, `1.2`, etc. so that an expanded point does not get confused with a new top-level phase.
+
+## 9-point repair and audit roadmap
+
+1. **Execution-model refactor and verification** — BUG-001, BUG-003, BUG-007, BUG-009; currently active. Subtasks: 1.1 bounded workers, 1.2 first-send pacing, 1.3 retry pacing, 1.4 actual-SEND gate ordering, 1.5 regression/cancellation review, 1.6 compile/static integrity of candidate fix.
+2. **Delivery correctness / auto-restart** — BUG-002; durable per-message delivery ledger and duplicate-send prevention.
+3. **Proxy rotation** — BUG-004; blocked endpoint eligibility and exhaustion semantics.
+4. **IPv4 rotation** — BUG-005; RFC 3021 `/31` and `/32` semantics.
+5. **Repository integrity** — BUG-006; preserve structured solution layout and prevent accidental flattening/Git-internal artifacts.
+6. **Direct MX routing hardening** — BUG-008; make runner safe even if validation is bypassed or reused with mixed recipient domains.
+7. **Security verification** — SEC-AUDIT-001..004; AUTH redaction, filesystem boundaries, secret provenance, `--unauthorized` and DryRun network isolation.
+8. **Concurrency/network/runtime verification** — CONC-AUDIT-001..002 and NET-AUDIT-001..002; combined state-machine stress, cancellation, socket/source-IP/proxy combinations and TLS matrix.
+9. **Architecture and release verification** — plugin discovery/lifecycle, options/validation cohesion, production-to-test coverage map, Release build, tests and smoke verification.
 
 ## Confirmed / registered findings
 
@@ -20,6 +33,16 @@
 **Impact:** high `MessageCount` can create excessive task/state/CPU/memory pressure.
 
 **Status:** OPEN
+
+#### 1.1 — Bounded worker-pool replacement
+The candidate `SmtpTestRunner.fixed.cs` replaces task-per-message execution with a bounded `Channel<int>` plus `MaxConcurrency` workers. Static review indicates the intended worker bound is correct. The candidate is not yet promoted to the production runner and is not marked fixed until compilation and regression evidence exist.
+
+**Status:** CANDIDATE — STATIC REVIEW POSITIVE, VERIFICATION PENDING
+
+#### 1.6 — Candidate syntax/integrity finding
+The uploaded candidate currently contains an extra closing brace immediately before the `finally` belonging to `ProcessMessageAsync` (around the end of the per-message try/finally block). This makes the candidate non-compilable in its current form and must be corrected before it can be considered for the repair branch.
+
+**Status:** OPEN — CANDIDATE BLOCKER
 
 ### BUG-002 — HIGH — Auto-restart can duplicate successful deliveries
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
@@ -38,6 +61,11 @@
 **Impact:** unnecessary startup latency and lower measured throughput for short tests.
 
 **Status:** CONFIRMED — OPEN
+
+#### 1.2 — First actual SEND must be immediate
+The repair design changes global pacing from pre-reserved schedule slots to an actual-send gate based on the timestamp of the previous real SEND. The first SEND is immediate; subsequent SEND operations are spaced from the previous actual SEND. Static compatibility with the fixed runner is positive, but runtime verification remains pending.
+
+**Status:** CANDIDATE — STATIC REVIEW POSITIVE, VERIFICATION PENDING
 
 ### BUG-004 — MEDIUM — Proxy rotation can sample blocked endpoints repeatedly
 **Location:** `src/MailLoadTester.Core/ProxyRotator.cs`
@@ -71,6 +99,11 @@ Initial sends reserve a slot through `SmartPaceController.WaitBeforeSendAsync`, 
 
 **Status:** OPEN
 
+#### 1.3 — Retry must re-enter actual-SEND pacing
+The candidate runner places `AcquireSendSlotAsync()` immediately around each real `SendAsync()` inside the retry loop. Retry backoff remains cancellation-aware and does not itself consume a pacing slot. Static review indicates this closes the original retry-pacing bypass, subject to build and deterministic timing tests.
+
+**Status:** CANDIDATE — STATIC REVIEW POSITIVE, VERIFICATION PENDING
+
 ### BUG-008 — HIGH — Direct MX implementation resolves only the first recipient domain
 **Location:** `src/MailLoadTester.Core/SmtpTestRunner.cs`
 
@@ -90,6 +123,16 @@ The runner calls `WaitBeforeSendAsync()` first. That method reserves and waits f
 **Required regression:** deterministic test with a controlled second-stage delay proving actual send order/timestamps cannot collapse below the configured spacing.
 
 **Status:** CONFIRMED — OPEN
+
+#### 1.4 — Actual-SEND gate ordering
+The candidate runner moves the global pacing gate to the point immediately before the actual SMTP `SendAsync()`, after adaptive-concurrency and SMTP-pool admission. The gate is scoped only around the real SEND and is released immediately afterward. It is not held during MIME generation, connection admission, retry backoff or post-send reporting.
+
+**Status:** CANDIDATE — STATIC REVIEW POSITIVE, VERIFICATION PENDING
+
+#### 1.5 — Execution-model regression and cancellation review
+Regression coverage exists on the repair branch for first-send immediacy, concurrent pacing, gate cancellation, zero interval, recipient limiter interaction, bounded worker concurrency, transient retry pacing and cancellation. Full build/test execution has not yet been performed in this environment, so these tests are evidence of intended coverage, not execution proof.
+
+**Status:** OPEN — VERIFICATION PENDING
 
 ## Investigation items — not promoted to confirmed bugs
 
@@ -119,6 +162,10 @@ Plain/STARTTLS/implicit TLS, certificate validation, client certificates, timeou
 
 ## Phase 1–7 conclusion
 
-The targeted deep audit promoted two additional source-confirmed defects: **BUG-003** (first pacing slot) and **BUG-009** (pacing composition with downstream admission). The confirmed ledger is now BUG-001 through BUG-009.
+The targeted deep audit promoted two additional source-confirmed defects: **BUG-003** (first pacing slot) and **BUG-009** (pacing composition with downstream admission). The confirmed ledger remains BUG-001 through BUG-009.
 
-Phase 8 is the next step: build/test execution plus targeted integration and smoke verification. No item is marked FIXED merely because a code comment claims it is fixed.
+## Current execution-model status
+
+Top-level point **1** is still active. It has expanded into subtasks **1.1–1.6**, but it remains one top-level plan item rather than six new audit phases. The uploaded `SmtpTestRunner.fixed.cs` is a candidate implementation only; `src/MailLoadTester.Core/SmtpTestRunner.cs` on `main` remains unchanged as the source-of-truth production runner. The candidate must first receive the syntax/integrity correction, then pass static review, build, regression and integration verification before any merge decision.
+
+Phase 8 remains the next verification stage after the source-level repair work: build/test execution plus targeted integration and smoke verification. No item is marked FIXED merely because a code comment or candidate file claims it is fixed.
