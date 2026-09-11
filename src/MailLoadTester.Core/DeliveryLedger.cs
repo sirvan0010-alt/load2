@@ -1,6 +1,6 @@
 namespace MailLoadTester;
 
-internal enum DeliveryState
+public enum DeliveryState
 {
     Pending = 0,
     InFlight = 1,
@@ -8,7 +8,7 @@ internal enum DeliveryState
     Failed = 3
 }
 
-internal sealed class DeliveryLedger
+public sealed class DeliveryLedger
 {
     private readonly int[] _states;
 
