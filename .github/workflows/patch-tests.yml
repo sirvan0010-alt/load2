@@ -1,0 +1,48 @@
+name: Patch Tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-tests.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove duplicate AttachmentPlannerTests class
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('tests/MailLoadTester.Tests/ValidationTests.cs')
+          t = p.read_text(encoding='utf-8')
+          markers = ['\npublic class AttachmentPlannerTests', '\npublic sealed class AttachmentPlannerTests']
+          idx = -1
+          for m in markers:
+              idx = t.find(m)
+              if idx >= 0:
+                  break
+          if idx < 0:
+              print('No duplicate class found')
+          else:
+              t = t[:idx].rstrip() + '\n'
+              p.write_text(t, encoding='utf-8')
+              print('Removed duplicate AttachmentPlannerTests from ValidationTests.cs')
+          PY
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/MailLoadTester.Tests/ValidationTests.cs
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "fix(tests): remove duplicate AttachmentPlannerTests class"
+            git push
+          fi
