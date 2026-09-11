@@ -1,6 +1,5 @@
 # MailLoadTester — MASTER FIX PLAN
 
-> Canonical repair/audit plan for `sirvan0010-alt/load:main`? No.
 > **SOURCE OF TRUTH: `sirvan0010-alt/load2`, branch `main`.**
 >
 > This document consolidates the repair ledger and audit-progress documents previously maintained in the parallel `load` repository. Historical copies remain secondary references only.
