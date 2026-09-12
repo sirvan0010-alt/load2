@@ -283,6 +283,8 @@ public sealed class SmtpTestRunner
         // FEAT-HEALTH: per SMTP endpoint health (host:port). Independent of circuit breaker / proxy ban.
         var endpointHealth = new TransportHealthRegistry();
         var endpointKey = $"{options.SmtpHost}:{options.Port}";
+        var runId = Guid.NewGuid().ToString("N");
+        var runStartedUtc = DateTimeOffset.UtcNow;
         // FEAT-022: phase timing samples (successful logical messages only).
         var prepWaits = new ConcurrentBag<double>();
         var adaptiveWaits = new ConcurrentBag<double>();
@@ -896,7 +898,9 @@ public sealed class SmtpTestRunner
             AvgAdaptiveWaitMs: AverageOrZero(adaptiveWaits),
             AvgPoolWaitMs: AverageOrZero(poolWaits),
             AvgPaceWaitMs: AverageOrZero(paceWaits),
-            AvgSmtpSendMs: AverageOrZero(smtpSends));
+            AvgSmtpSendMs: AverageOrZero(smtpSends),
+            RunId: runId,
+            EndpointHealth: endpointHealth.SnapshotAll());
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;

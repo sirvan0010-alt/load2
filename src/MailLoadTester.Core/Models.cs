@@ -138,7 +138,11 @@ public sealed record MailTestResult(
     /// <summary>Average wait inside AcquireSendSlotAsync (global SEND spacing gate).</summary>
     double AvgPaceWaitMs = 0,
     /// <summary>Average duration of the actual SmtpClient.SendAsync call.</summary>
-    double AvgSmtpSendMs = 0);
+    double AvgSmtpSendMs = 0,
+    /// <summary>FEAT-REPORT: unique id for this run (single attempt or aggregate AutoRestart).</summary>
+    string? RunId = null,
+    /// <summary>FEAT-HEALTH snapshots at end of run (may be empty).</summary>
+    IReadOnlyList<EndpointHealthSnapshot>? EndpointHealth = null);
 
 public static class Validation
 {
