@@ -100,7 +100,12 @@ public sealed record MailTestOptions(
     string ProviderPreset = "Custom",
     bool CheckRblBeforeStart = false,
     bool CollectObservedResponses = true,
-    bool Unauthorized = false);
+    bool Unauthorized = false,
+    /// <summary>
+    /// Optional multi-account list. Null/empty/single-entry keeps the classic single-pool path
+    /// (Username/Password on options). Two or more entries activate SmtpAccountPoolHub.
+    /// </summary>
+    IReadOnlyList<SmtpAccount>? Accounts = null);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
@@ -220,6 +225,20 @@ public static class Validation
         if (!o.DryRun && !o.TestMode && !o.Unauthorized)
             throw new ArgumentException(
                 "Odesílání mimo Test mode vyžaduje --unauthorized (nebo Unauthorized=true).");
+        if (o.Accounts is { Count: > 0 })
+        {
+            foreach (var a in o.Accounts)
+            {
+                if (a is null || string.IsNullOrWhiteSpace(a.Id))
+                    throw new ArgumentException("Každý SmtpAccount musí mít neprázdné Id.");
+                if (string.IsNullOrWhiteSpace(a.SmtpHost))
+                    throw new ArgumentException($"SmtpAccount '{a?.Id}' musí mít SmtpHost.");
+                if (a.UseAuthentication && string.IsNullOrWhiteSpace(a.Username))
+                    throw new ArgumentException($"SmtpAccount '{a.Id}' vyžaduje Username.");
+                if (a.UseAuthentication && string.IsNullOrEmpty(a.Password) && a.AuthMethod != SmtpAuthMethod.OAuth2)
+                    throw new ArgumentException($"SmtpAccount '{a.Id}' vyžaduje Password (kromě OAuth2).");
+            }
+        }
         if (o.Security == SmtpSecurity.ImplicitTls && o.Port != 465)
             throw new ArgumentException("Implicit TLS je podporováno na portu 465.");
         if (o.Security == SmtpSecurity.StartTls && o.Port == 465)

@@ -380,16 +380,40 @@ public sealed class SmtpTestRunner
             "Odesílání zpráv" + (options.MaxConcurrency > 1 ? $" (paralelismus {options.MaxConcurrency})" : ""));
 
         SmtpConnectionPool? pool = null;
+        SmtpAccountPoolHub? accountHub = null;
+        var multiPoolConnections = 0;
+        // N>1 accounts → hub; otherwise classic single SmtpConnectionPool (unchanged semantics).
+        var multiAccount = options.Accounts is { Count: > 1 };
         try
         {
             if (!options.DryRun)
             {
-                pool = new SmtpConnectionPool(options, sessionLogger, pathObserver);
-                if (options.PreWarmConnections)
+                if (multiAccount)
                 {
-                    Report(0, 0, "Pre-warming SMTP connections…", null, 2, "Pre-warm spojení", "Odesílání");
-                    await pool.PreWarmAsync(options.MaxConcurrency, ct).ConfigureAwait(false);
-                    Report(0, 0, $"Pre-warmed {pool.CreatedCount} connections", null, 2, "Spojení připravena", "Odesílání");
+                    var accountRegistry = new SmtpAccountRegistry(options.Accounts!);
+                    accountHub = new SmtpAccountPoolHub(options, accountRegistry, endpointHealth, sessionLogger, pathObserver);
+                    if (options.PreWarmConnections)
+                    {
+                        Report(0, 0, "Pre-warming multi-account SMTP pools…", null, 2, "Pre-warm spojení", "Odesílání");
+                        var warmed = 0;
+                        foreach (var acc in accountRegistry.Snapshot())
+                        {
+                            var ap = accountHub.GetOrCreatePool(acc);
+                            await ap.PreWarmAsync(options.MaxConcurrency, ct).ConfigureAwait(false);
+                            warmed += ap.CreatedCount;
+                        }
+                        Report(0, 0, $"Pre-warmed {warmed} connections across {accountRegistry.Count} accounts", null, 2, "Spojení připravena", "Odesílání");
+                    }
+                }
+                else
+                {
+                    pool = new SmtpConnectionPool(options, sessionLogger, pathObserver);
+                    if (options.PreWarmConnections)
+                    {
+                        Report(0, 0, "Pre-warming SMTP connections…", null, 2, "Pre-warm spojení", "Odesílání");
+                        await pool.PreWarmAsync(options.MaxConcurrency, ct).ConfigureAwait(false);
+                        Report(0, 0, $"Pre-warmed {pool.CreatedCount} connections", null, 2, "Spojení připravena", "Odesílání");
+                    }
                 }
             }
 
@@ -533,6 +557,7 @@ public sealed class SmtpTestRunner
                             }
 
                             SmtpClient? client = null;
+                        SmtpAccountLease? accountLease = null;
                             try
                             {
                                 if (options.DryRun)
@@ -569,9 +594,19 @@ public sealed class SmtpTestRunner
                                         MessageStep.RentingConnection, i, workerId,
                                         DeliveryStepKind.TcpConnect, null);
                                     var poolT0 = Stopwatch.GetTimestamp();
-                                    client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
-                                    samplePoolMs = TicksToMs(Stopwatch.GetTimestamp() - poolT0);
-                                    ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
+                                    if (multiAccount)
+                                    {
+                                        accountLease = await accountHub!.RentAsync(workerCt).ConfigureAwait(false);
+                                        client = accountLease.Client;
+                                        samplePoolMs = TicksToMs(Stopwatch.GetTimestamp() - poolT0);
+                                        ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, accountLease.Pool);
+                                    }
+                                    else
+                                    {
+                                        client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
+                                        samplePoolMs = TicksToMs(Stopwatch.GetTimestamp() - poolT0);
+                                        ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
+                                    }
 
                                     // Po úspěšném Rent: TCP + EHLO (+ STARTTLS + AUTH podle konfigurace) proběhly
                                     // TCP/EHLO/STARTTLS/AUTH barvy z ProtocolPathObserver (skutečné C:/S: řádky)
@@ -629,7 +664,14 @@ public sealed class SmtpTestRunner
                                     }
 
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
-                                    pool.Return(client);
+                                    if (accountLease != null)
+                                    {
+                                        accountHub!.ReportSendSuccess(accountLease.Account);
+                                        accountLease.Return();
+                                        accountLease = null;
+                                    }
+                                    else
+                                        pool!.Return(client);
                                     client = null;
                                 }
 
@@ -644,7 +686,17 @@ public sealed class SmtpTestRunner
                             }
                             catch (OperationCanceledException)
                             {
-                                if (client is not null) pool?.Discard(client);
+                                if (client is not null)
+                                {
+                                    if (accountLease != null)
+                                    {
+                                        accountLease.Discard();
+                                        accountLease = null;
+                                    }
+                                    else
+                                        pool?.Discard(client);
+                                    client = null;
+                                }
                                 throw;
                             }
                             catch (Exception ex) when (IsTransient(ex) && attempt < options.MaxRetries)
@@ -652,8 +704,14 @@ public sealed class SmtpTestRunner
                                 if (client is not null)
                                 {
                                     if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
-                                        pool!.ReportProxyBlocked(client);
-                                    pool!.Discard(client);
+                                        (accountLease != null ? accountLease.Pool : pool)!.ReportProxyBlocked(client);
+                                    if (accountLease != null)
+                                    {
+                                        accountLease.Discard(ex);
+                                        accountLease = null;
+                                    }
+                                    else
+                                        pool!.Discard(client);
                                     client = null;
                                 }
                                 lastEx = ex;
@@ -688,8 +746,14 @@ public sealed class SmtpTestRunner
                                 if (client is not null)
                                 {
                                     if (IpBanDetector.IsLikelyIpOrProxyBan(ex.Message))
-                                        pool!.ReportProxyBlocked(client);
-                                    pool!.Discard(client);
+                                        (accountLease != null ? accountLease.Pool : pool)!.ReportProxyBlocked(client);
+                                    if (accountLease != null)
+                                    {
+                                        accountLease.Discard(ex);
+                                        accountLease = null;
+                                    }
+                                    else
+                                        pool!.Discard(client);
                                     client = null;
                                 }
                                 lastEx = ex;
@@ -725,7 +789,8 @@ public sealed class SmtpTestRunner
                                 ledgerAccepted = true;
                                 var s = Interlocked.Increment(ref sent);
                                 latencies.Add(msgSw.Elapsed.TotalMilliseconds);
-                                endpointHealth.RecordSuccess(endpointKey);
+                                if (!multiAccount)
+                                    endpointHealth.RecordSuccess(endpointKey);
                                 prepWaits.Add(samplePrepMs);
                                 adaptiveWaits.Add(sampleAdaptiveMs);
                                 poolWaits.Add(samplePoolMs);
@@ -750,7 +815,7 @@ public sealed class SmtpTestRunner
                         else
                         {
                             ledger.MarkFailed(i);
-                            if (lastEx != null)
+                            if (lastEx != null && !multiAccount)
                                 endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(lastEx));
                             var f = Interlocked.Increment(ref failed);
                             Interlocked.Exchange(ref lastError, explained);
@@ -864,6 +929,15 @@ public sealed class SmtpTestRunner
         finally
         {
             sw.Stop();
+            if (accountHub != null)
+            {
+                foreach (var acc in accountHub.Registry.Snapshot())
+                {
+                    try { multiPoolConnections += accountHub.GetOrCreatePool(acc).CreatedCount; }
+                    catch (ObjectDisposedException) { break; }
+                }
+                await accountHub.DisposeAsync().ConfigureAwait(false);
+            }
             if (pool != null)
                 await pool.DisposeAsync().ConfigureAwait(false);
             sessionLogger?.Dispose();
@@ -887,7 +961,7 @@ public sealed class SmtpTestRunner
         if (cancelled && string.IsNullOrEmpty(lastError))
             lastError = "Zastaveno uživatelem";
 
-        var poolConnections = pool?.CreatedCount ?? 0;
+        var poolConnections = multiAccount ? multiPoolConnections : (pool?.CreatedCount ?? 0);
         var adaptiveConcurrency = adaptive?.Current ?? options.MaxConcurrency;
         var circuitOpen = circuit?.EverOpened ?? false;
 
