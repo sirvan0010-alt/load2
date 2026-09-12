@@ -1,41 +1,79 @@
 # Trehwmm/Email-Bomber-SMTP — source-level audit
 
-Status: SOURCE-AUDITED — relevant SMTP execution source inspected on `main`.
+**Status:** SOURCE-AUDITED · **SECURITY-CRITICAL FINDING**
+
+**Do not build this project on a trusted machine.** The `.vbproj` embeds a Roslyn MSBuild task that decodes and runs native code in-process during build.
 
 ## Verified source
-- `Email Bomber/Form1.vb` — SHA `d47f5ecdcba8105f8fee6b933c2afb4e5c43c820`
-- `README.md` — SHA `6c03b91c7a4ae124746d4ef2243a71acfc8ed546`
+- `Email Bomber/Form1.vb`
+- `Email Bomber/userinfo.vb`
+- `Email Bomber/Email Bomber.vbproj`
+- `.github/workflows/dotnet-desktop.yml`
+- `README.md`
 
-## Verified mechanisms
-- Windows VB.NET desktop GUI.
-- Up to five configured SMTP identities are started as separate `BackgroundWorker` instances.
-- Each worker creates an SMTP client, configures port 587, credentials and TLS, then repeatedly calls `Send` until its configured count is reached.
-- Cancellation is exposed through `CancelAsync()` and checked through `CancellationPending` inside each send loop.
-- README explicitly describes simultaneous sending for multiple users and a configurable email count.
+## SECURITY-CRITICAL — MSBuild in-memory loader
 
-## Defects / observations
-- Five workers and five sets of fields/counters are manually duplicated instead of represented by a bounded worker abstraction.
-- Mutable shared fields (`sa1..sa5`, account names/passwords) make lifecycle/state handling fragile.
-- Completion handling is attached to `BackgroundWorker1.RunWorkerCompleted`; it does not aggregate completion of all workers.
-- `BackgroundWorker4_DoWork` builds the message `From` address from `name3` instead of `name4`.
-- `BackgroundWorker5_DoWork` builds the message `From` address from `name3` instead of `name5`.
-- SMTP endpoint is hardcoded to Gmail and port 587.
-- Credentials are stored in mutable application fields; not suitable for load2's environment/secret configuration model.
-- No central pacing, retry policy, structured result classification or adaptive concurrency.
+`Email Bomber/Email Bomber.vbproj` contains a `UsingTask` with `RoslynCodeTaskFactory` whose `Execute()` method:
+
+1. `Convert.FromBase64String` on a large embedded blob
+2. XOR with three rotating 32-byte keys
+3. GZip decompress
+4. `VirtualAlloc` → `Marshal.Copy` → `VirtualProtect` → `CreateThread` → `WaitForSingleObject`
+
+This is **not** SMTP functionality. It is an obfuscated native payload runner hooked into the **build** process.
+
+| Item | Decision |
+|------|----------|
+| Embedded Base64/XOR/GZip native loader | **REJECT — SECURITY CRITICAL** |
+| VirtualAlloc / VirtualProtect / CreateThread in MSBuild | **REJECT — SECURITY CRITICAL** |
+| Any copy of this build task into load2 | **REJECT** |
+
+**load2 policy:** never accept custom MSBuild/Roslyn tasks that allocate executable memory or decode opaque blobs. Prefer stock SDK builds; review any `UsingTask` / `CodeTaskFactory` in third-party projects before open.
+
+## CI anomaly
+
+`.github/workflows/dotnet-desktop.yml`:
+
+- `on.push` **and** `schedule: cron: "* * * * *"` (every minute)
+- writes timestamp into `EMail`
+- commits with random/fixed messages
+- `ad-m/github-push-action` with **`force: true`**
+
+| Item | Decision |
+|------|----------|
+| Minute-ly auto-commit + force-push | **REJECT** as practice |
+| Branch protection / no force-push on `main` | **HARDEN** for load2 if not already |
+
+## SMTP mechanisms (Form1.vb)
+
+- Up to five SMTP identities as separate `BackgroundWorker` instances
+- Each worker: SMTP client, port 587, TLS, credentials, repeated `Send` to finite count
+- `CancelAsync` / `CancellationPending` in send loop
+- Shared mutable counters `sa1..sa5`; completion tied mainly to worker 1
+- Workers 4/5 use wrong `From` (`name3`) — source defect
+- Credentials in GUI `ListView` / mutable fields (`userinfo.vb`)
+- Hardcoded Gmail endpoint; no retry taxonomy; no central pacing; no ledger
 
 ## Transfer decisions
+
 | Mechanism | Decision | Load2 treatment |
-|---|---|---|
-| Multiple SMTP identities | ADAPT | Bounded sender/session pool instead of five hard-coded workers |
-| Persistent SMTP session | ADOPT/HARDEN | Keep MailKit persistent sessions and lifecycle management |
-| Parallel workers | ADOPT/HARDEN | Existing bounded Channel/worker and concurrency controls |
-| Finite message count | ADAPT | Scenario count with target scope, cancellation and limits |
-| Cancellation | ADOPT | CancellationToken throughout pipeline |
-| TLS / port configuration | ADAPT | Transport configuration, no hardcoded credentials |
-| Central pacing | ADOPT/HARDEN | SmartPaceController / adaptive rate limiting |
-| Structured outcomes | ADOPT/HARDEN | Delivery ledger / RunResult |
-| Manual duplicated worker state | REJECT | Replace with reusable worker/session abstraction |
-| Unrestricted bombing semantics | REJECT | Do not import as unrestricted public-target behavior |
+|-----------|----------|-----------------|
+| Multiple SMTP identities | ADAPT | Session/account pool, not 5× copy-paste |
+| Parallel workers | ADOPT | Existing bounded Channel workers |
+| Cancellation | ADOPT | `CancellationToken` |
+| Finite count | ADAPT | Scenario limits |
+| TLS / configurable endpoint | ADAPT | Options, not hardcoded host |
+| Central pacing / structured results | ADOPT | SmartPace + ledger / FEAT-REPORT |
+| Completion aggregation all workers | ADOPT | `Task.WhenAll` / runner lifecycle |
+| Manual 5× worker duplication | REJECT | |
+| GUI plaintext passwords | REJECT | |
+| Hardcoded Gmail | REJECT | |
+| Unrestricted bombing semantics | REJECT | |
+| MSBuild native loader | **REJECT — SECURITY CRITICAL** | |
+| Force-push minute CI | REJECT / HARDEN branch rules | |
 
 ## Conclusion
-Useful evidence for multi-account SMTP concurrency, persistent sessions, cancellation and finite execution. The implementation itself should not be copied. The mechanisms map onto load2's async, bounded-worker, MailKit, CancellationToken and telemetry architecture.
+
+SMTP path is a weak reference next to load2's MailKit engine. The **primary lasting value of this audit is the security finding**: compromised/abusive build tooling and hostile CI patterns to keep out of load2 supply chain.
+
+**Do not clone-and-build Trehwmm for experimentation.** Static file read only.
