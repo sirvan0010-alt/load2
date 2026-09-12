@@ -2,109 +2,79 @@
 
 > **SOURCE OF TRUTH: `sirvan0010-alt/load2`, branch `main`.**
 >
-> Audit-first workflow: phases 1–7 are statically audited against current `main`; phase 8 is reserved for execution/build/test verification.
+> This document is an audit/history register. Current implementation status must be verified against `main`; historical claims are not authoritative.
 
 ## Audit method
 
-For each component we checked entry points/callers, async and cancellation flow, shared state and synchronization, resource ownership, boundary values, retry/pacing interactions, security-sensitive data flow, configuration validation, GUI lifecycle, and regression-test coverage. Confirmed defects are recorded in `BUGS-AUDIT.md`; unverified suspicions remain explicitly marked `NOT VERIFIED`.
+For each component, inspect entry points/callers, async and cancellation flow, shared state and synchronization, resource ownership, boundary values, retry/pacing interactions, security-sensitive data flow, configuration validation, GUI lifecycle, and regression-test coverage. A feature is not marked implemented merely because it is proposed in an older document.
 
-## Phase 1 — Correctness / execution model — AUDITED
+## Current execution model — IMPLEMENTED / TEST-BACKED AREAS
 
-Confirmed:
-- **BUG-001 HIGH:** `SmtpTestRunner` creates per-message async tasks rather than a strict global worker bound; `MaxConcurrency` therefore does not bound the complete message pipeline.
-- **BUG-002 HIGH:** auto-restart repeats the complete message set and can duplicate successful deliveries because no per-message delivery ledger exists.
-- **BUG-007 HIGH:** retry delay does not reserve a new global `SmartPaceController` slot.
-- **BUG-008:** runner-level Direct MX logic resolves the first recipient domain only. Current `Validation.Validate()` rejects mixed-domain Direct MX configurations, so the unsafe mixed-domain path is currently blocked at the public validation boundary; structural hardening remains required.
-- **BUG-003 MEDIUM:** first global pacing reservation is statically confirmed to wait one full interval when the schedule is initially empty.
-- **BUG-009 HIGH:** global pacing is reserved before adaptive/pool admission, so it does not strictly guarantee spacing between actual `SendAsync` operations under downstream contention.
+`main` now contains the repaired execution model:
 
-## Phase 2 — Networking / configuration correctness — AUDITED
+- bounded `Channel<T>` work queue with fixed workers derived from `MaxConcurrency`;
+- per-message delivery ledger so AutoRestart does not duplicate already accepted logical messages;
+- actual-SEND pacing through `SmartPaceController` and an exclusive `SemaphoreSlim` gate;
+- first actual send is immediate;
+- retries reacquire the same actual-SEND gate after retry/admission delays;
+- adaptive concurrency and SMTP-pool admission occur before actual-SEND pacing;
+- per-recipient limiting remains separate from global pacing;
+- `CancellationToken` is propagated through worker, limiter, pool and send paths.
 
-Checked SMTP pool lifecycle, proxy selection/ban state, IPv4/IPv6 binding/rotation, MX resolution, TLS mode validation, source-IP interactions and idle health checks.
+These are the current invariants. Do not resurrect the former task-per-message or pre-admission pacing model.
 
-Confirmed/carry-forward:
-- **BUG-004 MEDIUM:** blocked proxy endpoints can remain eligible for random selection.
-- **BUG-005 MEDIUM:** IPv4 `/31` handling requires RFC 3021 semantics.
-- Direct-MX mixed-domain configuration is currently rejected by validation; see BUG-008 note above.
+## Historical defect register — status must follow current evidence
 
-Not runtime-verified: full TLS/connect/certificate matrix and combined source-IP/proxy/socket-family matrix.
+BUG-001 through BUG-009 were the original deep-audit findings. The execution-model fixes for BUG-001/003/007/009 are merged into `main`; BUG-004/005 have implementation and regression-test evidence; BUG-002 and BUG-008 have corresponding ledger/routing handling in the current runner. Before declaring the complete ledger closed, verify current tests and source rather than relying on this historical paragraph.
 
-## Phase 3 — Security / robustness — AUDITED STATICALLY
+## Security / robustness status
 
-Checked authentication configuration, custom-header validation, EML/attachment limits, path traversal checks, session logging, webhook behavior and safety-gate references.
+Current `main` contains:
 
-Important verification blockers:
-- **SEC-AUDIT-001 NOT VERIFIED:** end-to-end AUTH secret redaction. `SessionProtocolLogger` exposes raw `LogClient` bytes and declares `AuthenticationSecretDetector`, but source inspection alone does not prove that the detector is wired and masks AUTH traffic for this custom logger. This requires a fake-SMTP integration test; do not mark as a confirmed leak without that evidence.
-- **SEC-AUDIT-002 NOT VERIFIED:** complete UNC/junction/symlink/path-boundary audit across every file-producing/reading feature.
-- **SEC-AUDIT-003 NOT VERIFIED:** complete configuration/environment provenance audit for all secrets.
-- **SEC-AUDIT-004 NOT VERIFIED:** end-to-end `--unauthorized` enforcement and DryRun non-networking behavior.
+- explicit `--unauthorized` handling through `AuthorizationGate` for live sending outside TestMode/DryRun;
+- protocol AUTH-secret redaction through the MailKit authentication-secret detector path;
+- path traversal validation plus `PathSecurity` reparse-point checks on relevant file-producing/reading paths;
+- plugin directory/DLL path hardening;
+- MIME/attachment quotas and bounded resource handling;
+- environment/configuration based secret handling rather than hardcoded credentials;
+- CI and CodeQL workflows.
 
-Positive evidence: custom header values reject CR/LF; validation rejects `..` segments in EML and session-log paths; attachment existence and message-size limits are validated.
+Remaining work must be identified from source/tests, not by reopening already verified historical findings without evidence.
 
-## Phase 4 — Concurrency / state machines — AUDITED STATICALLY
+## Networking / diagnostics
 
-Checked the interaction model among `CircuitBreaker`, `RateLimiter`, `SmartPaceController`, `AdaptiveConcurrencyLimiter`, `PerRecipientLimiter` and `SmtpConnectionPool`, including permit ownership and shutdown/cancellation transitions. Individual limiter/pool inspections found no additional confirmed primitive race.
+Current implementation includes SMTP connectivity/TLS mapping, SMTP connection pooling, proxy rotation and blocked-endpoint exclusion, IPv4/IPv6 binding/rotation, MX resolution, DNS policy checks and Direct-MX routing. The network matrix still benefits from targeted integration testing where an actual SMTP test service is available.
 
-Composition defect confirmed:
-- **BUG-009 HIGH:** pacing slot reservation occurs before adaptive concurrency and SMTP pool admission. Internal pacing state is synchronized, but the end-to-end execution path does not preserve the promised actual-send spacing when later admission is delayed.
+## Offensive/load-generation audit policy
 
-Not runtime-verified: full cross-component stress/cancellation matrix.
+The project purpose includes user-selected SMTP/load scenarios. A concrete recipient or target supplied by the user is part of the normal scenario model; the audit must therefore study implementations that perform repeated delivery, high concurrency, provider fan-out, retries, endpoint rotation, flooding-style scheduling and failure recovery rather than filtering them out merely because their source projects call themselves "bombers".
 
-## Phase 5 — Performance / resource lifecycle — AUDITED STATICALLY
+The distinction is **not** "offensive code is forbidden to study". The distinction is:
 
-Confirmed primary performance defect:
-- **BUG-001 / PERF-AUDIT-001:** task-per-message scheduling can create excessive task/state pressure for high `MessageCount`.
+1. study the mechanism and source implementation;
+2. identify the engineering value;
+3. map it to the existing `load2` transport/orchestration model;
+4. preserve explicit authorization, cancellation, pacing and concurrency semantics;
+5. do not add stealth, credential theft, abuse-control bypasses, public-target discovery for flooding, or mechanisms whose primary purpose is uncontrolled harm.
 
-Additional correctness/performance interaction:
-- **BUG-009:** unnecessary queued pacing reservations plus downstream admission can create schedule churn and out-of-order actual sends.
+`--unauthorized` is an explicit authorization acknowledgement, not a claim that every destination is automatically authorized. The application may accept a user-specified concrete recipient as input; authorization semantics must remain explicit and auditable.
 
-Reviewed attachment preloading/safety, progress throttling, session-log buffering, connection reuse and dry-run paths. No additional confirmed defect was established from static inspection.
+## External repository research
 
-Runtime allocation/throughput profiling remains unverified.
+`docs/EXTERNAL-REPO-TRANSFER-AUDIT.md` is the dedicated transfer register. Its purpose is to record **source-level** findings, not merely README impressions.
 
-## Phase 6 — GUI / UX / operability — AUDITED STATICALLY
+Every requested external repository should eventually be classified per concrete implementation unit as:
 
-The historical `MainForm` shutdown/lifecycle defect is already fixed in prior audit work: closing the form cancels the run and waits for completion before final close, with defensive UI invocation checks.
+- `ADOPT` — transfer the mechanism with minimal architectural change;
+- `ADAPT` — reimplement it against existing `load2` interfaces;
+- `HARDEN` — useful mechanism but current implementation needs stronger correctness/security;
+- `SIMULATE` — reproduce the behavior against a controlled test target;
+- `EXTRACT` — keep only a reusable algorithm/data model;
+- `REFERENCE` — useful for comparison but not yet ready to transfer;
+- `REJECT` — no legitimate engineering value or unacceptable mechanism.
 
-Current remaining verification:
-- GUI progress/ETA semantics after the future worker refactor;
-- Stop behavior under SMTP connect/retry;
-- dashboard cleanup and port collision behavior.
+## Final verification
 
-No new confirmed GUI defect was established in this pass.
+Required evidence includes Release build/test, targeted concurrency/pacing tests, retry pacing, AutoRestart ledger behavior, Direct-MX routing, proxy ban behavior, IPv4 `/31` and `/32`, AUTH redaction, path security, profile round-trip, TLS/network tests, GUI start/stop behavior, repository-integrity checks and CI/CodeQL status.
 
-## Phase 7 — Architecture / maintainability / feature opportunities — AUDITED
-
-Architecture review confirms the Core is organized around SMTP transport/session infrastructure plus separate message/payload helpers, and the existing test project provides focused unit coverage for several core components.
-
-Open architecture verification items:
-- **ARCH-AUDIT-001:** plugin discovery/lifecycle/thread safety requires focused inspection of the actual plugin implementation/callers.
-- **ARCH-AUDIT-002:** options/default/validation cohesion needs consolidation review.
-- **ARCH-AUDIT-003:** production-to-test coverage map needs completion.
-
-Feature opportunities remain separate in `FEATURE-BACKLOG.md`. Safe candidates include bounded worker execution, per-message delivery ledger, SMTP diagnostics, fake SMTP integration harness, DNS policy diagnostics and configuration preflight. Uncontrolled flooding/spam/DoS/DDoS behavior is outside the implementation target.
-
-## Phase 1–7 conclusion
-
-**TARGETED DEEP AUDIT COMPLETE.** The audit found two additional source-confirmed defects beyond the previous ledger: **BUG-003** (first pacing slot) and **BUG-009** (pacing reservation does not compose correctly with downstream admission). The confirmed ledger is now BUG-001 through BUG-009.
-
-The audit should now stop. Next is **repair of the registered defects**, followed by Phase 8 verification. No PASS/FIXED claim without execution evidence or trustworthy CI evidence.
-
-## Phase 8 — Final verification — NOT STARTED
-
-Required evidence:
-1. `dotnet restore`
-2. `dotnet build -c Release`
-3. `dotnet test -c Release`
-4. targeted regression tests for each fix
-5. cancellation/start-stop smoke tests
-6. Direct MX tests
-7. proxy partial-ban tests
-8. IPv4 `/31` and `/32`
-9. retry pacing
-10. auto-restart duplicate-delivery protection
-11. high-message-count/low-concurrency DryRun
-12. AUTH redaction integration test
-13. path/security tests
-14. profile round-trip
-15. final repository-integrity review
+No PASS/FIXED claim without source plus test/CI evidence.
