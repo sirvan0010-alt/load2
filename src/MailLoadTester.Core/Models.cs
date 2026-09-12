@@ -242,11 +242,15 @@ public static class Validation
         }
         foreach (var path in o.Attachments)
         {
+            if (ContainsPathTraversal(path))
+                throw new ArgumentException("Příloha cesta nesmí obsahovat '..'.");
             if (!File.Exists(path))
                 throw new ArgumentException($"Příloha neexistuje: {path}");
         }
         foreach (var path in o.InlineAttachments ?? Array.Empty<string>())
         {
+            if (ContainsPathTraversal(path))
+                throw new ArgumentException("Inline příloha cesta nesmí obsahovat '..'.");
             if (!File.Exists(path))
                 throw new ArgumentException($"Inline příloha neexistuje: {path}");
         }
@@ -294,8 +298,13 @@ public static class Validation
 
         if (!string.IsNullOrEmpty(o.SourceIp) && !System.Net.IPAddress.TryParse(o.SourceIp, out _))
             throw new ArgumentException("Source IP musí být platná IP adresa.");
-        if (!string.IsNullOrEmpty(o.ClientCertificatePath) && !File.Exists(o.ClientCertificatePath))
-            throw new ArgumentException("Client certificate neexistuje.");
+        if (!string.IsNullOrEmpty(o.ClientCertificatePath))
+        {
+            if (ContainsPathTraversal(o.ClientCertificatePath))
+                throw new ArgumentException("Cesta klientského certifikátu nesmí obsahovat '..'.");
+            if (!File.Exists(o.ClientCertificatePath))
+                throw new ArgumentException("Client certificate neexistuje.");
+        }
         if (!string.IsNullOrEmpty(o.WebhookUrl) && !Uri.TryCreate(o.WebhookUrl, UriKind.Absolute, out _))
             throw new ArgumentException("Webhook URL musí být platná absolutní URL.");
         if (o.BandwidthLimitKbps is < 0 or > 1_000_000)
@@ -328,66 +337,31 @@ public static class Validation
         if (o.BackoffMultiplier is < 1.0 or > 5.0)
             throw new ArgumentException("Backoff multiplier musí být 1.0–5.0.");
         if (o.MaxIntervalMs is < 100 or > 3_600_000)
-            throw new ArgumentException("Max. interval musí být 100–3600000 ms.");
-        if (o.MaxMessagesPerRecipient is < 1 or > 10_000)
-            throw new ArgumentException("Max. zpráv na příjemce musí být 1–10000.");
-        if (o.PerRecipientWindowMinutes is < 1 or > 10_080)
-            throw new ArgumentException("Okno per-recipient musí být 1–10080 minut.");
-        if (o.SendingWindowFromHour is < 0 or > 23 || o.SendingWindowToHour is < 0 or > 23)
-            throw new ArgumentException("Hodiny časového okna musí být 0–23.");
-        if (o.GreylistRetryMinutes is < 1 or > 120)
-            throw new ArgumentException("Greylist retry musí být 1–120 minut.");
+            throw new ArgumentException("Max interval je mimo povolený rozsah.");
+        if (o.EnablePerRecipientLimit)
+        {
+            if (o.MaxMessagesPerRecipient is < 1 or > 10000)
+                throw new ArgumentException("MaxMessagesPerRecipient musí být 1–10000.");
+            if (o.PerRecipientWindowMinutes is < 1 or > 1440)
+                throw new ArgumentException("PerRecipientWindowMinutes musí být 1–1440.");
+        }
+        if (o.EnableSendingTimeWindow)
+        {
+            if (o.SendingWindowFromHour is < 0 or > 23 || o.SendingWindowToHour is < 0 or > 23)
+                throw new ArgumentException("Časové okno musí být 0–23 hodin.");
+        }
+        if (o.EnableWarmup && string.IsNullOrWhiteSpace(o.WarmupPhases))
+            throw new ArgumentException("Warmup phases nesmí být prázdné.");
+        if (o.GreylistRetryMinutes is < 1 or > 1440)
+            throw new ArgumentException("Greylist retry musí být 1–1440 minut.");
         if (o.MaxGreylistRetries is < 0 or > 20)
-            throw new ArgumentException("Max. greylist retries musí být 0–20.");
+            throw new ArgumentException("Max greylist retries musí být 0–20.");
     }
 
-    static bool IsSafeCustomHeaderName(string name)
+    static bool IsSafeCustomHeaderName(string key)
     {
-        if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("X-", StringComparison.OrdinalIgnoreCase))
-            return false;
-        foreach (var ch in name)
-        {
-            if (!(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_'))
-                return false;
-        }
-        return true;
-    }
-
-    public static string ExplainSmtpError(Exception ex)
-    {
-        if (ex is MailKit.Net.Smtp.SmtpCommandException sce)
-        {
-            var code = (int)sce.StatusCode;
-            var hint = code switch
-            {
-                421 => "Služba dočasně nedostupná – zkuste později nebo snižte paralelismus.",
-                450 => "Schránka dočasně nedostupná.",
-                451 => "Chyba při zpracování – dočasná.",
-                452 => "Nedostatek místa na serveru.",
-                454 => "Dočasné selhání autentizace.",
-                500 => "Syntaktická chyba příkazu.",
-                501 => "Syntaktická chyba parametrů.",
-                502 => "Příkaz není implementován.",
-                503 => "Špatné pořadí příkazů.",
-                504 => "Parametr není implementován.",
-                535 => "Autentizace selhala (špatné jméno/heslo nebo metoda).",
-                550 => "Schránka neexistuje nebo je odmítnuta.",
-                551 => "Uživatel není lokální.",
-                552 => "Překročena kvóta schránky.",
-                553 => "Adresa příjemce je neplatná.",
-                554 => "Transakce selhala (často policy/spam).",
-                _ when code >= 400 && code < 500 => "Dočasná chyba (4xx) – lze opakovat.",
-                _ when code >= 500 => "Trvalá chyba (5xx) – opakování nepomůže.",
-                _ => ""
-            };
-            return string.IsNullOrEmpty(hint)
-                ? $"SMTP {code}: {sce.Message}"
-                : $"SMTP {code}: {sce.Message} — {hint}";
-        }
-        if (ex is TimeoutException)
-            return "Vypršel časový limit spojení se serverem.";
-        if (ex is System.Net.Sockets.SocketException)
-            return "Síťová chyba: " + ex.Message;
-        return ex.Message;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        if (key.Any(char.IsWhiteSpace) || key.Any(c => c < 33 || c > 126)) return false;
+        return key.All(c => char.IsLetterOrDigit(c) || c == '-');
     }
 }
