@@ -371,20 +371,24 @@ public static class Validation
         if (ex is MailKit.Net.Smtp.SmtpProtocolException)
             return "SMTP protokol: " + ex.Message;
         if (ex is TimeoutException)
-            return "Timeout: " + ex.Message;
+            return "Vypršel časový limit: " + ex.Message;
         if (ex is OperationCanceledException)
             return "Zrušeno uživatelem / tokenem";
         if (ex is IOException)
             return "IO: " + ex.Message;
         if (ex is MailKit.Security.AuthenticationException)
             return "AUTH: " + ex.Message;
-        return ex.GetType().Name + ": " + ex.Message;
+        return string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
     }
 
+    /// <summary>
+    /// SEC-002: custom headers must be X-* so callers cannot override Subject/From/To/Bcc.
+    /// </summary>
     static bool IsSafeCustomHeaderName(string key)
     {
         if (string.IsNullOrWhiteSpace(key)) return false;
         if (key.Any(char.IsWhiteSpace) || key.Any(c => c < 33 || c > 126)) return false;
+        if (!key.StartsWith("X-", StringComparison.OrdinalIgnoreCase)) return false;
         return key.All(c => char.IsLetterOrDigit(c) || c == '-');
     }
 }
