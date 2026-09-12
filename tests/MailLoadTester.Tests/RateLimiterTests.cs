@@ -40,22 +40,30 @@ public class RateLimiterTests
             $"Third start was only {times[2] - times[1]} ms after the second.");
     }
 
-    [Fact(Skip = "Known pre-existing / out of scope for execution-model CI")]
+    [Fact]
     public async Task CancelledLastReservation_DoesNotLeavePhantomDelay()
     {
-        var limiter = new RateLimiter(250);
+        // Contract: a cancelled reservation must not stack an *extra* full interval
+        // on top of the spacing already established by the last granted slot.
+        // After one grant at T0, the next real wait is due at T0+interval — not T0+2*interval.
+        const int intervalMs = 200;
+        var limiter = new RateLimiter(intervalMs);
         using var cts = new CancellationTokenSource();
 
-        await limiter.WaitAsync(CancellationToken.None);
-        cts.Cancel();
+        await limiter.WaitAsync(CancellationToken.None); // grant at T0 (immediate)
 
+        cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => limiter.WaitAsync(cts.Token));
 
         var sw = Stopwatch.StartNew();
         await limiter.WaitAsync(CancellationToken.None);
+        sw.Stop();
 
-        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(100),
-            $"Unexpected phantom delay: {sw.ElapsedMilliseconds} ms.");
+        // Must wait roughly one interval from T0, not two.
+        Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(intervalMs - 40),
+            $"Expected ~{intervalMs} ms spacing after grant, got {sw.ElapsedMilliseconds} ms.");
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(intervalMs * 1.6),
+            $"Cancelled reservation left a stacked phantom delay: {sw.ElapsedMilliseconds} ms.");
     }
 
     [Fact]
