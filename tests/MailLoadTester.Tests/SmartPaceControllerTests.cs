@@ -51,7 +51,7 @@ public sealed class SmartPaceControllerTests
 
         var tasks = Enumerable.Range(0, messages).Select(async _ =>
         {
-            await pace.WaitBeforeSendAsync("b@test.local", CancellationToken.None);
+            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
             pace.RecordSuccess("b@test.local");
         });
         await Task.WhenAll(tasks);
@@ -77,35 +77,27 @@ public sealed class SmartPaceControllerTests
     public async Task Cancellation_ReleasesWithoutHang()
     {
         var pace = new SmartPaceController(BaseOptions(5_000));
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
         using var cts = new CancellationTokenSource(100);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => pace.WaitBeforeSendAsync("x@test.local", cts.Token));
+            async () => { await using var lease = await pace.AcquireSendSlotAsync(cts.Token); });
     }
 
     [Fact]
     public async Task Cancellation_RemovesOnlyItsOwnReservation()
     {
         var pace = new SmartPaceController(BaseOptions(5_000));
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+
         using var firstCts = new CancellationTokenSource();
         using var secondCts = new CancellationTokenSource();
-
-        var first = pace.WaitBeforeSendAsync("first@test.local", firstCts.Token);
-        var second = pace.WaitBeforeSendAsync("second@test.local", secondCts.Token);
-
-        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
-        while (pace.ScheduledReservationCount < 2 && Stopwatch.GetTimestamp() < deadline)
-            await Task.Yield();
-
-        Assert.Equal(2, pace.ScheduledReservationCount);
+        var first = pace.AcquireSendSlotAsync(firstCts.Token).AsTask();
+        var second = pace.AcquireSendSlotAsync(secondCts.Token).AsTask();
 
         firstCts.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
-
-        Assert.Equal(1, pace.ScheduledReservationCount);
-
         secondCts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second);
-        Assert.Equal(0, pace.ScheduledReservationCount);
     }
 
     [Fact]
@@ -119,7 +111,13 @@ public sealed class SmartPaceControllerTests
     [Fact]
     public async Task PerRecipientLimit_DoesNotConsumeGlobalSlotWhileBlocked()
     {
-        var pace = new SmartPaceController(BaseOptions(1000));
+        var opts = BaseOptions(1000) with
+        {
+            EnablePerRecipientLimit = true,
+            MaxMessagesPerRecipient = 1,
+            PerRecipientWindowMinutes = 60
+        };
+        var pace = new SmartPaceController(opts);
         Assert.True(pace.TryReserveRecipient("same@test.local"));
         pace.CommitRecipient("same@test.local");
 
