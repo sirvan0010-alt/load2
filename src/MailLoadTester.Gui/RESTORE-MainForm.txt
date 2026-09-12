@@ -1,0 +1,10 @@
+MainForm.cs was accidentally truncated during UI update.
+
+RESTORE:
+1. Download from previous good commit:
+   https://github.com/sirvan0010-alt/load2/blob/aceabadb791d82a15e344b267e6a9d1409dc7356/src/MailLoadTester.Gui/MainForm.cs
+2. Or use local artifact MainForm.FULL.cs (banner+wizard+dark mode+compact) if you have the agent workspace.
+
+Theme helpers already on main: MainForm.Theme.cs (UpdateSafetyBanner, ShowGettingStartedWizard, ApplyTheme).
+
+After restoring original MainForm, apply UI patch or replace with FULL version from agent.
