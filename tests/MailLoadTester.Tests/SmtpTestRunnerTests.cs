@@ -104,6 +104,29 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task TransientRetry_IssuesSecondDataAttempt_ThroughSendPath()
+    {
+        // Phase A / 1.3: each retry must reach a real SMTP SEND again
+        // (runner places AcquireSendSlotAsync inside the attempt loop).
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailThenAccept);
+        var runner = new SmtpTestRunner();
+
+        var options = CreateOptions(server.Port, messageCount: 1, maxRetries: 1, maxConcurrency: 1) with
+        {
+            IntervalMs = 50
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.Equal(1, result.Sent);
+        Assert.Equal(0, result.Failed);
+        Assert.True(result.Retries >= 1, $"Expected at least one retry, got Retries={result.Retries}");
+        Assert.True(result.Smtp4xx >= 1, "First attempt should have observed SMTP 4xx");
+        Assert.Equal(2, server.DataAttempts);
+        Assert.Equal(1, server.MessagesAccepted);
+    }
+
+    [Fact]
     public async Task Cancellation_ReturnsPartialResults()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData);
@@ -152,7 +175,8 @@ public sealed class SmtpTestRunnerTests
         FailPermanent,
         FailTransient,
         AcceptFirstThenTransientThenAccept,
-        DelayData
+        DelayData,
+        FailThenAccept
     }
 
     private sealed class ScriptedSmtpServer : IAsyncDisposable
@@ -241,6 +265,19 @@ public sealed class SmtpTestRunnerTests
                                     break;
                                 case SmtpBehavior.AcceptFirstThenTransientThenAccept:
                                     if (attempt == 2)
+                                    {
+                                        await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Increment(ref _accepted);
+                                        await writer.WriteLineAsync("250 2.0.0 OK");
+                                    }
+                                    break;
+                                case SmtpBehavior.FailThenAccept:
+                                    // First DATA → 451; every subsequent DATA → 250.
+                                    // Proves runner MaxRetries path issues a second real SEND.
+                                    if (attempt == 1)
                                     {
                                         await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
                                     }
