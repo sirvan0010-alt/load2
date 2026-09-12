@@ -43,16 +43,14 @@ public sealed class RateLimiter
             reservedSlot = earliest;
             reservation = _schedule.AddLast(reservedSlot);
 
-            while (_schedule.First is { } first && first != reservation && first.Value <= now)
-                _schedule.RemoveFirst();
+            // Do not remove an expired reservation here. A waiter can have reached
+            // its reserved time but still be between the delay loop and the grant
+            // lock. Removing it before it commits _lastGranted lets a concurrent
+            // waiter reuse the same slot and collapses global spacing to zero.
         }
 
         try
         {
-            // Yield once so concurrently-started waiters can reserve before we
-            // mark this slot granted and remove it (important when slot == now).
-            await Task.Yield();
-
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
@@ -86,7 +84,7 @@ public sealed class RateLimiter
                 _lastGranted = reservedSlot;
 
             var now = Stopwatch.GetTimestamp();
-            while (_schedule.First is { } first && first.Value <= now)
+            while (_schedule.First is { } first && first.Value <= now && first.Value <= _lastGranted)
                 _schedule.RemoveFirst();
         }
     }
