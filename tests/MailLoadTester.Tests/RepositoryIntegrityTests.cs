@@ -2,8 +2,17 @@ using Xunit;
 
 namespace MailLoadTester.Tests;
 
+/// <summary>
+/// Guards against accidental commits of unresolved large-file placeholders
+/// that have appeared when tools truncated uploads.
+/// Marker strings are assembled at runtime so this file is not itself an offender.
+/// </summary>
 public sealed class RepositoryIntegrityTests
 {
+    // Assembled so the source does not contain the forbidden contiguous marker.
+    private static readonly string MarkerPrefix = "SEE_" + "ARTIFACT";
+    private static readonly string MarkerWithUnderscore = MarkerPrefix + "S_";
+
     [Fact]
     public void Source_files_must_not_contain_artifact_placeholder_markers()
     {
@@ -19,8 +28,8 @@ public sealed class RepositoryIntegrityTests
         foreach (var path in candidates)
         {
             var text = File.ReadAllText(path);
-            if (text.Contains("SEE_ARTIFACTS_", StringComparison.Ordinal) ||
-                text.Contains("SEE_ARTIFACT", StringComparison.Ordinal))
+            if (text.Contains(MarkerWithUnderscore, StringComparison.Ordinal) ||
+                text.Contains(MarkerPrefix, StringComparison.Ordinal))
             {
                 offenders.Add(Path.GetRelativePath(root, path));
             }
@@ -35,12 +44,14 @@ public sealed class RepositoryIntegrityTests
     public void CSharp_source_files_must_not_be_literal_placeholder_files()
     {
         var root = FindRepositoryRoot();
+        var literalA = "PLACE" + "HOLDER";
+        var literalB = "SEE_" + "ARTIFACTS";
         var offenders = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Where(path => !IsBuildOutput(path))
             .Where(path =>
             {
                 var text = File.ReadAllText(path).Trim();
-                return text is "PLACEHOLDER" or "TODO" or "SEE_ARTIFACTS";
+                return text == literalA || text == "TODO" || text == literalB;
             })
             .Select(path => Path.GetRelativePath(root, path))
             .ToArray();
