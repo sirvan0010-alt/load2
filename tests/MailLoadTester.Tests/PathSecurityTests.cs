@@ -66,4 +66,35 @@ public sealed class PathSecurityTests
             target.Delete(true);
         }
     }
+
+    [Fact]
+    public void SessionLogger_RejectsReparsePointPath_WhenSupported()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var root = Directory.CreateTempSubdirectory("mail-load-log-");
+        var target = Directory.CreateTempSubdirectory("mail-load-log-target-");
+        var link = Path.Combine(root.FullName, "link");
+        try
+        {
+            try
+            {
+                Directory.CreateSymbolicLink(link, target.FullName);
+            }
+            catch (Exception linkEx) when (linkEx is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            var logPath = Path.Combine(link, "session.log");
+            var rejected = Assert.Throws<ArgumentException>(() => new SmtpSessionLogger(logPath));
+            Assert.Contains("symlink/junction/reparse", rejected.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(link, false); } catch { /* ignore */ }
+            root.Delete(true);
+            target.Delete(true);
+        }
+    }
 }
