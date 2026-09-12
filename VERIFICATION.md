@@ -3,27 +3,27 @@
 **FIXED** only with commit SHA + green CI run URL.
 
 ## Phase A–F — FIXED
-CI #42–#60 (execution model, ledger, proxy, IPv4, Direct MX).
+CI #42–#60.
 
 ## Phase G — Security
 
-### SEC-AUDIT-001 AUTH secret redaction — FIXED
+| Item | Status | Evidence |
+|------|--------|----------|
+| SEC-001 AUTH redaction | ✅ FIXED | CI #64 |
+| SEC-002 path boundary | 🟡 partial | `PathBoundaryTests` · CI #66 |
+| SEC-003 secret provenance | ⏳ open | — |
+| SEC-004 `--unauthorized` | ⏸ deferred | DryRun isolation in `TlsMatrixTests` |
 
-| Item | Detail |
-|------|--------|
-| Helper | `ProtocolLogRedaction.DecodeClientOrServer` |
-| Wired | `SessionProtocolLogger`, `ProtocolPathObserver` |
-| Tests | `ProtocolLogRedactionTests` |
-| Commits | `6cb1ac3` · `4c74f61` · `e1e4f2e` |
-| **CI** | **[#64 success](https://github.com/sirvan0010-alt/load2/actions/runs/34665725745)** |
+## Phase H — Concurrency / TLS
 
-### SEC-AUDIT-002 path boundary — OPEN (partial)
-`..` rejected for EML / session-log / profile paths.
+| Item | Status | Evidence |
+|------|--------|----------|
+| NET-AUDIT-002 TLS matrix | 🟡 partial FIXED | `TlsMatrixTests` · socket map + port rules · [CI #66](https://github.com/sirvan0010-alt/load2/actions/runs/34666077795) |
+| CONC-AUDIT-001 compose | 🟡 partial FIXED | `CrossComponentConcurrencyTests` · CI #66 |
+| CONC-AUDIT-002 cancel | 🟡 partial FIXED | runner cancel tests (Phase A) + cross-component · CI #66 |
+| NET-AUDIT-001 live matrix | ⏳ deferred | needs source-IP/proxy/IPv6 fixtures |
 
-### SEC-AUDIT-003 secret provenance — OPEN
-
-### SEC-AUDIT-004 `--unauthorized` — DEFERRED (FEAT-003)
-DryRun skips SMTP pool (`if (!options.DryRun)`).
+Commit: `68f736d`
 
 ## Next
-Phase H — CONC / TLS matrix · remaining SEC · Plugin/release
+Phase I — plugin/release smoke · remaining live NET matrix if fixtures available
