@@ -1,8 +1,8 @@
-# MailLoadTester — MASTER FIX PLAN
+# MailLoadTester — MASTER FIX / EVOLUTION PLAN
 
 > **SOURCE OF TRUTH: `sirvan0010-alt/load2`, branch `main`.**
 >
-> This is the master execution plan. The workflow is now audit-first: inspect all eight phases, register all confirmed defects and feature opportunities, then repair interconnected items as groups and finish with a release verification gate.
+> This is the active engineering plan. Historical audit files remain evidence/history only. Before changing code, verify the current `main` implementation and tests.
 
 ## Repository authority
 
@@ -10,156 +10,113 @@
 - `sirvan0010-alt/load` = secondary/parallel copy only.
 - `sirvan0010-alt/Load-tester-` = legacy; do not use for new implementation.
 
-## Rules
+## Engineering rules
 
-- Verify every item against the current `load2/main` source before changing code.
-- A finding is not FIXED because a comment claims it is fixed; source + callers + regression test + verification evidence must support the status.
-- Do not copy implementation from secondary/legacy repositories merely because it exists there.
-- Keep network/SMTP transport separate from message/payload generation.
-- Preserve asynchronous/thread-safe behavior, `SemaphoreSlim`, `Volatile`, and `CancellationToken` semantics.
-- Security/load-testing behavior remains explicitly authorized and bounded.
-- Build/test results must not be claimed unless actually executed or supported by CI evidence.
-- New feature ideas are recorded separately from bugs and are not treated as implemented.
+- No invented behavior: verify source, callers and tests.
+- Preserve asynchronous/thread-safe C# with `SemaphoreSlim`, `Volatile` where appropriate and `CancellationToken`.
+- Keep network/SMTP transport separate from MIME/payload generation.
+- Preserve `IMailPayloadPlugin` architecture.
+- Credentials/secrets come from configuration/environment; never hardcode them.
+- `--unauthorized` remains the explicit live-send authorization acknowledgement outside TestMode/DryRun.
+- A concrete recipient supplied by the user is a valid scenario input; do not silently replace the application's target model with an invented allowlist policy. Authorization must nevertheless remain explicit and auditable.
+- Do not claim build/test status without actual execution or trustworthy CI evidence.
 
-## Master audit register
+## Current core execution invariants
 
-`AUDIT-MASTER.md` is the canonical phase-by-phase audit register.
+The repaired runner uses:
 
-`BUGS-AUDIT.md` is the confirmed defect ledger.
+`bounded Channel → fixed workers → PerRecipientLimiter → adaptive concurrency → SMTP pool → actual-SEND gate/pacing → SendAsync`
 
-`FEATURE-BACKLOG.md` contains proposed improvements.
+The actual-SEND gate is exclusive. The first send is immediate. Retries return through the same admission and pacing path. Do not move pacing back ahead of adaptive/pool admission or recreate one task per message.
 
-## Phase 1 — Correctness / execution model
+## Current repair status
 
-Audit first:
-- full message scheduling and worker lifecycle;
-- MaxConcurrency semantics;
-- retries and delivery accounting;
-- auto-restart semantics;
-- pacing and retry pacing;
-- direct-MX recipient routing;
-- result/statistics correctness;
-- exception classification.
+### BUG-001 — worker bound / task pressure
+**Status: FIXED / merged.**
 
-Known findings: BUG-001, BUG-002, BUG-007, BUG-008.
+Bounded channel + fixed worker pool replaces task-per-message scheduling.
 
-Repair after phase-wide audit: bounded worker/channel execution, unique-message accounting, retry pacing and per-domain MX routing.
+### BUG-002 — AutoRestart duplicate delivery
+**Status: FIXED / implemented.**
 
-## Phase 2 — Networking / configuration correctness
+`DeliveryLedger` tracks accepted logical messages across restart cycles.
 
-Audit:
-- SMTP connection pool;
-- proxy rotation/ban state;
-- IPv4/IPv6 binding and rotation;
-- DNS/MX resolution;
-- TLS modes and certificate validation;
-- source-IP and proxy interactions;
-- connection reuse/health checks.
+### BUG-003 — first global pacing reservation
+**Status: FIXED / regression-tested.**
 
-Known findings: BUG-004, BUG-005.
+The first actual send is immediate; concurrent reservations preserve spacing.
 
-Pending verification: BUG-003 and TLS/network interaction matrix.
+### BUG-004 — blocked proxy random selection
+**Status: FIXED / regression-tested.**
 
-## Phase 3 — Security / robustness
+Blocked endpoints are excluded from random and round-robin selection.
 
-Audit:
-- AUTH secret redaction;
-- credential/configuration sources;
-- `--unauthorized` safety gate;
-- path traversal/UNC/junction/symlink handling;
-- EML and attachment quotas;
-- webhook/export paths;
-- logging of sensitive protocol data;
-- cancellation during network and filesystem operations.
+### BUG-005 — IPv4 `/31`
+**Status: FIXED / regression-tested.**
 
-Required evidence: fake-SMTP AUTH integration test and targeted path/security tests.
+`/31` retains both RFC 3021 point-to-point addresses; `/32` retains its single address.
 
-## Phase 4 — Concurrency / state machines
+### BUG-006 — repository integrity
+**Status: IMPLEMENTED / test-backed.**
 
-Audit the combined state machine:
+Repository-integrity controls remain part of the release gate.
 
-`CircuitBreaker ↔ RateLimiter ↔ SmartPaceController ↔ AdaptiveConcurrencyLimiter ↔ PerRecipientLimiter ↔ SmtpConnectionPool`
+### BUG-007 — retry pacing bypass
+**Status: FIXED / regression-tested.**
 
-Check permit ownership, reservation rollback, cancellation, shutdown, fairness, deadlocks, starvation and duplicate release. Re-run concurrency tests after any runner/pool changes.
+Every retry must reacquire the same actual-SEND pacing path.
 
-## Phase 5 — Performance / resource lifecycle
+### BUG-008 — Direct-MX recipient-domain handling
+**Status: HARDENED.**
 
-Audit:
-- task allocation under large MessageCount;
-- MIME allocation and disposal;
-- attachment memory/file handles;
-- progress-report pressure;
-- observed-response collection;
-- session logging backpressure;
-- connection reuse;
-- CPU and memory behavior in dry-run and real SMTP modes.
+Current public validation/routing constraints must be preserved and tested. Do not infer broader multi-domain support than the current implementation actually provides.
 
-Optimize only after correctness semantics are established.
+### BUG-009 — pacing before downstream admission
+**Status: FIXED / regression-tested.**
 
-## Phase 6 — GUI / UX / operability
+Actual-SEND pacing occurs after adaptive concurrency and SMTP-pool admission.
 
-Audit:
-- Start/Stop lifecycle;
-- UI cancellation and shutdown;
-- progress/ETA/statistics consistency;
-- dashboard lifecycle;
-- profile handling;
-- error presentation;
-- safe defaults and minimal configuration.
+## Next engineering round
 
-Historical MainForm shutdown fix must be reverified after runner changes.
+### 1. Source-level external capability transfer
 
-## Phase 7 — Architecture / maintainability / feature opportunities
+Audit the requested external repositories at source level. For each concrete class/function/module record:
 
-Audit:
-- `IMailPayloadPlugin` lifecycle/discovery/thread safety;
-- transport vs payload separation;
-- options/default/validation duplication;
-- test coverage mapping;
-- observability model;
-- opportunities for automation and diagnostics.
+`repository → file → symbol → mechanism → measured/claimed behavior → comparison with load2 → transfer decision → target location → tests`
 
-Proposals go to `FEATURE-BACKLOG.md`. Defensive diagnostics such as SPF/DKIM/DMARC, TLS capability checks and bounded open-relay verification may be considered. Flooding, mailbombing, spam, DoS/DDoS behavior is outside the implementation target.
+Do not stop at README summaries. Offensive/load-generator repositories are valid technical references for queueing, provider abstraction, concurrency, retries, endpoint health, fan-out, scenario orchestration, failure classification, reporting and reproducibility.
 
-## Phase 8 — Final verification / release gate
+### 2. Controlled capability implementation
 
-Only after phases 1–7 and grouped repairs:
+Where an external mechanism is useful, adapt it to the existing `load2` model instead of copying its language/runtime assumptions. Candidate capabilities include:
 
-1. clean `dotnet restore`;
-2. `dotnet build -c Release`;
-3. `dotnet test -c Release`;
-4. targeted regression tests for every fixed finding;
-5. cancellation/start-stop smoke tests;
-6. direct-MX one-domain and multi-domain tests;
-7. proxy partial-ban tests;
-8. IPv4 `/31` and `/32` tests;
-9. retry pacing tests;
-10. auto-restart partial-failure/duplicate-delivery test;
-11. high MessageCount + low MaxConcurrency dry-run test;
-12. AUTH log-redaction test;
-13. path/security tests;
-14. profile round-trip;
-15. final repository-tree/integrity review.
+- transport/provider registry;
+- endpoint normalization/deduplication;
+- provider and endpoint health/quarantine;
+- configurable scenario definitions;
+- verify/execute separation;
+- high-throughput bounded dispatch;
+- per-target metrics;
+- failure classification;
+- retry policy;
+- deterministic replay and run artifacts;
+- SMTP/TLS/DNS diagnostics;
+- controlled repeated-send and stress scenarios.
 
-## Current status
+### 3. Security and correctness verification
 
-- Phase 1 audit: IN PROGRESS; BUG-001/002/007/008 confirmed from current source.
-- Phase 2 audit: IN PROGRESS; BUG-004/005 carried forward; broader network/TLS matrix pending.
-- Phase 3: NOT VERIFIED.
-- Phase 4: partial historical review completed; full cross-component audit pending.
-- Phase 5: NOT VERIFIED.
-- Phase 6: historical lifecycle fix exists; post-refactor verification pending.
-- Phase 7: feature backlog initialized; architecture audit pending.
-- Phase 8: BLOCKED until phases 1–7 and repair verification are complete.
+Every new capability must preserve authorization, cancellation, bounded worker ownership, pacing, retry accounting, secret redaction and resource cleanup. Do not weaken an existing invariant merely to match an external tool.
 
-## Status semantics
+### 4. Network/TLS matrix
 
-- `OPEN` = confirmed problem not yet fixed/verified.
-- `OPEN pending verification` = plausible finding requiring targeted runtime/test evidence.
-- `FIXED` = source and regression test changed and verified.
-- `PASS` = audited with no confirmed defect for the stated scope.
-- `NOT VERIFIED` = not yet checked; never treat as PASS.
+Continue integration coverage for SMTP `None`, STARTTLS and implicit TLS, authentication failures, certificate failures, proxy/source-IP combinations and Direct-MX behavior where a controlled test service is available.
 
-## Provenance
+### 5. Release gate
 
-This plan consolidates the previous audit/repair records while treating the current `load2/main` tree as authoritative. Historical audit documents remain evidence/history, not implementation authority.
+Require Release build/test, targeted regression tests, concurrency/cancellation stress, network/TLS tests, security tests, repository-integrity review and green CI/CodeQL before declaring the round complete.
+
+## External capability boundary
+
+The audit may fully study offensive mechanics. The implementation decision is made per mechanism, not per repository label.
+
+Useful engineering mechanisms may be adopted/adapted. Mechanisms whose primary purpose is credential theft, stealth, CAPTCHA/OTP bypass, abuse-control evasion, arbitrary public-target discovery for flooding, or uncontrolled destructive traffic are not transferred as such.
