@@ -2,10 +2,15 @@ using Xunit;
 
 namespace MailLoadTester.Tests;
 
-/// <summary>SEC-AUDIT-002 partial — reject path traversal segments on validated paths.</summary>
+/// <summary>SEC-AUDIT-002 partial — reject path traversal segments on validated file paths.</summary>
 public sealed class PathBoundaryTests
 {
-    static MailTestOptions Base(string? eml = null, string? sessionLog = null) => new(
+    static MailTestOptions Base(
+        string? eml = null,
+        string? sessionLog = null,
+        IReadOnlyList<string>? attachments = null,
+        IReadOnlyList<string>? inlineAttachments = null,
+        string clientCertificatePath = "") => new(
         From: "from@example.com",
         Recipients: new[] { "to@example.com" },
         SmtpHost: "smtp.example.com",
@@ -27,14 +32,16 @@ public sealed class PathBoundaryTests
         TestMode: false,
         AllowedDomains: "",
         HtmlBody: false,
-        Attachments: Array.Empty<string>(),
+        Attachments: attachments ?? Array.Empty<string>(),
         CustomHeaders: new Dictionary<string, string>(),
         IgnoreCertificateErrors: false,
         MaxRetries: 0,
         DryRun: true,
         EmlTemplatePath: eml,
         SessionLogPath: sessionLog ?? "",
-        EnableSessionLog: !string.IsNullOrEmpty(sessionLog));
+        EnableSessionLog: !string.IsNullOrEmpty(sessionLog),
+        InlineAttachments: inlineAttachments,
+        ClientCertificatePath: clientCertificatePath);
 
     [Theory]
     [InlineData("../secret.eml")]
@@ -53,6 +60,39 @@ public sealed class PathBoundaryTests
     public void SessionLogPath_RejectsDotDot(string path)
     {
         var o = Base(sessionLog: path);
+        var ex = Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+        Assert.Contains("..", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("../secret.bin")]
+    [InlineData("assets/../../secret.bin")]
+    [InlineData("..\\secret.bin")]
+    public void AttachmentPath_RejectsDotDot(string path)
+    {
+        var o = Base(attachments: new[] { path });
+        var ex = Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+        Assert.Contains("..", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("../secret.bin")]
+    [InlineData("assets/../../secret.bin")]
+    [InlineData("..\\secret.bin")]
+    public void InlineAttachmentPath_RejectsDotDot(string path)
+    {
+        var o = Base(inlineAttachments: new[] { path });
+        var ex = Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+        Assert.Contains("..", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("../client.pfx")]
+    [InlineData("certs/../../client.pfx")]
+    [InlineData("..\\client.pfx")]
+    public void ClientCertificatePath_RejectsDotDot(string path)
+    {
+        var o = Base(clientCertificatePath: path);
         var ex = Assert.Throws<ArgumentException>(() => Validation.Validate(o));
         Assert.Contains("..", ex.Message);
     }
