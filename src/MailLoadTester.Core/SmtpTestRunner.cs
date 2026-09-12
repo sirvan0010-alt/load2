@@ -728,7 +728,8 @@ public sealed class SmtpTestRunner
                     }
                     catch (OperationCanceledException) when (workerCt.IsCancellationRequested)
                     {
-                        // Cancellation is coordinated by batchCts/outer ct.
+                        // Workers must surface user cancel to the run result (BUG 1.5).
+              cancelled = true;
                     }
                     catch
                     {
