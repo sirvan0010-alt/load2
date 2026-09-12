@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Xunit;
 
 namespace MailLoadTester.Tests;
@@ -43,26 +42,28 @@ public sealed class CrossComponentConcurrencyTests
     }
 
     [Fact]
-    public async Task ProxyRotator_ConcurrentBanAndSelect_NeverReturnsBlocked()
+    public async Task ProxyRotator_AfterBan_ConcurrentSelectNeverReturnsBlocked()
     {
+        // Correct concurrency contract: once ReportBlocked has completed, no concurrent
+        // TryGetNext may return that endpoint. (Selecting then later banning is not a bug.)
         var list = ProxyClientFactory.ParseList(
             "socks5://127.0.0.1:1080;socks5://127.0.0.1:1081;socks5://127.0.0.1:1082;socks5://127.0.0.1:1083");
         var rot = new ProxyRotator(list, random: true, blockDuration: TimeSpan.FromMinutes(5));
-        var blocked = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
 
-        var tasks = Enumerable.Range(0, 40).Select(async i =>
+        var victim = rot.TryGetNext();
+        Assert.NotNull(victim);
+        rot.ReportBlocked(victim!);
+
+        var tasks = Enumerable.Range(0, 32).Select(_ => Task.Run(() =>
         {
-            await Task.Yield();
-            var ep = rot.TryGetNext();
-            if (ep is null) return;
-            Assert.False(blocked.ContainsKey(ep.DisplayKey),
-                $"returned blocked endpoint {ep.DisplayKey}");
-            if (i % 3 == 0)
+            for (var i = 0; i < 25; i++)
             {
-                rot.ReportBlocked(ep);
-                blocked[ep.DisplayKey] = 0;
+                var ep = rot.TryGetNext();
+                if (ep is null)
+                    continue;
+                Assert.NotEqual(victim.DisplayKey, ep.DisplayKey);
             }
-        });
+        }));
 
         await Task.WhenAll(tasks);
     }
