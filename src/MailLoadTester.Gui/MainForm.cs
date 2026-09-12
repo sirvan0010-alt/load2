@@ -795,7 +795,11 @@ public sealed class MainForm : Form
             ProviderPreset: ProviderPresets.All.FirstOrDefault(p => p.DisplayName == (cmbProviderPreset.SelectedItem?.ToString() ?? ""))?.Id
                 ?? cmbProviderPreset.SelectedItem?.ToString() ?? "Custom",
             CheckRblBeforeStart: chkRbl.Checked,
-            CollectObservedResponses: chkCollectObserved.Checked);
+            CollectObservedResponses: chkCollectObserved.Checked,
+            // SEC-003/004: GUI Start without Test mode is an explicit operator acknowledgement.
+            // CLI --unauthorized also grants live send outside Test mode.
+            Unauthorized: !chkTestMode.Checked
+                || AuthorizationGate.HasUnauthorizedFlag(Environment.GetCommandLineArgs()));
     }
 
     private async Task OnStartAsync()
