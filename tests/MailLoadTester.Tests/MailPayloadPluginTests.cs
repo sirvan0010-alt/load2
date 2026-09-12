@@ -123,7 +123,7 @@ public sealed class MailPayloadPluginTests
         var message = new MimeMessage();
         await pipeline.ApplyAsync(message,
             new MailPayloadPluginContext(1, "r@example.test", 0, CancellationToken.None));
-        Assert.Empty(message.Headers.Where(h => h.Field.StartsWith("X-Plugin", StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(message.Headers, h => h.Field.StartsWith("X-Plugin", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
