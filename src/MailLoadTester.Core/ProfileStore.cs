@@ -28,6 +28,7 @@ public static class ProfileStore
     {
         if (Validation.ContainsPathTraversal(path))
             throw new ArgumentException("Cesta profilu nesmí obsahovat '..'.");
+        PathSecurity.EnsureNoReparsePoints(path);
         var safe = includeSecrets
             ? options
             : options with { Password = "", ProxyPassword = "", ClientCertificatePassword = "" };
@@ -41,12 +42,12 @@ public static class ProfileStore
     {
         if (Validation.ContainsPathTraversal(path))
             throw new ArgumentException("Cesta profilu nesmí obsahovat '..'.");
+        PathSecurity.EnsureNoReparsePoints(path);
         var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
         var file = JsonSerializer.Deserialize<ProfileFile>(json, JsonOptions)
                    ?? throw new InvalidOperationException("Neplatný profil (null).");
         if (file.Options is null)
             throw new InvalidOperationException("Profil neobsahuje Options.");
-        // Version zůstává z souboru — GUI může zobrazit mismatch vůči AppVersion.Current.
         return file;
     }
 
