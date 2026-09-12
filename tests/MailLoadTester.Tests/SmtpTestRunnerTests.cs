@@ -127,8 +127,6 @@ public sealed class SmtpTestRunnerTests
     [Fact]
     public async Task Cancellation_DuringRetryPath_CompletesWithoutHang()
     {
-        // Phase A / 1.5: cancel while waiting on transient retry delay must not hang
-        // and must surface Cancelled=true (workers set the flag on OCE).
         await using var server = new ScriptedSmtpServer(SmtpBehavior.FailTransient);
         var runner = new SmtpTestRunner();
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
@@ -145,7 +143,6 @@ public sealed class SmtpTestRunnerTests
     [Fact]
     public async Task Cancellation_PreventsAutoRestart()
     {
-        // Phase A / 1.5 + B: user cancel must not start AutoRestart loops.
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(250));
         var runner = new SmtpTestRunner();
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(120));
@@ -203,7 +200,8 @@ public sealed class SmtpTestRunnerTests
         CustomHeaders: new Dictionary<string, string>(),
         IgnoreCertificateErrors: false,
         MaxRetries: maxRetries,
-        DryRun: false);
+        DryRun: false,
+        Unauthorized: true);
 
     private enum SmtpBehavior
     {
