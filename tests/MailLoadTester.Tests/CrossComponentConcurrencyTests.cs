@@ -105,9 +105,6 @@ public sealed class CrossComponentConcurrencyTests
     [Fact]
     public async Task AdaptiveAndSendPace_ParallelCancel_NoPermitOrGateLeak()
     {
-        // Models runner critical section:
-        //   Adaptive.Acquire → AcquireSendSlotAsync → simulated SEND → lease dispose → Adaptive.Release
-        // Cancel mid-flight must not leave adaptive.Active > 0 or hang on the send gate.
         const int maxConcurrency = 4;
         var adaptive = new AdaptiveConcurrencyLimiter(maxConcurrency, 1, maxConcurrency);
         var pace = new SmartPaceController(PaceOptions(intervalMs: 15));
@@ -142,13 +139,11 @@ public sealed class CrossComponentConcurrencyTests
         });
 
         await Task.WhenAll(tasks);
-
         for (var i = 0; i < 80 && adaptive.Active != 0; i++)
             await Task.Delay(10);
         Assert.Equal(0, adaptive.Active);
         Assert.InRange(maxObserved, 1, maxConcurrency);
 
-        // After cancel drain, a new lease must still be acquirable (send gate not stuck).
         using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         await using var recovery = await pace.AcquireSendSlotAsync(cts2.Token);
         Assert.True(completedSends >= 0);
@@ -187,5 +182,91 @@ public sealed class CrossComponentConcurrencyTests
         Assert.Equal(0, adaptive.Active);
         Assert.Equal(0, active);
         Assert.InRange(peak, 1, maxConcurrency);
+    }
+
+    [Fact]
+    public async Task AdaptiveAndSendPace_CancelQueuedSenders_AllRecoverAndGateRemainsUsable()
+    {
+        const int maxConcurrency = 4;
+        const int intervalMs = 40;
+        var adaptive = new AdaptiveConcurrencyLimiter(maxConcurrency, 1, maxConcurrency);
+        var pace = new SmartPaceController(PaceOptions(intervalMs));
+        using var firstSendReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancelQueued = new CancellationTokenSource();
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var first = Task.Run(async () =>
+        {
+            await adaptive.AcquireAsync(overall.Token);
+            try
+            {
+                await using var lease = await pace.AcquireSendSlotAsync(overall.Token);
+                firstSendReady.SetResult(true);
+                await Task.Delay(150, overall.Token);
+            }
+            finally
+            {
+                adaptive.Release();
+            }
+        });
+
+        await firstSendReady.Task.WaitAsync(overall.Token);
+
+        var queued = Enumerable.Range(0, 12).Select(async _ =>
+        {
+            try
+            {
+                await adaptive.AcquireAsync(cancelQueued.Token);
+                try
+                {
+                    await using var lease = await pace.AcquireSendSlotAsync(cancelQueued.Token);
+                    await Task.Delay(1, overall.Token);
+                }
+                finally
+                {
+                    adaptive.Release();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }).ToArray();
+
+        await Task.Delay(20, overall.Token);
+        cancelQueued.Cancel();
+        await Task.WhenAll(queued);
+        await first;
+
+        Assert.Equal(0, adaptive.Active);
+
+        using var recoveryCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await using var recovery = await pace.AcquireSendSlotAsync(recoveryCts.Token);
+    }
+
+    [Fact]
+    public async Task SendPace_RetryMustReenterGateAndRespectInterval()
+    {
+        const int intervalMs = 35;
+        var pace = new SmartPaceController(PaceOptions(intervalMs));
+        var starts = new List<long>();
+        var sync = new object();
+
+        async Task SimulatedAttemptAsync(bool retry)
+        {
+            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
+            lock (sync)
+                starts.Add(Stopwatch.GetTimestamp());
+            if (!retry)
+                await Task.Delay(1);
+        }
+
+        await SimulatedAttemptAsync(retry: false);
+        await Task.Delay(2);
+        await SimulatedAttemptAsync(retry: true);
+
+        Assert.Equal(2, starts.Count);
+        var elapsedMs = (starts[1] - starts[0]) * 1000.0 / Stopwatch.Frequency;
+        Assert.True(elapsedMs >= intervalMs - 3,
+            $"Retry bypassed actual-SEND pacing: {elapsedMs:F1} ms < {intervalMs} ms.");
     }
 }
