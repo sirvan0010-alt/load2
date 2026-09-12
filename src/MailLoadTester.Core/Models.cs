@@ -99,7 +99,8 @@ public sealed record MailTestOptions(
     int MaxGreylistRetries = 3,
     string ProviderPreset = "Custom",
     bool CheckRblBeforeStart = false,
-    bool CollectObservedResponses = true);
+    bool CollectObservedResponses = true,
+    bool Unauthorized = false);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
@@ -164,7 +165,6 @@ public static class Validation
         return dict;
     }
 
-    /// <summary>Odmítne cesty s ".." segmenty (základní ochrana proti path traversal).</summary>
     public static bool ContainsPathTraversal(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
@@ -199,6 +199,9 @@ public static class Validation
             throw new ArgumentException("Paralelismus musí být 1–20.");
         if (o.MaxRetries is < 0 or > 5)
             throw new ArgumentException("Počet opakování musí být 0–5.");
+        if (!o.DryRun && !o.TestMode && !o.Unauthorized)
+            throw new ArgumentException(
+                "Odesílání mimo Test mode vyžaduje --unauthorized (nebo Unauthorized=true).");
         if (o.Security == SmtpSecurity.ImplicitTls && o.Port != 465)
             throw new ArgumentException("Implicit TLS je podporováno na portu 465.");
         if (o.Security == SmtpSecurity.StartTls && o.Port == 465)
@@ -358,9 +361,6 @@ public static class Validation
             throw new ArgumentException("Max greylist retries musí být 0–20.");
     }
 
-    /// <summary>
-    /// Human-readable SMTP / transport error for UI and session status.
-    /// </summary>
     public static string ExplainSmtpError(Exception ex)
     {
         if (ex is null) return "";
@@ -381,9 +381,6 @@ public static class Validation
         return string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
     }
 
-    /// <summary>
-    /// SEC-002: custom headers must be X-* so callers cannot override Subject/From/To/Bcc.
-    /// </summary>
     static bool IsSafeCustomHeaderName(string key)
     {
         if (string.IsNullOrWhiteSpace(key)) return false;
