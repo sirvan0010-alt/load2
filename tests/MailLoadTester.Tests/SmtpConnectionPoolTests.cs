@@ -109,12 +109,14 @@ public sealed class SmtpConnectionPoolTests
         await using var server = new FakeSmtpServer();
         var options = CreateOptions(server.Port, maxConcurrency: 1) with
         {
-            IdleConnectionHealthCheckSeconds = 0
+            IdleConnectionHealthCheckSeconds = 1
         };
         await using var pool = new SmtpConnectionPool(options);
 
         var client = await pool.RentAsync(CancellationToken.None);
         pool.Return(client);
+
+        await Task.Delay(1100);
 
         var reused = await pool.RentAsync(CancellationToken.None);
 

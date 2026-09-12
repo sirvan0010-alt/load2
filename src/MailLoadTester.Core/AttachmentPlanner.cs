@@ -48,6 +48,15 @@ public static class AttachmentPlanner
         var available = GetAvailableMemory();
         var budget = Math.Min(RandomAttachmentSafetyHardCap, (long)(available * RandomAttachmentSafetyFraction));
         budget = Math.Max(8L * 1024 * 1024, budget);
+
+        if (requestedSizeMb > 128)
+        {
+            var bad = (long)requestedSizeMb * 1024L * 1024L * maxAttachments * maxConcurrency;
+            return new RandomAttachmentSafetyEstimate(
+                false, bad, available, budget,
+                $"BLOKOVÁNO: požadovaná velikost {requestedSizeMb} MB přesahuje strop. Budget: {FormatBytes(budget)}.");
+        }
+
         int sizeMb = requestedSizeMb <= 0
             ? Math.Max(1, (int)Math.Min(128, budget / (maxAttachments * (long)maxConcurrency * 1024L * 1024L * 3)))
             : requestedSizeMb;
@@ -55,7 +64,7 @@ public static class AttachmentPlanner
         const double transientFactor = 2.37;
         var estimated = (long)(sizeMb * 1024L * 1024L * maxAttachments * maxConcurrency * transientFactor);
         var safe = estimated <= budget;
-        var explanation =
+        var explanation = (safe ? "OK: " : "BLOKOVÁNO: ") +
             $"Odhad transient RAM: ~{FormatBytes(estimated)} (size={sizeMb}MB × att={maxAttachments} × workers={maxConcurrency} × {transientFactor:0.00}). " +
             $"Budget: {FormatBytes(budget)} z dostupných ~{FormatBytes(available)}.";
         return new RandomAttachmentSafetyEstimate(safe, estimated, available, budget, explanation);

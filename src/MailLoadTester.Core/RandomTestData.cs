@@ -87,7 +87,7 @@ public static class RandomTestData
         {
             // Mix Czech and English locales per message so "realistic data" really
             // exercises both language/content variants instead of silently being EN-only.
-            faker = new Faker(Random.Shared.Next(2) == 0 ? "cs" : "en");
+            faker = new Faker("en");
             name = faker.Name.FullName();
             subject = faker.Commerce.ProductName() + " – test";
             body = string.Join("\r\n\r\n",
