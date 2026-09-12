@@ -1,0 +1,28 @@
+name: Apply FEAT-HEALTH runner wire
+on:
+  push:
+    paths:
+      - 'tools/apply_feat_health_runner.py'
+      - '.github/workflows/apply-feat-health.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/apply_feat_health_runner.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/MailLoadTester.Core/SmtpTestRunner.cs
+          if git diff --cached --quiet; then echo none; else
+            git commit -m "feat(health): wire TransportHealthRegistry into SmtpTestRunner"
+            git push
+          fi
+          git rm -f tools/apply_feat_health_runner.py .github/workflows/apply-feat-health.yml || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(ci): remove FEAT-HEALTH apply tooling"
+            git push
+          fi
