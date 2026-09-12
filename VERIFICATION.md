@@ -2,31 +2,30 @@
 
 **FIXED** only with commit SHA + green CI run URL.
 
-## Phase A — Execution model (001/003/007/009) — FIXED
-CI #42–#51.
+## Phase A–F — FIXED
+See prior CI #42–#60 (execution model, ledger, proxy, IPv4, Direct MX).
 
-## Phase B — DeliveryLedger / AutoRestart (002) — FIXED
-CI #51.
+## Phase G — Security
 
-## Phase C — Proxy (004) — FIXED
-`a6d59a1` · [CI #54](https://github.com/sirvan0010-alt/load2/actions/runs/34664736578)
+### SEC-AUDIT-001 AUTH secret redaction — FIXED
 
-## Phase D — IPv4 /31 /32 (005) — FIXED
-`4f89659` · [CI #56](https://github.com/sirvan0010-alt/load2/actions/runs/34664949650)
+| Item | Detail |
+|------|--------|
+| Helper | `ProtocolLogRedaction.DecodeClientOrServer` |
+| Wired | `SessionProtocolLogger`, `ProtocolPathObserver` |
+| Proof | `ProtocolLogRedactionTests` (plain, range, prefix, session file) |
+| Commits | `6cb1ac3` helper+tests · `4c74f61` logger wiring |
 
-## Phase F — Direct MX (008) — FIXED (candidate pending this CI)
+MailKit sets `IAuthenticationSecretDetector` on the logger; we now mask detected ranges with `*` before any session-log or path-observer text is stored.
 
-| Layer | Behavior |
-|-------|----------|
-| `Validation` | rejects mixed recipient domains when `DirectMxDelivery` |
-| `DirectMxRouting.RequireSingleRecipientDomain` | same check at runner entry |
-| `SmtpTestRunner` | resolves MX for that unique domain only (not `Recipients[0]` alone) |
+### SEC-AUDIT-002 path boundary — OPEN (partial)
+`..` rejected for EML/session-log/profile paths. UNC/junction matrix still open.
 
-Commits: `6d753b2` (helper+tests) · `49aa332` (runner)  
-Tests: `DirectMxRoutingTests` (single/mixed/normalize + Validation boundary)
+### SEC-AUDIT-003 secret provenance — OPEN
+No hardcoded SMTP passwords found in Core; full provenance still open.
 
-## Phase E — Repo hygiene — partial
-One-shot patch workflows removed where possible.
+### SEC-AUDIT-004 `--unauthorized` — DEFERRED
+Listed in backlog (FEAT-003); app is GUI-primary. DryRun skips `SmtpConnectionPool` construction (`if (!options.DryRun)`).
 
 ## Next
-SEC-AUDIT · CONC/TLS · Plugin/release
+CONC / TLS matrix · remaining SEC · Plugin/release
