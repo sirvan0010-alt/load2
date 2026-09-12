@@ -36,7 +36,8 @@ public sealed class TlsMatrixTests
         CustomHeaders: new Dictionary<string, string>(),
         IgnoreCertificateErrors: ignoreCert,
         MaxRetries: 0,
-        DryRun: dryRun);
+        DryRun: dryRun,
+        Unauthorized: true);
 
     [Theory]
     [InlineData(SmtpSecurity.None, SecureSocketOptions.None)]
