@@ -11,6 +11,7 @@ public sealed class RateLimiter
     private readonly long _intervalTicks;
     private readonly object _lock = new();
     private readonly LinkedList<long> _schedule = new();
+    private long _lastGranted;
 
     public RateLimiter(int intervalMs)
     {
@@ -33,21 +34,25 @@ public sealed class RateLimiter
         lock (_lock)
         {
             var now = Stopwatch.GetTimestamp();
-            var nextAvailable = _schedule.Last?.Value ?? now;
-            if (nextAvailable < now)
-                nextAvailable = now;
+            long earliest = now;
+            if (_lastGranted > 0)
+                earliest = Math.Max(earliest, _lastGranted + _intervalTicks);
+            if (_schedule.Last is { } last)
+                earliest = Math.Max(earliest, last.Value + _intervalTicks);
 
-            reservedSlot = nextAvailable + _intervalTicks;
+            reservedSlot = earliest;
             reservation = _schedule.AddLast(reservedSlot);
 
-            // Odstraň již prošlé rezervace před naším slotem.
-            while (_schedule.First is { } first && first != reservation &&
-                   first.Value <= now)
+            while (_schedule.First is { } first && first != reservation && first.Value <= now)
                 _schedule.RemoveFirst();
         }
 
         try
         {
+            // Yield once so concurrently-started waiters can reserve before we
+            // mark this slot granted and remove it (important when slot == now).
+            await Task.Yield();
+
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
@@ -67,8 +72,6 @@ public sealed class RateLimiter
         {
             lock (_lock)
             {
-                // LinkedListNode umožňuje odstranit přesně naši rezervaci,
-                // i když před ní čekají jiné workery.
                 if (reservation.List is not null)
                     _schedule.Remove(reservation);
             }
@@ -79,6 +82,8 @@ public sealed class RateLimiter
         {
             if (reservation.List is not null)
                 _schedule.Remove(reservation);
+            if (reservedSlot > _lastGranted)
+                _lastGranted = reservedSlot;
 
             var now = Stopwatch.GetTimestamp();
             while (_schedule.First is { } first && first.Value <= now)

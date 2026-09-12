@@ -14,13 +14,17 @@ public sealed class ProtocolPathObserverTests
             Task.Run(() =>
             {
                 first.LogClient(Array.Empty<byte>(), 0, 0);
-                first.LogClient(System.Text.Encoding.ASCII.GetBytes("EHLO first\r\n"), 0, 12);
-                first.LogServer(System.Text.Encoding.ASCII.GetBytes("250 hello\r\n"), 0, 12);
+                var ehlo = System.Text.Encoding.ASCII.GetBytes("EHLO first\r\n");
+                first.LogClient(ehlo, 0, ehlo.Length);
+                var hello = System.Text.Encoding.ASCII.GetBytes("250 hello\r\n");
+                first.LogServer(hello, 0, hello.Length);
             }),
             Task.Run(() =>
             {
-                second.LogClient(System.Text.Encoding.ASCII.GetBytes("MAIL FROM:<second@example.test>\r\n"), 0, 33);
-                second.LogServer(System.Text.Encoding.ASCII.GetBytes("550 denied\r\n"), 0, 12);
+                var mail = System.Text.Encoding.ASCII.GetBytes("MAIL FROM:<second@example.test>\r\n");
+                second.LogClient(mail, 0, mail.Length);
+                var denied = System.Text.Encoding.ASCII.GetBytes("550 denied\r\n");
+                second.LogServer(denied, 0, denied.Length);
             }));
 
         var firstEvents = first.Drain();
@@ -41,7 +45,8 @@ public sealed class ProtocolPathObserverTests
 
         var clientTask = Task.Run(() =>
         {
-            observer.LogClient(System.Text.Encoding.ASCII.GetBytes("MAIL FROM:<a@example.test>\r\n"), 0, 30);
+            var mail = System.Text.Encoding.ASCII.GetBytes("MAIL FROM:<a@example.test>\r\n");
+            observer.LogClient(mail, 0, mail.Length);
             clientReady.SetResult(true);
         });
 
@@ -49,7 +54,8 @@ public sealed class ProtocolPathObserverTests
         {
             await clientReady.Task;
             await serverGo.Task;
-            observer.LogServer(System.Text.Encoding.ASCII.GetBytes("550 denied\r\n"), 0, 12);
+            var denied = System.Text.Encoding.ASCII.GetBytes("550 denied\r\n");
+            observer.LogServer(denied, 0, denied.Length);
         });
 
         await clientTask;
@@ -60,5 +66,4 @@ public sealed class ProtocolPathObserverTests
         Assert.Contains(events, e => e.Step == DeliveryStepKind.MailFrom && e.Ok == false);
         Assert.Contains(events, e => e.Step == DeliveryStepKind.Error && e.Ok == false);
     }
-
 }

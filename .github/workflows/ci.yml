@@ -27,10 +27,5 @@ jobs:
           dotnet build src/MailLoadTester.Core/MailLoadTester.Core.csproj -c Release --no-restore
           dotnet build tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore
 
-      # Build is the gate. Remaining known pre-existing / environment-sensitive tests
-      # are excluded until fixed; execution-model and runner regressions still run.
-      - name: Test Release
-        run: >
-          dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
-          -c Release --no-build --verbosity normal
-          --filter "FullyQualifiedName!~ProtocolPathObserverTests&FullyQualifiedName!~IdleClient_HealthCheckUsesNoOp&FullyQualifiedName!~CancelledLastReservation_DoesNotLeavePhantomDelay&FullyQualifiedName!~BogusAndVariation&FullyQualifiedName!~Generator_IsSafeUnderParallelUse&FullyQualifiedName!~CreatePaddedPng&FullyQualifiedName!~LegacyCreate_RemainsUsable&FullyQualifiedName!~UnsafeHugeRequest&FullyQualifiedName!~AutoModeProducesSafeEstimate&FullyQualifiedName!~AutoModeAccountsForRawAndMimeMemory&FullyQualifiedName!~ManualReasonableRequest"
+      - name: Test Release (full suite, no quarantine filter)
+        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --verbosity normal
