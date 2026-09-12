@@ -8,16 +8,12 @@ public static class EmlTemplateParser
     public const long DefaultMaxAttachmentBytes = 256L * 1024 * 1024;
     public const int MaxBodyCharacters = 10_000_000;
 
-    /// <summary>
-    /// Loads an EML template with hard safety limits. Attachments are decoded through
-    /// a quota stream so a malicious/accidentally huge attachment cannot allocate an
-    /// unbounded byte[] before the runner's normal RAM preflight gets a chance to act.
-    /// </summary>
     public static EmlTemplate Parse(
         string path,
         long maxFileBytes = DefaultMaxFileBytes,
         long maxAttachmentBytes = DefaultMaxAttachmentBytes)
     {
+        PathSecurity.EnsureNoReparsePoints(path);
         var info = new FileInfo(path);
         if (!info.Exists)
             throw new FileNotFoundException($"EML šablona neexistuje: {path}", path);
@@ -30,14 +26,12 @@ public static class EmlTemplateParser
 
         using var message = MimeMessage.Load(path);
         var subject = message.Subject ?? "MailLoadTester test";
-        // MimeMessage.HtmlBody / TextBody are not cached — each access walks the
-        // whole MIME tree and re-decodes the body. Read HtmlBody exactly once.
         var htmlBody = message.HtmlBody;
         var isHtml = htmlBody != null;
         var body = htmlBody ?? message.TextBody ?? "";
         if (body.Length > MaxBodyCharacters)
             throw new InvalidOperationException(
-                $"Tělo EML šablony je příliš velké ({body.Length:N0} znaků). Limit je {MaxBodyCharacters:N0}.");
+                $"Tělo EML šablony je příliš velké ({body.Length:N0} znaků). Limit je {MaxBodyCharacters:N0} znaků.");
 
         var attachments = new List<(string FileName, byte[] Content)>();
         long totalDecoded = 0;
@@ -72,14 +66,6 @@ public static class EmlTemplateParser
 
     private sealed class QuotaExceededException : IOException { }
 
-    /// <summary>
-    /// A raw MemoryStream() starts at 0 capacity and doubles on every overflow, so a
-    /// large decoded attachment triggers several full-buffer copies, and ToArray()
-    /// afterwards adds one more. Guessing a starting capacity from the still-encoded
-    /// source size (roughly encoded-size for binary transfer encodings, or the
-    /// well-known ~3/4 ratio for base64) cuts most of that regrowth without ever
-    /// exceeding the caller's quota.
-    /// </summary>
     private static int EstimateInitialCapacity(MimePart part, long remaining)
     {
         const int fallback = 64 * 1024;
@@ -122,7 +108,6 @@ public static class EmlTemplateParser
         public override bool CanWrite => true;
         public override long Length => _written;
         public override long Position { get => _written; set => throw new NotSupportedException(); }
-
         public override void Flush() => _inner.Flush();
         public override Task FlushAsync(CancellationToken cancellationToken) => _inner.FlushAsync(cancellationToken);
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
