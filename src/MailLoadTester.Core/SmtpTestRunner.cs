@@ -280,6 +280,9 @@ public sealed class SmtpTestRunner
         int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
+        // FEAT-HEALTH: per SMTP endpoint health (host:port). Independent of circuit breaker / proxy ban.
+        var endpointHealth = new TransportHealthRegistry();
+        var endpointKey = $"{options.SmtpHost}:{options.Port}";
         // FEAT-022: phase timing samples (successful logical messages only).
         var prepWaits = new ConcurrentBag<double>();
         var adaptiveWaits = new ConcurrentBag<double>();
@@ -720,6 +723,7 @@ public sealed class SmtpTestRunner
                                 ledgerAccepted = true;
                                 var s = Interlocked.Increment(ref sent);
                                 latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                                endpointHealth.RecordSuccess(endpointKey);
                                 prepWaits.Add(samplePrepMs);
                                 adaptiveWaits.Add(sampleAdaptiveMs);
                                 poolWaits.Add(samplePoolMs);
@@ -744,6 +748,8 @@ public sealed class SmtpTestRunner
                         else
                         {
                             ledger.MarkFailed(i);
+                            if (lastEx != null)
+                                endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(lastEx));
                             var f = Interlocked.Increment(ref failed);
                             Interlocked.Exchange(ref lastError, explained);
                             var done = Volatile.Read(ref sent) + f;
