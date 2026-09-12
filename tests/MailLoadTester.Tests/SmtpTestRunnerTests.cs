@@ -106,8 +106,6 @@ public sealed class SmtpTestRunnerTests
     [Fact]
     public async Task TransientRetry_IssuesSecondDataAttempt_ThroughSendPath()
     {
-        // Phase A / 1.3: each retry must reach a real SMTP SEND again
-        // (runner places AcquireSendSlotAsync inside the attempt loop).
         await using var server = new ScriptedSmtpServer(SmtpBehavior.FailThenAccept);
         var runner = new SmtpTestRunner();
 
@@ -124,6 +122,44 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Smtp4xx >= 1, "First attempt should have observed SMTP 4xx");
         Assert.Equal(2, server.DataAttempts);
         Assert.Equal(1, server.MessagesAccepted);
+    }
+
+    [Fact]
+    public async Task Cancellation_DuringRetryPath_CompletesWithoutHang()
+    {
+        // Phase A / 1.5: cancel while waiting on transient retry delay must not hang
+        // and must surface Cancelled=true (workers set the flag on OCE).
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailTransient);
+        var runner = new SmtpTestRunner();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
+
+        var result = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 2, maxRetries: 3, maxConcurrency: 1),
+            new Progress<ProgressUpdate>(), cts.Token);
+
+        Assert.True(result.Sent + result.Failed <= result.Requested);
+        Assert.True(result.Cancelled,
+            $"Expected Cancelled=true when user aborts during retry path, got Cancelled={result.Cancelled}, Failed={result.Failed}, Sent={result.Sent}");
+    }
+
+    [Fact]
+    public async Task Cancellation_PreventsAutoRestart()
+    {
+        // Phase A / 1.5 + B: user cancel must not start AutoRestart loops.
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(250));
+        var runner = new SmtpTestRunner();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(120));
+        var options = CreateOptions(server.Port, messageCount: 12, maxRetries: 0, maxConcurrency: 2) with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 3
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), cts.Token);
+
+        Assert.True(result.Cancelled);
+        Assert.Equal(0, result.AutoRestartAttempts);
+        Assert.True(result.Sent + result.Failed < result.Requested);
     }
 
     [Fact]
@@ -275,8 +311,6 @@ public sealed class SmtpTestRunnerTests
                                     }
                                     break;
                                 case SmtpBehavior.FailThenAccept:
-                                    // First DATA → 451; every subsequent DATA → 250.
-                                    // Proves runner MaxRetries path issues a second real SEND.
                                     if (attempt == 1)
                                     {
                                         await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
