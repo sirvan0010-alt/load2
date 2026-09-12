@@ -1,0 +1,106 @@
+--- a/src/MailLoadTester.Gui/MainForm.cs
++++ b/src/MailLoadTester.Gui/MainForm.cs
+@@ -3,12 +3,17 @@
+ 
+ namespace MailLoadTester.Gui;
+ 
+-public sealed class MainForm : Form
++public sealed partial class MainForm : Form
+ {
+     // === Controls ===
+     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
+     private TabControl tabs = null!;
+     private ToolTip toolTip = null!;
++    private Panel pnlSafetyBanner = null!;
++    private Label lblSafetyBanner = null!;
++    private Button btnWizard = null!;
++    private CheckBox chkDarkMode = null!;
++    private bool _darkMode;
+ 
+     // SMTP tab
+     private TextBox txtHost = null!;
+@@ -135,8 +140,8 @@
+     public MainForm()
+     {
+         Text = $"MailLoadTester {MailLoadTester.AppVersion.Current} — Maximum Brutal Edition";
+-        Size = new Size(1280, 920);
+-        MinimumSize = new Size(1000, 750);
++        Size = new Size(1100, 780);
++        MinimumSize = new Size(900, 650);
+         StartPosition = FormStartPosition.CenterScreen;
+         InitializeComponent();
+         WireEvents();
+@@ -234,10 +239,37 @@
+         toolTip.SetToolTip(btnLoadProfile, "Načte profil testu z JSON souboru.");
+         topPanel.Controls.Add(btnSaveProfile);
+         topPanel.Controls.Add(btnLoadProfile);
++
++        btnWizard = new Button
++        {
++            Text = "❓ Jak začít", Width = 110, Height = 36, Left = 560, Top = 6,
++            FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand
++        };
++        toolTip.SetToolTip(btnWizard, "Krátký návod pro první spuštění (krok za krokem).");
++        topPanel.Controls.Add(btnWizard);
++
++        chkDarkMode = new CheckBox
++        {
++            Text = "Tmavý režim", AutoSize = true, Left = 680, Top = 14,
++            Cursor = Cursors.Hand
++        };
++        toolTip.SetToolTip(chkDarkMode, "Přepne světlý / tmavý vzhled okna.");
++        topPanel.Controls.Add(chkDarkMode);
+         Controls.Add(topPanel);
+ 
++        // === Safety banner ===
++        pnlSafetyBanner = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(10, 6, 10, 6) };
++        lblSafetyBanner = new Label
++        {
++            Dock = DockStyle.Fill,
++            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
++            TextAlign = ContentAlignment.MiddleLeft
++        };
++        pnlSafetyBanner.Controls.Add(lblSafetyBanner);
++        Controls.Add(pnlSafetyBanner);
++
+         // === TabControl ===
+-        tabs = new TabControl { Dock = DockStyle.Top, Height = 480 };
++        tabs = new TabControl { Dock = DockStyle.Top, Height = 400 };
+ 
+         // --- Tab: SMTP Server ---
+         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
+@@ -539,7 +571,7 @@
+         flPace.Controls.Add(lblObs);
+         gridObserved = new DataGridView
+         {
+-            Width = 520, Height = 120, AllowUserToAddRows = false, ReadOnly = true,
++            Width = 480, Height = 90, AllowUserToAddRows = false, ReadOnly = true,
+             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false
+         };
+         gridObserved.Columns.Add("Code", "Kód");
+@@ -553,7 +585,7 @@
+         flPace.Controls.Add(lblKnow);
+         gridKnowledge = new DataGridView
+         {
+-            Width = 520, Height = 140, AllowUserToAddRows = false, ReadOnly = true,
++            Width = 480, Height = 100, AllowUserToAddRows = false, ReadOnly = true,
+             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false
+         };
+         gridKnowledge.Columns.Add("Provider", "Poskytovatel");
+@@ -646,6 +678,8 @@
+         statusStrip.Items.Add(lblEta);
+         statusStrip.Items.Add(lblSentFailed);
+         Controls.Add(statusStrip);
++
++        UpdateSafetyBanner();
+     }
+ 
+     private TextBox AddLabeledText(Control parent, string label, string tip)
+@@ -695,6 +729,9 @@
+         btnSaveProfile.Click += async (s, e) => await OnSaveProfileAsync();
+         btnLoadProfile.Click += async (s, e) => await OnLoadProfileAsync();
+         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
++        btnWizard.Click += (s, e) => ShowGettingStartedWizard();
++        chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
++        chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
+         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
