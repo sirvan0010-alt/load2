@@ -32,6 +32,7 @@ Navrhované rozložení:
 │ User [ ................ ]   Password [ ................ ]            │
 │                                                                      │
 │ TEST CONFIGURATION                                                   │
+│ Target [ recipient@example.com ]                                    │
 │ Messages [ 100 ]     Concurrency [ 4 ]     Interval [ 500 ] ms      │
 │                                                                      │
 │                 [ TEST SMTP ]        [ SEND ]                        │
@@ -48,7 +49,8 @@ Navrhované rozložení:
 
 ## 5. Ovládání
 - `TEST SMTP` provede bezpečný test připojení a autentizace podle konfigurace.
-- `SEND` spustí vlastní test podle nastavených parametrů.
+- `SEND` spustí vlastní test podle nastavených parametrů a uživatelem zadaného konkrétního cíle/příjemce.
+- Cíl není automaticky nahrazován interním pevným seznamem; je součástí testovací konfigurace.
 - Během běhu se `SEND` nesmí spustit podruhé.
 - Přidat jednoznačné `STOP/CANCEL` ovládání s podporou CancellationToken.
 - Po dokončení se GUI vrátí do READY stavu.
@@ -89,8 +91,9 @@ Pokročilé parametry skrýt do samostatného panelu, aby základní obrazovka z
 ## 9. Bezpečnost a autorizace
 - Povinný parametr CLI `--unauthorized` zůstává zachován podle projektových požadavků.
 - Testovací funkce musí být explicitně řízené a zrušitelné.
-- Žádné odstranění bezpečnostních limitů pouze kvůli UI.
-- GUI nesmí umožnit náhodné spuštění neomezeného zatížení.
+- `--unauthorized` je explicitní potvrzení uživatele pro živé odesílání; není to náhrada za technické řízení concurrency/pacing/cancellation.
+- GUI nesmí obcházet existující AuthorizationGate, pacing, concurrency, cancellation nebo další síťové ochrany.
+- GUI nemá samo vytvářet mechanismus pro obcházení limitů poskytovatele nebo skrývání provozu.
 
 ## 10. Architektura UI
 GUI má zůstat oddělené od síťové vrstvy a generování MIME zpráv.
@@ -136,4 +139,5 @@ Při implementaci UI se nesmí měnit síťová logika jen kvůli vzhledu. Každ
 - Progress a counters odpovídají skutečnému stavu runneru.
 - Citlivá data se neobjeví v UI logu ani výjimkách.
 - Vizuální styl je konzistentní napříč celou aplikací.
-- UI nepřidává žádné nové neomezené load/flood chování.
+- GUI zachovává aktuální cílový model a nepřepisuje uživatelem zadaného příjemce.
+- GUI neobchází AuthorizationGate, pacing, concurrency nebo cancellation.
