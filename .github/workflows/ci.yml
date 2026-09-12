@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# CodeQL actions/missing-workflow-permissions — least privilege for GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
