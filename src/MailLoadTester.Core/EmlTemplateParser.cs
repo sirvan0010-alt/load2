@@ -47,7 +47,9 @@ public static class EmlTemplateParser
             using var quota = new QuotaWriteStream(ms, remaining);
             try
             {
-                part.Content.DecodeTo(quota);
+                var content = part.Content ?? throw new InvalidOperationException(
+                    $"EML příloha '{part.FileName ?? "attachment"}' nemá obsah.");
+                content.DecodeTo(quota);
             }
             catch (QuotaExceededException)
             {
@@ -56,9 +58,9 @@ public static class EmlTemplateParser
                     $"{AttachmentPlanner.FormatBytes(maxAttachmentBytes)} pro dekódované přílohy.");
             }
 
-            var content = ms.ToArray();
-            totalDecoded = checked(totalDecoded + content.LongLength);
-            attachments.Add((part.FileName ?? "attachment", content));
+            var decoded = ms.ToArray();
+            totalDecoded = checked(totalDecoded + decoded.LongLength);
+            attachments.Add((part.FileName ?? "attachment", decoded));
         }
 
         return new EmlTemplate(subject, body, isHtml, attachments);
