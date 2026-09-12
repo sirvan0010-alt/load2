@@ -9,6 +9,10 @@ namespace MailLoadTester;
 /// 1) Explicitní seznam: <c>192.0.2.10,192.0.2.11,192.0.2.12</c>
 /// 2) CIDR: <c>192.0.2.0/28</c> (generuje použitelné host adresy v rozsahu)
 ///
+/// /31 — RFC 3021 point-to-point: both addresses usable.
+/// /32 — single host address.
+/// /30 and wider — classic skip network + broadcast.
+///
 /// OS musí mít adresy na rozhraní (nebo povolený non-local bind), jinak Connect selže.
 /// Thread-safe (round-robin přes Interlocked).
 /// </summary>
@@ -34,10 +38,6 @@ public sealed class IpV4Rotator
         {
             if (part.Contains('/'))
             {
-                // ExpandCidr is a lazy yield-based generator specifically so a config
-                // typo (e.g. "/8" instead of "/28") can be rejected here, mid-expansion,
-                // instead of first fully materializing millions/billions of IPAddress
-                // objects into `list` and only checking the size limit afterwards.
                 foreach (var ip in ExpandCidr(part))
                 {
                     list.Add(ip);
@@ -55,7 +55,6 @@ public sealed class IpV4Rotator
             }
         }
 
-        // Unikátní, stabilní pořadí
         _addresses = list
             .Distinct()
             .OrderBy(a => a.GetAddressBytes()[0])
@@ -65,9 +64,7 @@ public sealed class IpV4Rotator
             .ToArray();
 
         if (_addresses.Length == 0)
-            throw new ArgumentException("IPv4 rotace neobsahuje žádnou adresu.");
-        if (_addresses.Length > maxAddresses)
-            throw new ArgumentException($"IPv4 rotace: max {maxAddresses} adres (zmenši CIDR/seznam).");
+            throw new ArgumentException("IPv4 rotace: žádná použitelná adresa.");
     }
 
     public IPAddress GetNextIp()
@@ -75,7 +72,6 @@ public sealed class IpV4Rotator
         var i = Interlocked.Increment(ref _index);
         if (i < 0)
         {
-            // overflow wrap
             Interlocked.Exchange(ref _index, 0);
             i = 0;
         }
@@ -96,10 +92,25 @@ public sealed class IpV4Rotator
             prefixLen is < 0 or > 32)
             throw new ArgumentException($"Neplatný IPv4 CIDR: {cidr}");
 
-        if (prefixLen > 30)
+        var netBytes = network.GetAddressBytes();
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(netBytes);
+        var netInt = BitConverter.ToUInt32(netBytes, 0);
+        var mask = prefixLen == 0 ? 0u : uint.MaxValue << (32 - prefixLen);
+        netInt &= mask;
+
+        // /32 — single host address (host route).
+        if (prefixLen == 32)
         {
-            // /31 a /32 — vrať přímo síťovou adresu (žádný klasický broadcast)
-            yield return network;
+            yield return ToIpv4(netInt);
+            yield break;
+        }
+
+        // /31 — RFC 3021 point-to-point: both addresses are usable; no network/broadcast.
+        if (prefixLen == 31)
+        {
+            yield return ToIpv4(netInt);
+            yield return ToIpv4(netInt + 1);
             yield break;
         }
 
@@ -107,21 +118,17 @@ public sealed class IpV4Rotator
             throw new ArgumentException(
                 $"IPv4 CIDR /{prefixLen} je příliš široký (minimum /20 kvůli limitu 4096 adres). Zadaný: {cidr}");
 
-        var netBytes = network.GetAddressBytes();
-        if (BitConverter.IsLittleEndian)
-            Array.Reverse(netBytes);
-        var netInt = BitConverter.ToUInt32(netBytes, 0);
-        var mask = prefixLen == 0 ? 0u : uint.MaxValue << (32 - prefixLen);
-        netInt &= mask;
         var hostCount = 1u << (32 - prefixLen);
-        // přeskoč network a broadcast
+        // Traditional subnets: skip network (0) and broadcast (hostCount-1).
         for (uint h = 1; h < hostCount - 1; h++)
-        {
-            var addrInt = netInt + h;
-            var b = BitConverter.GetBytes(addrInt);
-            if (BitConverter.IsLittleEndian)
-                Array.Reverse(b);
-            yield return new IPAddress(b);
-        }
+            yield return ToIpv4(netInt + h);
+    }
+
+    static IPAddress ToIpv4(uint addrInt)
+    {
+        var b = BitConverter.GetBytes(addrInt);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(b);
+        return new IPAddress(b);
     }
 }

@@ -41,10 +41,6 @@ public sealed class IpV4RotatorTests
     [Fact]
     public void OversizedCidr_FailsFastWithoutMaterializingMillionsOfAddresses()
     {
-        // Regression test: the >4096 guard used to run only *after* fully expanding
-        // the CIDR into a List<IPAddress> — a typo like "/8" instead of "/28" (or
-        // worse, "/1") would try to allocate millions/billions of IPAddress objects
-        // before the limit was ever checked. Must now fail quickly and cheaply.
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var ex = Assert.ThrowsAny<Exception>(() => new IpV4Rotator("10.0.0.0/8"));
         sw.Stop();
@@ -52,5 +48,35 @@ public sealed class IpV4RotatorTests
         Assert.Contains("4096", ex.Message);
         Assert.True(sw.ElapsedMilliseconds < 5000,
             $"Oversized CIDR should fail fast, took {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void Slash31_YieldsBothAddresses_Rfc3021()
+    {
+        // RFC 3021: /31 point-to-point — both addresses usable (no classic net/bcast).
+        var rot = new IpV4Rotator("192.0.2.10/31");
+        Assert.Equal(2, rot.Count);
+        Assert.Contains(IPAddress.Parse("192.0.2.10"), rot.Addresses);
+        Assert.Contains(IPAddress.Parse("192.0.2.11"), rot.Addresses);
+    }
+
+    [Fact]
+    public void Slash32_YieldsSingleHostAddress()
+    {
+        var rot = new IpV4Rotator("192.0.2.55/32");
+        Assert.Equal(1, rot.Count);
+        Assert.Equal(IPAddress.Parse("192.0.2.55"), rot.Addresses[0]);
+    }
+
+    [Fact]
+    public void Slash30_StillSkipsNetworkAndBroadcast()
+    {
+        // /30 = 4 addresses → 2 usable hosts under classic rules.
+        var rot = new IpV4Rotator("192.0.2.0/30");
+        Assert.Equal(2, rot.Count);
+        Assert.DoesNotContain(IPAddress.Parse("192.0.2.0"), rot.Addresses);
+        Assert.DoesNotContain(IPAddress.Parse("192.0.2.3"), rot.Addresses);
+        Assert.Contains(IPAddress.Parse("192.0.2.1"), rot.Addresses);
+        Assert.Contains(IPAddress.Parse("192.0.2.2"), rot.Addresses);
     }
 }
