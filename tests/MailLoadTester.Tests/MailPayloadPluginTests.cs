@@ -1,5 +1,6 @@
 using MailLoadTester;
 using MimeKit;
+using Xunit;
 
 namespace MailLoadTester.Tests;
 
