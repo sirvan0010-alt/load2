@@ -237,12 +237,15 @@ public sealed class SmtpTestRunner
         IReadOnlyList<MxRecord>? mxRecords = null;
         if (options.DirectMxDelivery)
         {
-            Report(0, 0, "Resolving MX records…", null, 1, "DNS MX lookup", "SMTP spojení",
+            // BUG-008: never take Recipients[0] alone — require a single shared domain
+            // (defense in depth even if Validation.Validate was skipped).
+            var mxDomain = DirectMxRouting.RequireSingleRecipientDomain(options.Recipients);
+            Report(0, 0, $"Resolving MX records for {mxDomain}…", null, 1, "DNS MX lookup", "SMTP spojení",
                 pathStep: DeliveryStepKind.DnsMxLookup, pathOk: null);
-            mxRecords = await MxResolver.ResolveAsync(options.Recipients[0].Split('@').Last(), ct).ConfigureAwait(false);
+            mxRecords = await MxResolver.ResolveAsync(mxDomain, ct).ConfigureAwait(false);
             var bestMx = MxResolver.GetBestHost(mxRecords);
             options = options with { SmtpHost = bestMx };
-            Report(0, 0, $"MX: {bestMx}", null, 1, $"MX resolved: {bestMx}", "SMTP spojení",
+            Report(0, 0, $"MX: {bestMx} ({mxDomain})", null, 1, $"MX resolved: {bestMx}", "SMTP spojení",
                 pathStep: DeliveryStepKind.DnsMxLookup, pathOk: true);
         }
         else
