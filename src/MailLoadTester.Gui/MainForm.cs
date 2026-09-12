@@ -3,12 +3,19 @@ using System.Text.Json;
 
 namespace MailLoadTester.Gui;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
     private TabControl tabs = null!;
     private ToolTip toolTip = null!;
+
+    // UI enhancement
+    private Panel pnlSafetyBanner = null!;
+    private Label lblSafetyBanner = null!;
+    private Button btnWizard = null!;
+    private CheckBox chkDarkMode = null!;
+    private bool _darkMode;
 
     // SMTP tab
     private TextBox txtHost = null!;
@@ -141,6 +148,8 @@ public sealed class MainForm : Form
         InitializeComponent();
         WireEvents();
         SetDefaults();
+        UpdateSafetyBanner();
+        ApplyTheme(false);
         FormClosing += MainForm_FormClosing;
     }
 
@@ -202,6 +211,43 @@ public sealed class MainForm : Form
     {
         toolTip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 400, ReshowDelay = 200 };
 
+        // === UI enhancement ===
+        pnlSafetyBanner = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 48,
+            Padding = new Padding(12, 6, 12, 6),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        lblSafetyBanner = new Label
+        {
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = false,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        };
+        pnlSafetyBanner.Controls.Add(lblSafetyBanner);
+
+        btnWizard = new Button
+        {
+            Text = "GETTING STARTED",
+            Width = 150,
+            Height = 36,
+            Left = 560,
+            Top = 6,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        btnWizard.FlatAppearance.BorderSize = 0;
+
+        chkDarkMode = new CheckBox
+        {
+            Text = "Dark mode",
+            AutoSize = true,
+            Left = 730,
+            Top = 16
+        };
+
         // === Top button bar ===
         var topPanel = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(8, 6, 8, 6) };
         btnStart = new Button
@@ -232,9 +278,14 @@ public sealed class MainForm : Form
         };
         toolTip.SetToolTip(btnSaveProfile, "Uloží aktuální nastavení testu do JSON (bez hesel).");
         toolTip.SetToolTip(btnLoadProfile, "Načte profil testu z JSON souboru.");
+        toolTip.SetToolTip(btnWizard, "Zobrazí stručného průvodce prvním bezpečným testem.");
+        toolTip.SetToolTip(chkDarkMode, "Přepne vzhled aplikace mezi světlým a tmavým režimem.");
         topPanel.Controls.Add(btnSaveProfile);
         topPanel.Controls.Add(btnLoadProfile);
+        topPanel.Controls.Add(btnWizard);
+        topPanel.Controls.Add(chkDarkMode);
         Controls.Add(topPanel);
+        Controls.Add(pnlSafetyBanner);
 
         // === TabControl ===
         tabs = new TabControl { Dock = DockStyle.Top, Height = 480 };
@@ -449,7 +500,6 @@ public sealed class MainForm : Form
         chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (jedna)", false, "Jedna SOCKS5 proxy níže. Pro více serverů použij seznam rotace.");
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
-        // multiline
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (např. 127.0.0.1).");
         numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 1080, "SOCKS5 proxy port (Tor používá 9050).");
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
@@ -694,6 +744,9 @@ public sealed class MainForm : Form
         btnStop.Click += (s, e) => OnStop();
         btnSaveProfile.Click += async (s, e) => await OnSaveProfileAsync();
         btnLoadProfile.Click += async (s, e) => await OnLoadProfileAsync();
+        btnWizard.Click += (s, e) => ShowGettingStartedWizard();
+        chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
+        chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numRandomAttachmentSizeMb.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
@@ -940,13 +993,6 @@ public sealed class MainForm : Form
             {
                 try
                 {
-                    // Was CancellationToken.None — meant a webhook that hung for up to
-                    // its own 30s HttpClient timeout could not be interrupted, so
-                    // closing the window right after a test finished (but before the
-                    // webhook POST completed) blocked FormClosing's wait on
-                    // _runCompletion for up to 30s, since that TCS isn't set until
-                    // this whole method's finally block runs. Tying it to _cts means
-                    // MainForm_FormClosing's _cts?.Cancel() actually interrupts it.
                     await WebhookNotifier.NotifyAsync(txtWebhookUrl.Text, result, _cts?.Token ?? CancellationToken.None);
                     AppendLog("Webhook notifikace odeslána.", Color.LightGreen);
                 }
@@ -1031,10 +1077,6 @@ public sealed class MainForm : Form
 
     private void UpdateProgress(ProgressUpdate u)
     {
-        // Defense in depth alongside MainForm_FormClosing: a progress event queued
-        // just before Cancel() took effect could still arrive while the form is
-        // disposing. InvokeRequired itself can throw on a torn-down handle, so
-        // check IsDisposed first rather than relying solely on the closing handler.
         if (IsDisposed) return;
         if (InvokeRequired) { try { Invoke(UpdateProgress, u); } catch (ObjectDisposedException) { } catch (InvalidOperationException) { } return; }
         if (IsDisposed) return;
@@ -1069,319 +1111,138 @@ public sealed class MainForm : Form
             int stepIdx = u.MessageStep.Value switch
             {
                 MessageStep.Queued => 0,
-                MessageStep.WaitingRateLimit => 1,
-                MessageStep.RentingConnection => 2,
-                MessageStep.BuildingMime => 3,
-                MessageStep.SmtpSend => 4,
+                MessageStep.RateLimited => 1,
+                MessageStep.Smtp => 2,
+                MessageStep.Mime => 3,
+                MessageStep.Sending => 4,
                 MessageStep.Succeeded => 5,
+                MessageStep.FailedTransient => 5,
                 MessageStep.FailedFinal => 5,
                 _ => -1
             };
-            for (int i = 0; i < 6; i++)
+            if (stepIdx >= 0)
             {
-                if (i == stepIdx)
-                {
-                    _checklistLabels[i].BackColor = Color.FromArgb(66, 153, 225);
-                    _checklistLabels[i].ForeColor = Color.White;
-                    _checklistLabels[i].Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-                }
-                else if (i < stepIdx)
-                {
-                    _checklistLabels[i].BackColor = Color.FromArgb(154, 230, 180);
-                    _checklistLabels[i].ForeColor = Color.FromArgb(20, 60, 20);
-                    _checklistLabels[i].Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-                }
-                else
-                {
-                    _checklistLabels[i].BackColor = Color.LightGray;
-                    _checklistLabels[i].ForeColor = Color.DimGray;
-                    _checklistLabels[i].Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-                }
+                for (int i = 0; i < _checklistLabels.Length; i++)
+                    _checklistLabels[i].BackColor = i <= stepIdx ? Color.LightGreen : Color.LightGray;
             }
         }
 
-        var color = u.MessageStep switch
+        if (u.DeliveryStep.HasValue && _pathLabels.TryGetValue(u.DeliveryStep.Value, out var pathLabel))
         {
-            MessageStep.Succeeded => Color.LightGreen,
-            MessageStep.FailedFinal => Color.OrangeRed,
-            MessageStep.FailedTransient => Color.Yellow,
-            _ => Color.LightGray
-        };
-        // Hlavní log: jen finální stavy + fáze přípravy (ne každý CONNECT/EHLO)
-        if (u.MessageStep is MessageStep.Succeeded or MessageStep.FailedFinal or MessageStep.FailedTransient
-            || u.Phase <= 2)
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] {u.CurrentStep}", color);
-
-        // Rychlý grid log (SMTP log záložka) – jen významné stavy
-        if (smtpLogTab != null && u.MessageStep is MessageStep.Succeeded or MessageStep.FailedFinal or MessageStep.FailedTransient)
-        {
-            var st = u.MessageStep switch
-            {
-                MessageStep.Succeeded => ("OK", Color.SeaGreen),
-                MessageStep.FailedTransient => ("RETRY", Color.DarkOrange),
-                _ => ("FAIL", Color.Firebrick)
-            };
-            smtpLogTab.AddLogEntry(
-                email: u.CurrentStep.Contains('→') ? u.CurrentStep : $"#{u.MessageIndex}",
-                status: st.Item1,
-                message: u.CurrentStep,
-                statusColor: st.Item2);
+            foreach (var pair in _pathLabels)
+                pair.Value.BackColor = pair.Key == u.DeliveryStep.Value ? Color.LightGreen : Color.Gainsboro;
+            pathLabel.BackColor = Color.LightGreen;
         }
 
-        // Živá tabulka pozorovaných SMTP odpovědí (max ~2×/s)
-        if (u.ObservedSnapshot != null && gridObserved != null)
+        if (u.ObservedResponseCode.HasValue && gridObserved != null)
         {
-            var nowObs = DateTime.UtcNow;
-            if ((nowObs - _observedThrottle).TotalMilliseconds >= 500 || u.MessageStep == MessageStep.FailedFinal)
+            try
             {
-                _observedThrottle = nowObs;
-                gridObserved.SuspendLayout();
-                try
+                var row = gridObserved.Rows.Cast<DataGridViewRow>().FirstOrDefault(r =>
+                    r.Cells[0].Value?.ToString() == u.ObservedResponseCode.Value.ToString());
+                if (row == null)
                 {
-                    gridObserved.Rows.Clear();
-                    foreach (var row in u.ObservedSnapshot.Take(50))
-                    {
-                        gridObserved.Rows.Add(
-                            row.SmtpCode,
-                            row.SampleText,
-                            row.Count,
-                            row.Classification.ToString(),
-                            row.RecommendedAction);
-                    }
-                }
-                finally { gridObserved.ResumeLayout(); }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(u.PaceStatus) && lblPaceStatus != null)
-            lblPaceStatus.Text = "Stav tempa: " + u.PaceStatus
-                + (u.EffectiveIntervalMs is int ms ? $" · interval {ms} ms" : "");
-
-        // Cesta odesílání – postupné zbarvování
-        if (u.PathStep.HasValue)
-            ColorPathStep(u.PathStep.Value, u.PathStepSuccess ?? true);
-
-        // Mapování MessageStep → path kroky (když runner posílá MessageStep)
-        if (u.MessageStep.HasValue)
-        {
-            var mapped = u.MessageStep.Value switch
-            {
-                MessageStep.RentingConnection => DeliveryStepKind.TcpConnect,
-                MessageStep.BuildingMime => DeliveryStepKind.MailFrom,
-                MessageStep.SmtpSend => DeliveryStepKind.Data,
-                MessageStep.Succeeded => DeliveryStepKind.Quit,
-                MessageStep.FailedFinal => DeliveryStepKind.Error,
-                _ => (DeliveryStepKind?)null
-            };
-            if (mapped.HasValue)
-                ColorPathStep(mapped.Value, u.MessageStep != MessageStep.FailedFinal && u.MessageStep != MessageStep.FailedTransient);
-        }
-
-        if (!string.IsNullOrEmpty(u.PaceStatus) && lblPaceStatus != null)
-            lblPaceStatus.Text = "Stav tempa: " + u.PaceStatus;
-        if (u.EffectiveIntervalMs.HasValue && lblEffectiveInterval != null)
-            lblEffectiveInterval.Text = $"Efektivní interval: {u.EffectiveIntervalMs.Value} ms";
-    }
-
-    private void AppendLog(string text, Color color)
-    {
-        if (IsDisposed) return;
-        if (InvokeRequired) { try { Invoke(AppendLog, text, color); } catch (ObjectDisposedException) { } catch (InvalidOperationException) { } return; }
-        if (IsDisposed) return;
-
-        // Throttle: max 25 řádků / 200 ms (ochrana UI při vysokém paralelismu)
-        var now = DateTime.UtcNow;
-        if ((now - _logThrottleWindow).TotalMilliseconds > 200)
-        {
-            if (_logSuppressed > 0)
-            {
-                rtbLog.SelectionStart = rtbLog.TextLength;
-                rtbLog.SelectionColor = Color.DimGray;
-                rtbLog.AppendText($"… potlačeno {_logSuppressed} log řádků …\n");
-                _logSuppressed = 0;
-            }
-            _logThrottleWindow = now;
-            _logThrottleCount = 0;
-        }
-        if (_logThrottleCount >= 25)
-        {
-            _logSuppressed++;
-            return;
-        }
-        _logThrottleCount++;
-
-        rtbLog.SelectionStart = rtbLog.TextLength;
-        rtbLog.SelectionColor = color;
-        rtbLog.AppendText(text + "\n");
-        rtbLog.SelectionColor = rtbLog.ForeColor;
-        rtbLog.ScrollToCaret();
-
-        var lines = rtbLog.Lines;
-        if (lines.Length > 5000)
-        {
-            rtbLog.Text = string.Join("\n", lines.Skip(lines.Length - 4000));
-            rtbLog.SelectionStart = rtbLog.TextLength;
-            rtbLog.ScrollToCaret();
-        }
-    }
-
-    /// <summary>
-    /// Vytvoří zašedlou pipeline: DNS → TCP → EHLO → STARTTLS → AUTH → MAIL FROM → RCPT TO → DATA → QUIT
-    /// </summary>
-    private void BuildDeliveryPathPipeline()
-    {
-        pnlDeliveryPath.Controls.Clear();
-        _pathLabels.Clear();
-        var titles = new Dictionary<DeliveryStepKind, string>
-        {
-            [DeliveryStepKind.DnsMxLookup] = "DNS MX",
-            [DeliveryStepKind.TcpConnect] = "TCP",
-            [DeliveryStepKind.Ehlo] = "EHLO",
-            [DeliveryStepKind.StartTls] = "STARTTLS",
-            [DeliveryStepKind.Auth] = "AUTH",
-            [DeliveryStepKind.MailFrom] = "MAIL FROM",
-            [DeliveryStepKind.RcptTo] = "RCPT TO",
-            [DeliveryStepKind.Data] = "DATA",
-            [DeliveryStepKind.Quit] = "QUIT"
-        };
-        for (int i = 0; i < _pathOrder.Length; i++)
-        {
-            var kind = _pathOrder[i];
-            var lbl = new Label
-            {
-                Text = titles[kind],
-                AutoSize = true,
-                Padding = new Padding(6, 4, 6, 4),
-                Margin = new Padding(2),
-                BackColor = Color.Gainsboro,
-                ForeColor = Color.DimGray,
-                Font = new Font("Segoe UI", 8f),
-                BorderStyle = BorderStyle.FixedSingle,
-                Cursor = Cursors.Hand,
-                Tag = kind
-            };
-            toolTip.SetToolTip(lbl, $"Krok: {titles[kind]}\nZašedlý = ještě neproběhl.\nZelený = úspěch.\nČervený = chyba.\nOranžový = probíhá.");
-            lbl.Click += (s, e) =>
-            {
-                if (s is Label l && l.Tag is DeliveryStepKind k)
-                    MessageBox.Show($"Krok cesty: {titles[k]}\n\nStav: {(l.BackColor == Color.Gainsboro ? "čeká" : l.BackColor.R > 200 && l.BackColor.G < 150 ? "chyba" : "dokončeno / probíhá")}",
-                        "Cesta odesílání", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            };
-            _pathLabels[kind] = lbl;
-            pnlDeliveryPath.Controls.Add(lbl);
-            if (i < _pathOrder.Length - 1)
-                pnlDeliveryPath.Controls.Add(new Label { Text = "→", AutoSize = true, ForeColor = Color.Gray, Padding = new Padding(0, 4, 0, 0) });
-        }
-    }
-
-    /// <summary>
-    /// Zbarví krok cesty a všechny předchozí jako hotové (zelené).
-    /// </summary>
-    private void ColorPathStep(DeliveryStepKind step, bool success)
-    {
-        if (!_pathLabels.ContainsKey(step) && step != DeliveryStepKind.Error) return;
-
-        int idx = Array.IndexOf(_pathOrder, step);
-        if (step == DeliveryStepKind.Error)
-        {
-            // Označ poslední aktivní jako chybu
-            foreach (var kv in _pathLabels)
-            {
-                if (kv.Value.BackColor == Color.FromArgb(255, 200, 100))
-                {
-                    kv.Value.BackColor = Color.FromArgb(255, 160, 160);
-                    kv.Value.ForeColor = Color.DarkRed;
-                }
-            }
-            return;
-        }
-
-        for (int i = 0; i < _pathOrder.Length; i++)
-        {
-            var kind = _pathOrder[i];
-            if (!_pathLabels.TryGetValue(kind, out var lbl)) continue;
-            if (i < idx)
-            {
-                lbl.BackColor = Color.FromArgb(180, 230, 180);
-                lbl.ForeColor = Color.FromArgb(20, 80, 20);
-            }
-            else if (i == idx)
-            {
-                if (success)
-                {
-                    lbl.BackColor = Color.FromArgb(100, 200, 120);
-                    lbl.ForeColor = Color.White;
-                    lbl.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+                    gridObserved.Rows.Add(u.ObservedResponseCode.Value, u.ObservedResponseText ?? "", 1, u.ObservedClassification ?? "", u.ObservedRecommendation ?? "");
                 }
                 else
                 {
-                    lbl.BackColor = Color.FromArgb(255, 160, 160);
-                    lbl.ForeColor = Color.DarkRed;
-                    lbl.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+                    var count = Convert.ToInt32(row.Cells[2].Value ?? 0);
+                    row.Cells[2].Value = count + 1;
+                    row.Cells[1].Value = u.ObservedResponseText ?? row.Cells[1].Value;
                 }
+                while (gridObserved.Rows.Count > 200)
+                    gridObserved.Rows.RemoveAt(0);
             }
-            else if (lbl.BackColor != Color.FromArgb(100, 200, 120) && lbl.BackColor != Color.FromArgb(180, 230, 180))
-            {
-                // ještě neproběhlo – nech zašedlé, nebo označ „probíhá“ oranžově jen aktuální
-            }
+            catch { /* GUI-only telemetry must never fail the run */ }
         }
     }
 
     private void ResetDeliveryPath()
     {
-        foreach (var lbl in _pathLabels.Values)
+        foreach (var label in _pathLabels.Values)
+            label.BackColor = Color.Gainsboro;
+        foreach (var label in _checklistLabels)
+            label.BackColor = Color.LightGray;
+    }
+
+    private void BuildDeliveryPathPipeline()
+    {
+        _pathLabels.Clear();
+        foreach (var step in _pathOrder)
         {
-            lbl.BackColor = Color.Gainsboro;
-            lbl.ForeColor = Color.DimGray;
-            lbl.Font = new Font("Segoe UI", 8f, FontStyle.Regular);
+            var label = new Label
+            {
+                Text = step switch
+                {
+                    DeliveryStepKind.DnsMxLookup => "DNS/MX",
+                    DeliveryStepKind.TcpConnect => "TCP",
+                    DeliveryStepKind.Ehlo => "EHLO",
+                    DeliveryStepKind.StartTls => "STARTTLS",
+                    DeliveryStepKind.Auth => "AUTH",
+                    DeliveryStepKind.MailFrom => "MAIL FROM",
+                    DeliveryStepKind.RcptTo => "RCPT TO",
+                    DeliveryStepKind.Data => "DATA",
+                    DeliveryStepKind.Quit => "QUIT",
+                    _ => step.ToString()
+                },
+                AutoSize = true,
+                Padding = new Padding(5, 3, 5, 3),
+                Margin = new Padding(2),
+                BackColor = Color.Gainsboro,
+                ForeColor = Color.DimGray,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 8.5f)
+            };
+            _pathLabels[step] = label;
+            pnlDeliveryPath.Controls.Add(label);
+            if (step != _pathOrder[^1])
+                pnlDeliveryPath.Controls.Add(new Label { Text = "→", AutoSize = true, ForeColor = Color.Gray, Padding = new Padding(0, 3, 0, 3) });
         }
     }
 
     private void ApplyProviderPreset()
     {
-        var name = cmbProviderPreset.SelectedItem?.ToString();
-        var preset = ProviderPresets.All.FirstOrDefault(p => p.DisplayName == name);
+        var selected = cmbProviderPreset?.SelectedItem?.ToString();
+        if (string.IsNullOrWhiteSpace(selected)) return;
+        var preset = ProviderPresets.All.FirstOrDefault(p => p.DisplayName == selected);
         if (preset is null) return;
-
-        numInterval.Value = Math.Clamp(preset.IntervalMs, numInterval.Minimum, numInterval.Maximum);
         chkJitter.Checked = preset.EnableJitter;
-        numJitterPercent.Value = preset.JitterPercent;
+        numJitterPercent.Value = Math.Clamp(preset.JitterPercent, numJitterPercent.Minimum, numJitterPercent.Maximum);
         chkBurst.Checked = preset.EnableBurstMode;
-        numBurstSize.Value = preset.BurstSize;
-        numBurstPause.Value = preset.BurstPauseSeconds;
+        numBurstSize.Value = Math.Clamp(preset.BurstSize, numBurstSize.Minimum, numBurstSize.Maximum);
+        numBurstPause.Value = Math.Clamp(preset.BurstPauseSeconds, numBurstPause.Minimum, numBurstPause.Maximum);
         chkBackoff.Checked = preset.EnableProgressiveBackoff;
-        numBackoffAfter.Value = preset.BackoffAfterSuccesses;
-        numBackoffMult.Value = (decimal)Math.Clamp(preset.BackoffMultiplier * 10, 11, 50);
+        numBackoffAfter.Value = Math.Clamp(preset.BackoffAfterSuccesses, numBackoffAfter.Minimum, numBackoffAfter.Maximum);
+        numBackoffMult.Value = Math.Clamp((decimal)(preset.BackoffMultiplier * 10), numBackoffMult.Minimum, numBackoffMult.Maximum);
         numMaxInterval.Value = Math.Clamp(preset.MaxIntervalMs, numMaxInterval.Minimum, numMaxInterval.Maximum);
-        numConcurrency.Value = Math.Clamp(preset.MaxConcurrency, numConcurrency.Minimum, numConcurrency.Maximum);
-        chkGreylist.Checked = preset.DetectGreylist;
-        numGreylistMinutes.Value = preset.GreylistRetryMinutes;
+        chkPerRecipient.Checked = preset.EnablePerRecipientLimit;
+        numMaxPerRecipient.Value = Math.Clamp(preset.MaxMessagesPerRecipient, numMaxPerRecipient.Minimum, numMaxPerRecipient.Maximum);
+        numPerRecipientWindow.Value = Math.Clamp(preset.PerRecipientWindowMinutes, numPerRecipientWindow.Minimum, numPerRecipientWindow.Maximum);
+        chkTimeWindow.Checked = preset.EnableSendingTimeWindow;
+        numWindowFrom.Value = Math.Clamp(preset.SendingWindowFromHour, numWindowFrom.Minimum, numWindowFrom.Maximum);
+        numWindowTo.Value = Math.Clamp(preset.SendingWindowToHour, numWindowTo.Minimum, numWindowTo.Maximum);
         chkWarmup.Checked = preset.EnableWarmup;
         txtWarmupPhases.Text = preset.WarmupPhases;
-        numPort.Value = preset.SuggestedPort;
-        cmbSecurity.SelectedItem = preset.SuggestedSecurity.ToString();
+        chkGreylist.Checked = preset.DetectGreylist;
+        numGreylistMinutes.Value = Math.Clamp(preset.GreylistRetryMinutes, numGreylistMinutes.Minimum, numGreylistMinutes.Maximum);
+        numGreylistRetries.Value = Math.Clamp(preset.MaxGreylistRetries, numGreylistRetries.Minimum, numGreylistRetries.Maximum);
+        lblPaceStatus.Text = $"Stav tempa: {preset.DisplayName}";
     }
-
 
     private async Task OnSaveProfileAsync()
     {
         try
         {
             var options = BuildOptions();
-            using var dlg = new SaveFileDialog
-            {
-                Filter = "JSON profil|*.json",
-                FileName = "mailloadtester-profile.json",
-                Title = "Uložit profil testu"
-            };
+            Validation.Validate(options);
+            using var dlg = new SaveFileDialog { Filter = "MailLoadTester profil|*.json", FileName = "profile.json" };
             if (dlg.ShowDialog() != DialogResult.OK) return;
-            await ProfileStore.SaveAsync(dlg.FileName, options, profileName: Path.GetFileNameWithoutExtension(dlg.FileName), includeSecrets: false);
-            AppendLog($"Profil uložen: {dlg.FileName} (hesla vynechána)", Color.LightGreen);
-            MessageBox.Show("Profil uložen.\nHesla a tajemství se do souboru neukládají.", "Profil", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            await ProfileStore.SaveAsync(dlg.FileName, options);
+            lblStatus.Text = "Profil uložen";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Uložení profilu selhalo:\n" + ex.Message, "Profil", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Profil se nepodařilo uložit:\n{ex.Message}", "Uložení profilu", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -1389,102 +1250,90 @@ public sealed class MainForm : Form
     {
         try
         {
-            using var dlg = new OpenFileDialog
-            {
-                Filter = "JSON profil|*.json|All files|*.*",
-                Title = "Načíst profil testu"
-            };
+            using var dlg = new OpenFileDialog { Filter = "MailLoadTester profil|*.json|Všechny soubory|*.*" };
             if (dlg.ShowDialog() != DialogResult.OK) return;
-            var file = await ProfileStore.LoadAsync(dlg.FileName);
-            ApplyOptionsToUi(file.Options);
-            AppendLog($"Profil načten: {dlg.FileName}" + (file.Name is { } n ? $" ({n})" : ""), Color.LightBlue);
-            var msg = "Profil načten do formuláře.\nHesla doplňte ručně, pokud jsou potřeba.";
-            if (ProfileStore.IsVersionMismatch(file))
-                msg += $"\n\nUpozornění: profil je z verze {file.Version}, aplikace je {AppVersion.Current}. Novější volby mohou mít výchozí hodnoty.";
-            MessageBox.Show(msg, "Profil", MessageBoxButtons.OK,
-                ProfileStore.IsVersionMismatch(file) ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            var o = await ProfileStore.LoadAsync(dlg.FileName);
+            txtHost.Text = o.SmtpHost;
+            numPort.Value = Math.Clamp(o.SmtpPort, numPort.Minimum, numPort.Maximum);
+            cmbSecurity.SelectedItem = o.Security.ToString();
+            chkIgnoreCert.Checked = o.IgnoreCertificateErrors;
+            chkAuth.Checked = o.UseAuthentication;
+            cmbAuthMethod.SelectedItem = o.AuthMethod.ToString();
+            txtUser.Text = o.Username;
+            if (!string.IsNullOrEmpty(o.Password)) txtPass.Text = o.Password;
+            txtSourceIp.Text = o.SourceIp;
+            txtIpv6Prefix.Text = o.Ipv6Prefix;
+            numIpv6PrefixLen.Value = Math.Clamp(o.Ipv6PrefixLength, numIpv6PrefixLen.Minimum, numIpv6PrefixLen.Maximum);
+            txtIpv4Rotation.Text = o.Ipv4Rotation;
+            chkIpv4RotationRandom.Checked = o.Ipv4RotationRandom;
+            txtClientCert.Text = o.ClientCertificatePath;
+            txtClientCertPass.Text = o.ClientCertificatePassword;
+            txtFrom.Text = o.From;
+            txtTo.Text = string.Join(Environment.NewLine, o.Recipients);
+            txtCc.Text = string.Join(",", o.CcRecipients);
+            txtBcc.Text = string.Join(",", o.BccRecipients);
+            txtDisplayName.Text = o.DisplayName;
+            txtSubject.Text = o.Subject;
+            txtBody.Text = o.Body;
+            chkHtmlBody.Checked = o.HtmlBody;
+            chkRandomData.Checked = o.RandomData;
+            chkBogusData.Checked = o.UseBogusData;
+            chkRandomHtml.Checked = o.GenerateRandomHtml;
+            chkRandomAttachments.Checked = o.GenerateRandomAttachments;
+            numMaxRandomAttachments.Value = Math.Clamp(o.MaxRandomAttachments, numMaxRandomAttachments.Minimum, numMaxRandomAttachments.Maximum);
+            chkVaryMessage.Checked = o.VarySubjectBodyPerMessage;
+            numRandomAttachmentSizeMb.Value = Math.Clamp(o.RandomAttachmentSizeMb, numRandomAttachmentSizeMb.Minimum, numRandomAttachmentSizeMb.Maximum);
+            numCount.Value = Math.Clamp(o.MessageCount, numCount.Minimum, numCount.Maximum);
+            numInterval.Value = Math.Clamp(o.IntervalMs, numInterval.Minimum, numInterval.Maximum);
+            numConcurrency.Value = Math.Clamp(o.MaxConcurrency, numConcurrency.Minimum, numConcurrency.Maximum);
+            chkBatchMode.Checked = o.BatchMode;
+            numBatchSize.Value = Math.Clamp(o.BatchSize, numBatchSize.Minimum, numBatchSize.Maximum);
+            numBatchPause.Value = Math.Clamp(o.BatchPauseSeconds, numBatchPause.Minimum, numBatchPause.Maximum);
+            numRetries.Value = Math.Clamp(o.MaxRetries, numRetries.Minimum, numRetries.Maximum);
+            chkDryRun.Checked = o.DryRun;
+            chkTestMode.Checked = o.TestMode;
+            txtAllowedDomains.Text = o.AllowedDomains;
+            chkSocks5.Checked = o.UseSocks5Proxy;
+            txtProxyHost.Text = o.ProxyHost;
+            if (txtProxyList != null) txtProxyList.Text = o.ProxyList ?? "";
+            _idleHealthCheckSeconds = Math.Clamp(o.IdleConnectionHealthCheckSeconds, 0, 86_400);
+            _circuitWindowSize = o.CircuitBreakerWindowSize > 0 ? o.CircuitBreakerWindowSize : 100;
+            _circuitFailurePercent = o.CircuitBreakerFailurePercent > 0 ? o.CircuitBreakerFailurePercent : 90.0;
+            if (chkProxyListRandom != null) chkProxyListRandom.Checked = o.ProxyListRandom;
+            if (numProxyBanMinutes != null) numProxyBanMinutes.Value = Math.Clamp(o.ProxyBanMinutes <= 0 ? 15 : o.ProxyBanMinutes, 1, 1440);
+            numProxyPort.Value = Math.Clamp(o.ProxyPort <= 0 ? 1080 : o.ProxyPort, numProxyPort.Minimum, numProxyPort.Maximum);
+            txtProxyUser.Text = o.ProxyUsername;
+            if (!string.IsNullOrEmpty(o.ProxyPassword)) txtProxyPass.Text = o.ProxyPassword;
+            chkJitter.Checked = o.EnableJitter;
+            numJitterPercent.Value = Math.Clamp(o.JitterPercent, numJitterPercent.Minimum, numJitterPercent.Maximum);
+            chkBurst.Checked = o.EnableBurstMode;
+            numBurstSize.Value = Math.Clamp(o.BurstSize, numBurstSize.Minimum, numBurstSize.Maximum);
+            numBurstPause.Value = Math.Clamp(o.BurstPauseSeconds, numBurstPause.Minimum, numBurstPause.Maximum);
+            chkBackoff.Checked = o.EnableProgressiveBackoff;
+            numBackoffAfter.Value = Math.Clamp(o.BackoffAfterSuccesses, numBackoffAfter.Minimum, numBackoffAfter.Maximum);
+            chkGreylist.Checked = o.DetectGreylist;
+            numGreylistMinutes.Value = Math.Clamp(o.GreylistRetryMinutes, numGreylistMinutes.Minimum, numGreylistMinutes.Maximum);
+            chkWarmup.Checked = o.EnableWarmup;
+            txtWarmupPhases.Text = o.WarmupPhases;
+            chkTimeWindow.Checked = o.EnableSendingTimeWindow;
+            numWindowFrom.Value = Math.Clamp(o.SendingWindowFromHour, numWindowFrom.Minimum, numWindowFrom.Maximum);
+            numWindowTo.Value = Math.Clamp(o.SendingWindowToHour, numWindowTo.Minimum, numWindowTo.Maximum);
+            chkPerRecipient.Checked = o.EnablePerRecipientLimit;
+            numMaxPerRecipient.Value = Math.Clamp(o.MaxMessagesPerRecipient, numMaxPerRecipient.Minimum, numMaxPerRecipient.Maximum);
+            chkRbl.Checked = o.CheckRblBeforeStart;
+            chkCollectObserved.Checked = o.CollectObservedResponses;
+            chkCircuit.Checked = o.UseCircuitBreaker;
+            numCircuitThreshold.Value = Math.Clamp(o.CircuitBreakerThreshold, numCircuitThreshold.Minimum, numCircuitThreshold.Maximum);
+            chkDirectMx.Checked = o.DirectMxDelivery;
+            chkPreWarm.Checked = o.PreWarmConnections;
+            chkAdaptive.Checked = o.UseAdaptiveConcurrency;
+            UpdateRandomAttachmentSafetyInfo();
+            UpdateSafetyBanner();
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Načtení profilu selhalo:\n" + ex.Message, "Profil", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Profil se nepodařilo načíst:\n{ex.Message}", "Načtení profilu", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-    }
-
-    /// <summary>Naplní GUI z MailTestOptions (hesla se nepřepisují, pokud jsou v profilu prázdná).</summary>
-    private void ApplyOptionsToUi(MailTestOptions o)
-    {
-        txtHost.Text = o.SmtpHost;
-        numPort.Value = Math.Clamp(o.Port, numPort.Minimum, numPort.Maximum);
-        cmbSecurity.SelectedItem = o.Security.ToString();
-        chkIgnoreCert.Checked = o.IgnoreCertificateErrors;
-        chkAuth.Checked = o.UseAuthentication;
-        cmbAuthMethod.SelectedItem = o.AuthMethod.ToString();
-        txtUser.Text = o.Username;
-        if (!string.IsNullOrEmpty(o.Password)) txtPass.Text = o.Password;
-        txtSourceIp.Text = o.SourceIp ?? "";
-        if (txtIpv6Prefix != null) txtIpv6Prefix.Text = o.Ipv6Prefix ?? "";
-        if (numIpv6PrefixLen != null) numIpv6PrefixLen.Value = Math.Clamp(o.Ipv6PrefixLength <= 0 ? 64 : o.Ipv6PrefixLength, numIpv6PrefixLen.Minimum, numIpv6PrefixLen.Maximum);
-        cmbIpVersion.SelectedItem = o.IpVersion.ToString();
-        txtFrom.Text = o.From;
-        txtTo.Text = string.Join(", ", o.Recipients ?? Array.Empty<string>());
-        txtCc.Text = string.Join(", ", o.CcRecipients ?? Array.Empty<string>());
-        txtBcc.Text = string.Join(", ", o.BccRecipients ?? Array.Empty<string>());
-        txtDisplayName.Text = o.DisplayName;
-        txtSubject.Text = o.Subject;
-        txtBody.Text = o.Body;
-        chkHtmlBody.Checked = o.HtmlBody;
-        chkRandomData.Checked = o.RandomTestData;
-        chkBogusData.Checked = o.UseBogusData;
-        chkRandomHtml.Checked = o.GenerateRandomHtml;
-        chkRandomAttachments.Checked = o.GenerateRandomAttachments;
-        numMaxRandomAttachments.Value = Math.Clamp(o.MaxRandomAttachments, numMaxRandomAttachments.Minimum, numMaxRandomAttachments.Maximum);
-        chkVaryMessage.Checked = o.VarySubjectBodyPerMessage;
-        numRandomAttachmentSizeMb.Value = Math.Clamp(o.RandomAttachmentSizeMb, numRandomAttachmentSizeMb.Minimum, numRandomAttachmentSizeMb.Maximum);
-        numCount.Value = Math.Clamp(o.MessageCount, numCount.Minimum, numCount.Maximum);
-        numInterval.Value = Math.Clamp(o.IntervalMs, numInterval.Minimum, numInterval.Maximum);
-        numConcurrency.Value = Math.Clamp(o.MaxConcurrency, numConcurrency.Minimum, numConcurrency.Maximum);
-        chkBatchMode.Checked = o.BatchMode;
-        numBatchSize.Value = Math.Clamp(o.BatchSize, numBatchSize.Minimum, numBatchSize.Maximum);
-        numBatchPause.Value = Math.Clamp(o.BatchPauseSeconds, numBatchPause.Minimum, numBatchPause.Maximum);
-        numRetries.Value = Math.Clamp(o.MaxRetries, numRetries.Minimum, numRetries.Maximum);
-        chkDryRun.Checked = o.DryRun;
-        chkTestMode.Checked = o.TestMode;
-        txtAllowedDomains.Text = o.AllowedDomains;
-        chkSocks5.Checked = o.UseSocks5Proxy;
-        txtProxyHost.Text = o.ProxyHost;
-        if (txtProxyList != null) txtProxyList.Text = o.ProxyList ?? "";
-        _idleHealthCheckSeconds = Math.Clamp(o.IdleConnectionHealthCheckSeconds, 0, 86_400);
-        _circuitWindowSize = o.CircuitBreakerWindowSize > 0 ? o.CircuitBreakerWindowSize : 100;
-        _circuitFailurePercent = o.CircuitBreakerFailurePercent > 0 ? o.CircuitBreakerFailurePercent : 90.0;
-        if (chkProxyListRandom != null) chkProxyListRandom.Checked = o.ProxyListRandom;
-        if (numProxyBanMinutes != null) numProxyBanMinutes.Value = Math.Clamp(o.ProxyBanMinutes <= 0 ? 15 : o.ProxyBanMinutes, 1, 1440);
-        numProxyPort.Value = Math.Clamp(o.ProxyPort <= 0 ? 1080 : o.ProxyPort, numProxyPort.Minimum, numProxyPort.Maximum);
-        txtProxyUser.Text = o.ProxyUsername;
-        if (!string.IsNullOrEmpty(o.ProxyPassword)) txtProxyPass.Text = o.ProxyPassword;
-        chkJitter.Checked = o.EnableJitter;
-        numJitterPercent.Value = Math.Clamp(o.JitterPercent, numJitterPercent.Minimum, numJitterPercent.Maximum);
-        chkBurst.Checked = o.EnableBurstMode;
-        numBurstSize.Value = Math.Clamp(o.BurstSize, numBurstSize.Minimum, numBurstSize.Maximum);
-        numBurstPause.Value = Math.Clamp(o.BurstPauseSeconds, numBurstPause.Minimum, numBurstPause.Maximum);
-        chkBackoff.Checked = o.EnableProgressiveBackoff;
-        numBackoffAfter.Value = Math.Clamp(o.BackoffAfterSuccesses, numBackoffAfter.Minimum, numBackoffAfter.Maximum);
-        chkGreylist.Checked = o.DetectGreylist;
-        numGreylistMinutes.Value = Math.Clamp(o.GreylistRetryMinutes, numGreylistMinutes.Minimum, numGreylistMinutes.Maximum);
-        chkWarmup.Checked = o.EnableWarmup;
-        txtWarmupPhases.Text = o.WarmupPhases;
-        chkTimeWindow.Checked = o.EnableSendingTimeWindow;
-        numWindowFrom.Value = Math.Clamp(o.SendingWindowFromHour, numWindowFrom.Minimum, numWindowFrom.Maximum);
-        numWindowTo.Value = Math.Clamp(o.SendingWindowToHour, numWindowTo.Minimum, numWindowTo.Maximum);
-        chkPerRecipient.Checked = o.EnablePerRecipientLimit;
-        numMaxPerRecipient.Value = Math.Clamp(o.MaxMessagesPerRecipient, numMaxPerRecipient.Minimum, numMaxPerRecipient.Maximum);
-        chkRbl.Checked = o.CheckRblBeforeStart;
-        chkCollectObserved.Checked = o.CollectObservedResponses;
-        chkCircuit.Checked = o.UseCircuitBreaker;
-        numCircuitThreshold.Value = Math.Clamp(o.CircuitBreakerThreshold, numCircuitThreshold.Minimum, numCircuitThreshold.Maximum);
-        chkDirectMx.Checked = o.DirectMxDelivery;
-        chkPreWarm.Checked = o.PreWarmConnections;
-        chkAdaptive.Checked = o.UseAdaptiveConcurrency;
-        UpdateRandomAttachmentSafetyInfo();
     }
 
     private async Task OnCheckRblAsync()
