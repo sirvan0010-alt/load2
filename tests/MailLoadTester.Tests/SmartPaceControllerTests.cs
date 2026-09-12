@@ -145,4 +145,44 @@ public sealed class SmartPaceControllerTests
         Assert.True(secondMs >= intervalMs - 25,
             $"Second SEND should wait ~{intervalMs} ms, took {secondMs} ms");
     }
+
+    [Fact]
+    public async Task ActualSendGate_CancellationDoesNotLeakGate()
+    {
+        var pace = new SmartPaceController(BaseOptions(intervalMs: 200));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await using var lease = await pace.AcquireSendSlotAsync(cts.Token);
+            await Task.Delay(500, cts.Token);
+        });
+
+        using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await using var lease2 = await pace.AcquireSendSlotAsync(cts2.Token);
+    }
+
+    [Fact]
+    public async Task ActualSendGate_ConcurrentSendsRespectInterval()
+    {
+        const int intervalMs = 80;
+        var pace = new SmartPaceController(BaseOptions(intervalMs));
+        var starts = new long[4];
+        var sw = Stopwatch.StartNew();
+
+        var tasks = Enumerable.Range(0, 4).Select(async i =>
+        {
+            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
+            starts[i] = sw.ElapsedMilliseconds;
+            await Task.Delay(5);
+        });
+        await Task.WhenAll(tasks);
+        Array.Sort(starts);
+
+        for (var i = 1; i < starts.Length; i++)
+        {
+            Assert.True(starts[i] - starts[i - 1] >= intervalMs - 35,
+                $"Gap {i} was only {starts[i] - starts[i - 1]} ms (starts={string.Join(',', starts)})");
+        }
+    }
 }
