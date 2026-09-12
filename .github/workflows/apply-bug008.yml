@@ -1,0 +1,33 @@
+name: Apply BUG-008 runner patch
+on:
+  push:
+    paths:
+      - 'tools/apply_bug008_runner_patch.py'
+      - '.github/workflows/apply-bug008.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python3 tools/apply_bug008_runner_patch.py
+      - name: Commit and cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/MailLoadTester.Core/SmtpTestRunner.cs
+          if git diff --cached --quiet; then
+            echo "no runner changes"
+          else
+            git commit -m "fix(runner): Direct MX uses RequireSingleRecipientDomain (BUG-008)"
+            git push
+          fi
+          # remove one-shot tools
+          git rm -f tools/apply_bug008_runner_patch.py .github/workflows/apply-bug008.yml .github/workflows/patch-bug008-runner.yml 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(ci): remove one-shot BUG-008 patch tooling"
+            git push
+          fi
