@@ -3,7 +3,7 @@
 | Phase | Topic | Status |
 |-------|--------|--------|
 | A–F | Core bugs | ✅ FIXED |
-| G | Security | 🟡 SEC-001 FIXED; SEC-002 partial |
+| G | Security | 🟡 SEC-001 FIXED; **SEC-002 FIXED** (path traversal + X-* headers); SEC-003/004 next |
 | H | Concurrency / TLS | 🟡 partial FIXED — CI #66/#68 |
 | **I** | **Plugin / release** | ✅ **COMPLETE** |
 
@@ -16,12 +16,17 @@
 - I-6 integration/regression tests: ✅ (pipeline + loader isolation; CI full suite)
 - I-7 release/package documentation: ✅ (`PLUGINS.md` + `src/MailLoadTester.Core/Plugins/README.md`)
 
+## Phase G — Security
+- SEC-001: ✅
+- SEC-002: ✅ path traversal on file inputs + custom headers must be `X-*`
+- SEC-003 / SEC-004: ⏳ CLI gate `--unauthorized`
+
 ## Remaining deferred
 - NET-AUDIT-001 live source-IP/proxy/IPv6 matrix
 - SEC-003 / SEC-004 full CLI gate
 
 ## Execution order after Phase I
-1. Complete SEC-002 and full SEC-003/SEC-004 CLI gate.
+1. Complete full SEC-003/SEC-004 CLI gate.
 2. Close remaining Phase H audit evidence without changing already-fixed concurrency/TLS code unless fresh regression evidence appears.
 3. Execute NET-AUDIT-001 only with real evidence; never infer network behavior from source code alone.
 4. Run final security audit against `main`.
