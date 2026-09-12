@@ -81,6 +81,29 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task BoundedConcurrency_DoesNotExceedConfiguredWorkerCount()
+    {
+        const int maxConcurrency = 3;
+        const int messageCount = 12;
+
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(100));
+        var runner = new SmtpTestRunner();
+
+        var result = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount, maxRetries: 0, maxConcurrency),
+            new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.False(result.Cancelled);
+        Assert.Equal(messageCount, result.Sent);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal(messageCount, server.MessagesAccepted);
+        Assert.Equal(messageCount, server.DataAttempts);
+        Assert.True(server.MaxConcurrentData >= 2,
+            $"Expected the test to exercise parallel workers, observed max={server.MaxConcurrentData}.");
+        Assert.InRange(server.MaxConcurrentData, 1, maxConcurrency);
+    }
+
+    [Fact]
     public async Task Cancellation_ReturnsPartialResults()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData);
@@ -138,18 +161,23 @@ public sealed class SmtpTestRunnerTests
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _acceptLoop;
         private readonly SmtpBehavior _behavior;
+        private readonly TimeSpan _dataDelay;
         private int _connections;
         private int _accepted;
         private int _dataAttempts;
+        private int _activeData;
+        private int _maxConcurrentData;
 
         public int Port { get; }
         public int ConnectionCount => Volatile.Read(ref _connections);
         public int MessagesAccepted => Volatile.Read(ref _accepted);
         public int DataAttempts => Volatile.Read(ref _dataAttempts);
+        public int MaxConcurrentData => Volatile.Read(ref _maxConcurrentData);
 
-        public ScriptedSmtpServer(SmtpBehavior behavior)
+        public ScriptedSmtpServer(SmtpBehavior behavior, TimeSpan? dataDelay = null)
         {
             _behavior = behavior;
+            _dataDelay = dataDelay ?? TimeSpan.FromSeconds(10);
             _listener = new TcpListener(IPAddress.Loopback, 0);
             _listener.Start();
             Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -175,87 +203,110 @@ public sealed class SmtpTestRunnerTests
         {
             using (client)
             {
-            await using var stream = client.GetStream();
-            using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, leaveOpen: true);
-            await using var writer = new StreamWriter(stream, Encoding.ASCII, 4096, leaveOpen: true)
-            {
-                NewLine = "\r\n",
-                AutoFlush = true
-            };
-
-            await writer.WriteLineAsync("220 MailLoadTester integration test");
-
-            var inData = false;
-            while (!ct.IsCancellationRequested)
-            {
-                string? line;
-                try { line = await reader.ReadLineAsync(ct); }
-                catch (OperationCanceledException) { break; }
-                if (line is null) break;
-
-                if (inData)
+                await using var stream = client.GetStream();
+                using var reader = new StreamReader(stream, Encoding.ASCII, false, 4096, leaveOpen: true);
+                await using var writer = new StreamWriter(stream, Encoding.ASCII, 4096, leaveOpen: true)
                 {
-                    if (line == ".")
+                    NewLine = "\r\n",
+                    AutoFlush = true
+                };
+
+                await writer.WriteLineAsync("220 MailLoadTester integration test");
+
+                var inData = false;
+                while (!ct.IsCancellationRequested)
+                {
+                    string? line;
+                    try { line = await reader.ReadLineAsync(ct); }
+                    catch (OperationCanceledException) { break; }
+                    if (line is null) break;
+
+                    if (inData)
                     {
-                        inData = false;
-                        var attempt = Interlocked.Increment(ref _dataAttempts);
-                        switch (_behavior)
+                        if (line == ".")
                         {
-                            case SmtpBehavior.Accept:
-                                Interlocked.Increment(ref _accepted);
-                                await writer.WriteLineAsync("250 2.0.0 OK");
-                                break;
-                            case SmtpBehavior.FailPermanent:
-                                await writer.WriteLineAsync("550 5.7.1 Permanent test failure");
-                                break;
-                            case SmtpBehavior.FailTransient:
-                                await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
-                                break;
-                            case SmtpBehavior.AcceptFirstThenTransientThenAccept:
-                                if (attempt == 2)
-                                {
-                                    await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
-                                }
-                                else
-                                {
+                            inData = false;
+                            var attempt = Interlocked.Increment(ref _dataAttempts);
+                            switch (_behavior)
+                            {
+                                case SmtpBehavior.Accept:
                                     Interlocked.Increment(ref _accepted);
                                     await writer.WriteLineAsync("250 2.0.0 OK");
-                                }
-                                break;
-                            case SmtpBehavior.DelayData:
-                                await Task.Delay(TimeSpan.FromSeconds(10), ct);
-                                break;
+                                    break;
+                                case SmtpBehavior.FailPermanent:
+                                    await writer.WriteLineAsync("550 5.7.1 Permanent test failure");
+                                    break;
+                                case SmtpBehavior.FailTransient:
+                                    await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
+                                    break;
+                                case SmtpBehavior.AcceptFirstThenTransientThenAccept:
+                                    if (attempt == 2)
+                                    {
+                                        await writer.WriteLineAsync("451 4.3.0 Temporary test failure");
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Increment(ref _accepted);
+                                        await writer.WriteLineAsync("250 2.0.0 OK");
+                                    }
+                                    break;
+                                case SmtpBehavior.DelayData:
+                                    var active = Interlocked.Increment(ref _activeData);
+                                    UpdateMaxConcurrent(active);
+                                    try
+                                    {
+                                        await Task.Delay(_dataDelay, ct);
+                                        Interlocked.Increment(ref _accepted);
+                                        await writer.WriteLineAsync("250 2.0.0 OK");
+                                    }
+                                    finally
+                                    {
+                                        Interlocked.Decrement(ref _activeData);
+                                    }
+                                    break;
+                            }
                         }
+                        continue;
                     }
-                    continue;
-                }
 
-                var command = line.Length >= 4 ? line[..4].ToUpperInvariant() : line.ToUpperInvariant();
-                if (command.StartsWith("EHLO") || command.StartsWith("HELO"))
-                {
-                    await writer.WriteLineAsync("250-localhost");
-                    await writer.WriteLineAsync("250 PIPELINING");
+                    var command = line.Length >= 4 ? line[..4].ToUpperInvariant() : line.ToUpperInvariant();
+                    if (command.StartsWith("EHLO") || command.StartsWith("HELO"))
+                    {
+                        await writer.WriteLineAsync("250-localhost");
+                        await writer.WriteLineAsync("250 PIPELINING");
+                    }
+                    else if (command.StartsWith("MAIL") || command.StartsWith("RCPT"))
+                        await writer.WriteLineAsync("250 2.1.0 OK");
+                    else if (command.StartsWith("DATA"))
+                    {
+                        inData = true;
+                        await writer.WriteLineAsync("354 End data with <CR><LF>.<CR><LF>");
+                    }
+                    else if (command.StartsWith("RSET"))
+                        await writer.WriteLineAsync("250 OK");
+                    else if (command.StartsWith("NOOP"))
+                        await writer.WriteLineAsync("250 OK");
+                    else if (command.StartsWith("QUIT"))
+                    {
+                        await writer.WriteLineAsync("221 Bye");
+                        break;
+                    }
+                    else
+                        await writer.WriteLineAsync("250 OK");
                 }
-                else if (command.StartsWith("MAIL") || command.StartsWith("RCPT"))
-                    await writer.WriteLineAsync("250 2.1.0 OK");
-                else if (command.StartsWith("DATA"))
-                {
-                    inData = true;
-                    await writer.WriteLineAsync("354 End data with <CR><LF>.<CR><LF>");
-                }
-                else if (command.StartsWith("RSET"))
-                    await writer.WriteLineAsync("250 OK");
-                else if (command.StartsWith("NOOP"))
-                    await writer.WriteLineAsync("250 OK");
-                else if (command.StartsWith("QUIT"))
-                {
-                    await writer.WriteLineAsync("221 Bye");
-                    break;
-                }
-                else
-                    await writer.WriteLineAsync("250 OK");
             }
         }
+
+        private void UpdateMaxConcurrent(int value)
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref _maxConcurrentData);
+                if (value <= current)
+                    return;
+                if (Interlocked.CompareExchange(ref _maxConcurrentData, value, current) == current)
+                    return;
+            }
         }
 
         public async ValueTask DisposeAsync()
