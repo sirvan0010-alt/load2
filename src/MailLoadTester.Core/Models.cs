@@ -128,7 +128,17 @@ public sealed record MailTestResult(
     bool CircuitBreakerOpen = false,
     IReadOnlyList<string>? MxHosts = null,
     int AutoRestartAttempts = 0,
-    string? SessionLogFile = null);
+    string? SessionLogFile = null,
+    /// <summary>Average wait in WaitBeforeSendAsync (absolute/recipient gates) for successful messages.</summary>
+    double AvgPrepWaitMs = 0,
+    /// <summary>Average wait for rate limiter + adaptive concurrency acquire.</summary>
+    double AvgAdaptiveWaitMs = 0,
+    /// <summary>Average wait inside SMTP pool RentAsync (connect/handshake when needed).</summary>
+    double AvgPoolWaitMs = 0,
+    /// <summary>Average wait inside AcquireSendSlotAsync (global SEND spacing gate).</summary>
+    double AvgPaceWaitMs = 0,
+    /// <summary>Average duration of the actual SmtpClient.SendAsync call.</summary>
+    double AvgSmtpSendMs = 0);
 
 public static class Validation
 {

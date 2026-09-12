@@ -280,6 +280,12 @@ public sealed class SmtpTestRunner
         int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
+        // FEAT-022: phase timing samples (successful logical messages only).
+        var prepWaits = new ConcurrentBag<double>();
+        var adaptiveWaits = new ConcurrentBag<double>();
+        var poolWaits = new ConcurrentBag<double>();
+        var paceWaits = new ConcurrentBag<double>();
+        var smtpSends = new ConcurrentBag<double>();
         var startTime = DateTime.UtcNow;
 
         // Globální spacing skutečných SMTP SEND operací zajišťuje SmartPaceController.
@@ -428,8 +434,10 @@ public sealed class SmtpTestRunner
                     // Absolute pacing protections and recipient reservation are established
                     // once before the retry loop. Actual global SEND spacing is acquired
                     // immediately before every real SMTP SendAsync.
+                    var phaseT0 = Stopwatch.GetTimestamp();
                     await pace.WaitBeforeSendAsync(
                         options.Recipients[(i - 1) % options.Recipients.Count], workerCt).ConfigureAwait(false);
+                    var phaseT1 = Stopwatch.GetTimestamp();
 
                     // WaitBeforeSendAsync už rezervoval per-recipient slot (pokud je limit zapnutý).
                     // RateLimiter/AdaptiveConcurrency mohou být zrušeny ještě před vstupem do
@@ -439,15 +447,23 @@ public sealed class SmtpTestRunner
                     var recipientCommitted = false;
                     var adaptiveAcquired = false;
                     var ledgerAccepted = false;
+                    // FEAT-022 phase samples for this message (ms); committed only on success.
+                    double samplePrepMs = TicksToMs(phaseT1 - phaseT0);
+                    double sampleAdaptiveMs = 0;
+                    double samplePoolMs = 0;
+                    double samplePaceMs = 0;
+                    double sampleSmtpMs = 0;
 
                     try
                     {
+                        var ad0 = Stopwatch.GetTimestamp();
                         await rateLimiter.WaitAsync(workerCt).ConfigureAwait(false);
                         if (adaptive != null)
                         {
                             await adaptive.AcquireAsync(workerCt).ConfigureAwait(false);
                             adaptiveAcquired = true;
                         }
+                        sampleAdaptiveMs = TicksToMs(Stopwatch.GetTimestamp() - ad0);
                     }
                     catch
                     {
@@ -547,7 +563,9 @@ public sealed class SmtpTestRunner
                                         $"SMTP spojení · zpráva #{i} · W{workerId}", "MIME zprávy",
                                         MessageStep.RentingConnection, i, workerId,
                                         DeliveryStepKind.TcpConnect, null);
+                                    var poolT0 = Stopwatch.GetTimestamp();
                                     client = await pool!.RentAsync(workerCt).ConfigureAwait(false);
+                                    samplePoolMs = TicksToMs(Stopwatch.GetTimestamp() - poolT0);
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
 
                                     // Po úspěšném Rent: TCP + EHLO (+ STARTTLS + AUTH podle konfigurace) proběhly
@@ -592,13 +610,17 @@ public sealed class SmtpTestRunner
                                     // adaptive concurrency + SMTP pool admission and immediately
                                     // before the actual SMTP SEND. Every retry reaches this gate
                                     // again, so retries cannot bypass global spacing.
+                                    var paceT0 = Stopwatch.GetTimestamp();
                                     await using (var sendLease =
                                         await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
                                     {
+                                        samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
+                                        var smtpT0 = Stopwatch.GetTimestamp();
                                         if (utf8Format != null)
                                             await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
                                         else
                                             await client.SendAsync(message, workerCt).ConfigureAwait(false);
+                                        sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
                                     }
 
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
@@ -698,6 +720,11 @@ public sealed class SmtpTestRunner
                                 ledgerAccepted = true;
                                 var s = Interlocked.Increment(ref sent);
                                 latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                                prepWaits.Add(samplePrepMs);
+                                adaptiveWaits.Add(sampleAdaptiveMs);
+                                poolWaits.Add(samplePoolMs);
+                                paceWaits.Add(samplePaceMs);
+                                smtpSends.Add(sampleSmtpMs);
                                 var done = s + Volatile.Read(ref failed);
                                 var eta = EstimateEta(done, options.MessageCount, startTime, sw);
                                 var label = options.DryRun ? "DRY-RUN OK" : "OK";
@@ -858,7 +885,20 @@ public sealed class SmtpTestRunner
 
         return new MailTestResult(options.MessageCount, sent, failed, sw.Elapsed, lastError,
             avg, min, max, p50, p95, p99, throughput, cancelled, activeThroughput, retries, smtp4xx, smtp5xx, timeouts, poolConnections,
-            adaptiveConcurrency, circuitOpen, (IReadOnlyList<string>)(mxRecords?.Select(r => r.Host).ToList() ?? new List<string>()));
+            adaptiveConcurrency, circuitOpen, (IReadOnlyList<string>)(mxRecords?.Select(r => r.Host).ToList() ?? new List<string>()),
+            AvgPrepWaitMs: AverageOrZero(prepWaits),
+            AvgAdaptiveWaitMs: AverageOrZero(adaptiveWaits),
+            AvgPoolWaitMs: AverageOrZero(poolWaits),
+            AvgPaceWaitMs: AverageOrZero(paceWaits),
+            AvgSmtpSendMs: AverageOrZero(smtpSends));
+    }
+
+    static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+
+    static double AverageOrZero(ConcurrentBag<double> samples)
+    {
+        var arr = samples.ToArray();
+        return arr.Length == 0 ? 0 : arr.Average();
     }
 
     static MimeMessage BuildMessage(
