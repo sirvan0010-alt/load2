@@ -37,4 +37,48 @@ public sealed class ProxyRotatorTests
         Assert.True(IpBanDetector.IsLikelyIpOrProxyBan("550 5.7.1 Blocked"));
         Assert.False(IpBanDetector.IsLikelyIpOrProxyBan("450 Try again later"));
     }
+
+    [Fact]
+    public void Random_NeverReturnsBlockedEndpoint()
+    {
+        // BUG-004: random mode must sample only from eligible endpoints.
+        var list = ProxyClientFactory.ParseList(
+            "socks5://127.0.0.1:1080;socks5://127.0.0.1:1081;socks5://127.0.0.1:1082");
+        var rot = new ProxyRotator(list, random: true, blockDuration: TimeSpan.FromMinutes(10));
+        var blocked = rot.TryGetNext()!;
+        rot.ReportBlocked(blocked);
+
+        for (int i = 0; i < 40; i++)
+        {
+            var next = rot.TryGetNext();
+            Assert.NotNull(next);
+            Assert.NotEqual(blocked.DisplayKey, next!.DisplayKey);
+        }
+    }
+
+    [Fact]
+    public void AllBlocked_ReturnsNull_RandomAndRoundRobin()
+    {
+        var list = ProxyClientFactory.ParseList("socks5://127.0.0.1:1080;socks5://127.0.0.1:1081");
+        foreach (var random in new[] { false, true })
+        {
+            var rot = new ProxyRotator(list, random: random, blockDuration: TimeSpan.FromMinutes(10));
+            while (rot.TryGetNext() is { } ep)
+                rot.ReportBlocked(ep);
+            Assert.Null(rot.TryGetNext());
+            Assert.Equal(2, rot.BlockedCount);
+        }
+    }
+
+    [Fact]
+    public void Random_WithSingleEligible_AlwaysReturnsThatOne()
+    {
+        var list = ProxyClientFactory.ParseList(
+            "socks5://127.0.0.1:1080;socks5://127.0.0.1:1081;socks5://127.0.0.1:1082");
+        var rot = new ProxyRotator(list, random: true, blockDuration: TimeSpan.FromMinutes(10));
+        rot.ReportBlocked(list[0]);
+        rot.ReportBlocked(list[1]);
+        for (int i = 0; i < 20; i++)
+            Assert.Equal(list[2].DisplayKey, rot.TryGetNext()!.DisplayKey);
+    }
 }

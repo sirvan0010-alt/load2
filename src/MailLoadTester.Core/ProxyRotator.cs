@@ -4,7 +4,8 @@ namespace MailLoadTester;
 
 /// <summary>
 /// Round-robin / random výběr proxy s dočasným vyřazením po detekci banu.
-/// Thread-safe.
+/// Thread-safe. Random mode samples only from currently eligible endpoints
+/// (BUG-004: never repeatedly draws blocked entries from the full set).
 /// </summary>
 public sealed class ProxyRotator
 {
@@ -29,7 +30,6 @@ public sealed class ProxyRotator
     public ProxyEndpoint? TryGetNext()
     {
         var now = DateTimeOffset.UtcNow;
-        // Úklid starých banů
         foreach (var kv in _blockedUntil)
         {
             if (kv.Value <= now)
@@ -37,15 +37,7 @@ public sealed class ProxyRotator
         }
 
         if (_random)
-        {
-            for (int attempt = 0; attempt < _all.Length; attempt++)
-            {
-                var ep = _all[Random.Shared.Next(_all.Length)];
-                if (!IsBlocked(ep.DisplayKey, now))
-                    return ep;
-            }
-            return null;
-        }
+            return PickRandomEligible(now);
 
         for (int attempt = 0; attempt < _all.Length; attempt++)
         {
@@ -56,6 +48,26 @@ public sealed class ProxyRotator
                 return ep;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Uniform sample among currently unblocked endpoints only.
+    /// If every endpoint is blocked, returns null (exhaustion) — never a blocked one.
+    /// </summary>
+    ProxyEndpoint? PickRandomEligible(DateTimeOffset now)
+    {
+        ProxyEndpoint? chosen = null;
+        var eligible = 0;
+        foreach (var ep in _all)
+        {
+            if (IsBlocked(ep.DisplayKey, now))
+                continue;
+            eligible++;
+            // Reservoir sample of size 1 over eligible set.
+            if (Random.Shared.Next(eligible) == 0)
+                chosen = ep;
+        }
+        return chosen;
     }
 
     public void ReportBlocked(ProxyEndpoint ep, TimeSpan? duration = null)
