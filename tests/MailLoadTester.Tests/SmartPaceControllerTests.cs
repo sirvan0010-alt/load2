@@ -127,4 +127,22 @@ public sealed class SmartPaceControllerTests
 
         Assert.Equal(0, pace.ScheduledReservationCount);
     }
+
+    [Fact]
+    public async Task FirstSend_IsImmediate_SecondRespectsInterval()
+    {
+        const int intervalMs = 80;
+        var pace = new SmartPaceController(BaseOptions(intervalMs));
+        var sw = Stopwatch.StartNew();
+
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        var firstMs = sw.ElapsedMilliseconds;
+        Assert.True(firstMs < 40, $"First SEND should be immediate, took {firstMs} ms");
+
+        sw.Restart();
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        var secondMs = sw.ElapsedMilliseconds;
+        Assert.True(secondMs >= intervalMs - 25,
+            $"Second SEND should wait ~{intervalMs} ms, took {secondMs} ms");
+    }
 }
