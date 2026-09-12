@@ -26,12 +26,23 @@ public static class MailPayloadPluginLoader
         if (!Directory.Exists(directory))
             return Array.Empty<IMailPayloadPlugin>();
 
+        try
+        {
+            PathSecurity.EnsureNoReparsePoints(directory);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            log?.Invoke($"Plugin directory rejected: {ex.Message}");
+            return Array.Empty<IMailPayloadPlugin>();
+        }
+
         var plugins = new List<IMailPayloadPlugin>();
         foreach (var path in Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly)
                      .OrderBy(static p => p, StringComparer.OrdinalIgnoreCase))
         {
             try
             {
+                PathSecurity.EnsureNoReparsePoints(path);
                 var assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.GetFullPath(path));
                 foreach (var type in GetPluginTypes(assembly))
                 {
