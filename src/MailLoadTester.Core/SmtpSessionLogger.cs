@@ -110,13 +110,10 @@ public sealed class SessionProtocolLogger : MailKit.IProtocolLogger
     public void LogConnect(Uri uri) => _target.LogInfo($"Connect: {uri}");
 
     public void LogClient(byte[] buffer, int offset, int count) =>
-        _target.LogClient(Decode(buffer, offset, count));
+        _target.LogClient(ProtocolLogRedaction.DecodeClientOrServer(buffer, offset, count, AuthenticationSecretDetector));
 
     public void LogServer(byte[] buffer, int offset, int count) =>
-        _target.LogServer(Decode(buffer, offset, count));
-
-    static string Decode(byte[] buffer, int offset, int count) =>
-        System.Text.Encoding.ASCII.GetString(buffer, offset, count).TrimEnd('\r', '\n');
+        _target.LogServer(ProtocolLogRedaction.DecodeClientOrServer(buffer, offset, count, AuthenticationSecretDetector));
 
     public void Dispose() { /* SmtpSessionLogger má vlastní lifecycle, tady nic nezavíráme */ }
 }

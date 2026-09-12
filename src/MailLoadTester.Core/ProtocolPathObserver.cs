@@ -29,7 +29,8 @@ public sealed class ProtocolPathObserver : MailKit.IProtocolLogger
 
     public void LogClient(byte[] buffer, int offset, int count)
     {
-        var text = Decode(buffer, offset, count).Trim();
+        // SEC-AUDIT-001: redact AUTH secrets before any detail is enqueued.
+        var text = ProtocolLogRedaction.DecodeClientOrServer(buffer, offset, count, AuthenticationSecretDetector).Trim();
         if (string.IsNullOrEmpty(text)) return;
 
         var upper = text.Length > 12 ? text[..12].ToUpperInvariant() : text.ToUpperInvariant();
@@ -62,7 +63,7 @@ public sealed class ProtocolPathObserver : MailKit.IProtocolLogger
 
     public void LogServer(byte[] buffer, int offset, int count)
     {
-        var text = Decode(buffer, offset, count).Trim();
+        var text = ProtocolLogRedaction.DecodeClientOrServer(buffer, offset, count, AuthenticationSecretDetector).Trim();
         if (string.IsNullOrEmpty(text)) return;
 
         // SMTP odpověď: první 3 znaky = kód
