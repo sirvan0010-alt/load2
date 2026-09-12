@@ -12,9 +12,8 @@ Return/Discard (idempotence, double-return), PreWarmAsync, DisposeAsync.
 leased klientem" se nepotvrdila — `SmtpTestRunner` vždy čeká na
 `Task.WhenAll(tasks)` (které per definici nevrátí řízení, dokud nejsou
 VŠECHNY tasky dokončené, ať už úspěchem, chybou i zrušením) předtím, než
-`finally` zavolá `pool.DisposeAsync()`. Nebyl nalezen scénář, kde by
-DisposeAsync běžel souběžně s worker vláknem aktivně používajícím leased
-klienta.
+`finally` zavolá `pool.DisposeAsync()`. Nebyl nalezen scénář, kde by DisposeAsync
+běžel souběžně s worker vláknem aktivně používajícím leased klienta.
 **Oprava:** `catch{}` na řádku 116 (idle reconnect failure) teď loguje
 příčinu do session logu místo tichého zahození.
 
@@ -35,58 +34,62 @@ příčinu do session logu místo tichého zahození.
   `Task.WhenAll` sémantice, nebo čistě kosmetické UI info bez dopadu na
   korektnost testu).
 
-### 4. MainForm.cs lifecycle — nalezen a opraven přesně predikovaný bug
-**Potvrzeno:** `MainForm.cs` neměl žádný `FormClosing` handler. Zavření
-okna během běžícího testu:
-- nezrušilo `CancellationTokenSource` → běh pokračoval na pozadí i po
-  zavření okna,
-- každé další `UpdateProgress`/`AppendLog` volání z `IProgress<T>.Report()`
-  skončilo výjimkou (`Invoke` na torn-down handle), kterou vnitřní
-  catch-all v `SmtpTestRunner`'s per-message smyčce vyhodnotil jako
-  **selhání zprávy** — takže zbytek běhu by potichu "failoval" každou
-  zprávu z nesouvisejícího důvodu, spotřeboval retry pokusy a běžel dál na
-  pozadí až do vyčerpání `MessageCount`, aniž by se kdy skutečně zastavil.
+### 3. Path security — pokračování auditu
+- `ProfileStore.cs` chrání Save/Load přes `Validation.ContainsPathTraversal()`
+  a `PathSecurity.EnsureNoReparsePoints()`.
+- `EmlTemplateParser.cs` a `AttachmentPlanner.cs` byly již napojeny na
+  `PathSecurity`.
+- `ClientCertificateHelper.cs` nyní chrání cestu certifikátu přes
+  `PathSecurity` a zachovává `X509KeyStorageFlags.EphemeralKeySet`.
+- `SmtpSessionLogger.cs` nyní chrání cestu session logu přes `PathSecurity`.
+- `MailPayloadPluginLoader.cs` nyní odmítá reparse point na `plugins`
+  adresáři i na jednotlivých `.dll` souborech před `AssemblyLoadContext`.
+- Přidán `MailPayloadPluginLoaderSecurityTests.cs` pro Windows symlink
+  adresář/soubor (s bezpečným skipem, pokud prostředí symlink nepovolí).
 
-**Oprava:** přidán `FormClosing` handler, který při běžícím testu zavření
-odloží (`e.Cancel = true`), zavolá `_cts.Cancel()`, počká na dokončení
-běhu (přes nový `TaskCompletionSource` signalizovaný z `finally` bloku
-`OnStartAsync`) a teprve pak okno skutečně zavře. Navíc `UpdateProgress`/
-`AppendLog` mají defenzivní `IsDisposed` kontrolu a odchytávají
-`ObjectDisposedException`/`InvalidOperationException` z `Invoke` jako
-pojistku pro těsné časové okno.
+### 4. AUTH secret redaction — statické ověření zapojení
+`SmtpConnectionPool` vytváří `SmtpClient(IProtocolLogger)`. Oficiální zdroj
+MailKit 4.x potvrzuje, že tento konstruktor nastavuje na předaném loggeru
+`AuthenticationSecretDetector` přímo z interního `SmtpAuthenticationSecretDetector`.
+`SessionProtocolLogger` tuto property předává do `ProtocolLogRedaction`.
+Unit testy zároveň potvrzují maskování detekovaného secret range.
+**End-to-end fake-SMTP test zatím není hotový**, takže runtime PASS se stále
+neprohlašuje.
 
-### 6. Integer/size overflow — ověřeno, žádný nález
-`AttachmentPlanner.EstimateRandomAttachments` už používá `checked()` a
-`Math.Clamp` na všech vstupech (count 1–5, concurrency 1–20) — i při
-extrémním `requestedSizeMb` (int.MaxValue) zůstává výpočet v bezpečných
-mezích `long`. Grep na klasický vzor `int*int přiřazený do long` (ztráta
-přesnosti před promocí) nenašel nic nikde v `Core`.
+### 5. Phase 4 — composition audit concurrency/state machines
+Proveden průchod `CircuitBreaker`, `RateLimiter`, `SmartPaceController`,
+`AdaptiveConcurrencyLimiter`, `DeliveryLedger` a `SmtpConnectionPool`.
+Nebyl nalezen nový source-confirmed primitive race mimo již opravený BUG-009.
+Aktuální `SmtpTestRunner` drží pořadí:
+`WaitBeforeSend → AdaptiveConcurrency → SMTP pool → AcquireSendSlot → SendAsync`.
+Retry znovu vstupuje do `AcquireSendSlot`, `SendPaceLease` drží exclusive gate
+přes skutečný `SendAsync`, a pool Return/Discard jsou idempotentní vůči double-return.
+Stále chybí kombinovaný runtime stress/cancellation test celé sestavy.
 
-## NEOVĚŘENO (nestihnuto v tomto kole — nejde o "PASS", jen o "zatím
-nekontrolováno")
+### 6. CI po posledních změnách
+Na `main` commit `bc77fe5f4d7c37b702a0c7c34a984861729863c9` proběhl:
+- CI run 143 — **success**.
+- CodeQL Advanced run 28 — **success**.
 
-- **Bod 3 — AUTH secret redaction end-to-end test.** Property
-  `AuthenticationSecretDetector` existuje a je zapojená (viz komentář v
-  `SmtpConnectionPool.cs:163-168`), ale skutečný integrační test (fake SMTP
-  server vyžadující AUTH LOGIN → ověření, že heslo/base64 payload nikde
-  neskončí v logu) nebyl napsán. **Bezpečnostně nejcitlivější zbývající
-  položka, doporučuji jako první příště.**
-- **Bod 5 — Path traversal / UNC / symlink** u uživatelských cest
-  (EML šablona, přílohy, inline přílohy, profily, export, webhook) —
-  nekontrolováno vůbec.
-- **Bod 7 — Modelový audit interakce CircuitBreaker ↔ RateLimiter ↔
-  SmartPace ↔ AdaptiveConcurrency ↔ PerRecipientLimiter ↔ ConnectionPool**
-  jako celku (ne po jednotlivých třídách) — nekontrolováno.
-- **Bod 8 — Cancellation audit celého Core** (seznam všech `await` a
-  ověření správného předání `ct`) — nekontrolováno systematicky, jen
-  bodově v rámci bodů 1 a 4.
-- **Bod 9/10 — `dotnet test` / `dotnet build -c Release`** — pořád nutné
-  udělat u vás, v tomto prostředí není .NET SDK.
+## NEOVĚŘENO
 
-## Metoda ověřování v tomto kole
-Čtení zdrojového kódu + grep, bez spuštění. U bodu 1 a 6 jsem ověřování
-doplnil o explicitní trasování sémantiky (`Task.WhenAll` completion
-guarantee, `checked()`/`Math.Clamp` rozsahy) — tj. nejde o pouhé "vypadá to
-v pořádku", ale o odvození, proč konkrétní scénář není dosažitelný. U bodu
-4 jde o reálně reprodukovatelný scénář (chybějící handler je fakt, dopad
-je odvozen z kódu, ne domněnka).
+- **Bod 3 — AUTH secret redaction end-to-end test**: staticky potvrzené zapojení,
+  ale fake SMTP integrační test stále chybí.
+- **Bod 5 — úplný audit všech UNC/junction/symlink hranic**: známé produkční
+  file-path consumers jsou nyní pokryty, ale systematická enumerace všech
+  file-producing/reading features ještě není uzavřena.
+- **Bod 7 — kombinovaný runtime stress/cancellation test** celé limiter/pool
+  sestavy.
+- **Bod 8 — systematický cancellation audit všech awaitů v Core**.
+- **Bod 9/10 — lokální `dotnet test` / `dotnet build -c Release`** není zde
+  spuštěn mimo GitHub Actions; aktuální CI/CodeQL jsou zelené.
+
+## Další krok
+1. Doplnit fake-SMTP AUTH redaction integration test.
+2. Dokončit systematickou enumeraci file-path consumerů a konfigurace/secrets.
+3. Doplnit kombinovaný cancellation/stress test limiter → pool → SEND.
+4. Pak provést release-gate review a aktualizovat finální audit stav.
+
+## Metoda ověřování
+Čtení zdrojového kódu + GitHub CI evidence; bez lokálního .NET SDK. U
+MailKit AUTH wiring byl navíc ověřen upstream zdroj MailKit 4.x.
