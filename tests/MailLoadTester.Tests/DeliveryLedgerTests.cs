@@ -53,4 +53,18 @@ public sealed class DeliveryLedgerTests
         Assert.False(ledger.MarkFailed(1));
         Assert.Equal(MailLoadTester.DeliveryState.Accepted, ledger.GetState(1));
     }
+
+    [Fact]
+    public void InFlight_MarkFailed_AllowsReclaim_AfterCancelSemantics()
+    {
+        // Phase A/B 1.5 + 2.6: cancel path marks InFlight → Failed so AutoRestart can reclaim.
+        var ledger = new MailLoadTester.DeliveryLedger(1);
+        Assert.True(ledger.TryClaim(1));
+        Assert.Equal(MailLoadTester.DeliveryState.InFlight, ledger.GetState(1));
+        Assert.True(ledger.MarkFailed(1));
+        Assert.Equal(MailLoadTester.DeliveryState.Failed, ledger.GetState(1));
+        Assert.True(ledger.TryClaim(1));
+        Assert.True(ledger.TryMarkAccepted(1));
+        Assert.Equal(1, ledger.CountAccepted());
+    }
 }
