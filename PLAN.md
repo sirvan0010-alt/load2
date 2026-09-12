@@ -1,60 +1,30 @@
 # MailLoadTester (load2) — plán práce
 
-**Baseline:** `main` · full CI green without `--filter`  
-**Source of truth:** this file + `VERIFICATION.md` + `BUGS-AUDIT.md`  
-**FIXED only with:** commit SHA + CI run URL (see VERIFICATION.md)
-
----
+**Source of truth:** `PLAN.md` + `VERIFICATION.md` + `BUGS-AUDIT.md`  
+**FIXED only with:** commit SHA + CI run URL
 
 ## Status board
 
 | Phase | Topic | Status |
 |-------|--------|--------|
-| **0** | CI, compile, quarantine lift | ✅ DONE |
-| **A** | Execution model 1.1–1.6 / BUG-001,003,007,009 | ✅ **FIXED** — [VERIFICATION](VERIFICATION.md) |
-| **B** | DeliveryLedger / AutoRestart / BUG-002 | ✅ **FIXED** — [VERIFICATION](VERIFICATION.md) |
-| **C** | Proxy rotation BUG-004 | ⏳ NEXT |
-| **D** | IPv4 /31 /32 BUG-005 | ⏳ |
-| **E** | Repo integrity BUG-006 (cleanup patch-*.yml) | ⏳ parallel OK |
-| **F** | Direct MX BUG-008 | ⏳ |
-| **G** | Security SEC-AUDIT | ⏳ |
-| **H** | Concurrency / TLS matrix | ⏳ |
+| **0** | CI / quarantine | ✅ |
+| **A** | Execution model (001/003/007/009) | ✅ FIXED |
+| **B** | DeliveryLedger / AutoRestart (002) | ✅ FIXED |
+| **C** | Proxy rotation (004) | ✅ FIXED — [CI #54](https://github.com/sirvan0010-alt/load2/actions/runs/34664736578) |
+| **D** | IPv4 /31 /32 (005) | ⏳ **NEXT** |
+| **E** | Repo integrity (006) | 🟡 patch workflows removed |
+| **F** | Direct MX (008) | ⏳ |
+| **G** | Security | ⏳ |
+| **H** | Concurrency / TLS | ⏳ |
 | **I** | Plugin / release | ⏳ last |
 
----
+## AI rules
 
-## AI workflow (mandatory)
+1. One BUG per change set  
+2. `dotnet build` + `dotnet test` Release, no weakened asserts  
+3. FIXED only after green CI + `VERIFICATION.md` entry  
+4. No drive-by refactors  
 
-```
-1. git pull main
-2. Read PLAN.md + VERIFICATION.md + relevant BUGS-AUDIT section
-3. One BUG / one phase per change set
-4. dotnet build -c Release && dotnet test -c Release  (no weakened asserts, no new --filter)
-5. FIXED only after green CI + entry in VERIFICATION.md
-6. Do not start C–I until A+B FIXED (done)
-```
+## Next commit focus
 
-### Never-do
-- Disable tests to green CI  
-- Drive-by refactors outside the active BUG  
-- Mark FIXED without CI evidence  
-
----
-
-## Immediate next commits (Phase C / E)
-
-1. `chore(ci): remove obsolete one-shot patch-*.yml workflows` (E)
-2. Audit `ProxyRotator` — blocked endpoint still sampled? (C / BUG-004)
-3. Tests: ban skips proxy; all banned → clear error; no false exhaustion
-4. Only then BUG-005 / 008
-
----
-
-## Definition of done (MVP)
-
-- [x] Phase A FIXED with CI
-- [x] Phase B FIXED with CI
-- [ ] Phase C–F CLOSED or DEFERRED with reason
-- [ ] SEC-AUDIT critical items FIXED
-- [x] Full `dotnet test` on Linux CI without filter
-- [ ] README-MAINTENANCE points at PLAN + VERIFICATION
+`fix(ipv4): RFC 3021 /31 both usable; /32 single address` + tests (BUG-005)
