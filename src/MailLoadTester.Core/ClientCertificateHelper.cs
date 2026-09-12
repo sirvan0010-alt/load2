@@ -7,6 +7,12 @@ public static class ClientCertificateHelper
     public static X509Certificate2? Load(string? path, string? password)
     {
         if (string.IsNullOrEmpty(path)) return null;
+
+        // Reject symlinks/junctions/reparse points before loading a client certificate.
+        // This complements the existing path-traversal validation and prevents a
+        // certificate path from being redirected outside the intended filesystem tree.
+        PathSecurity.EnsureNoReparsePoints(path);
+
         // EphemeralKeySet: the private key is kept in memory only for the lifetime
         // of this X509Certificate2 instance and is never persisted to disk/registry
         // by the platform's key store — appropriate for a short-lived load-test
