@@ -59,9 +59,18 @@ public sealed class ProtocolLogRedactionTests
                 logger.LogClient(secret, 0, secret.Length);
             }
 
+            // Dispose flushes; small settle for filesystem.
+            for (var i = 0; i < 20; i++)
+            {
+                if (File.Exists(path) && File.ReadAllText(path).Contains('*'))
+                    break;
+                Thread.Sleep(50);
+            }
+
             var content = File.ReadAllText(path);
             Assert.DoesNotContain("SuperSecretPassword", content);
             Assert.Contains('*', content);
+            Assert.Contains("C: ", content);
         }
         finally
         {
