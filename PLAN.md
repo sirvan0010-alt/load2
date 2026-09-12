@@ -1,17 +1,18 @@
 # MailLoadTester (load2) — plán
 
-| Phase | Topic | Status |
-|-------|--------|--------|
-| A–F | Core bugs | ✅ FIXED |
-| G | Security | ✅ SEC-001…004 + path/reparse; AUTH detector wiring CI #147 |
-| H | Concurrency / TLS | ✅ offline evidence |
-| **4** | **Combined concurrency stress** | ✅ adaptive+pace cancel · [CI #147](https://github.com/sirvan0010-alt/load2/actions/runs/34718413544) |
-| I | Plugin / release | ✅ |
+**AI entry:** [`docs/AI-GUIDE.md`](docs/AI-GUIDE.md)
 
-## Remaining (honest)
-1. NET-AUDIT-001 live IP/proxy/IPv6 matrix — needs real endpoints.
-2. Optional fake-SMTP AUTH LOGIN/PLAIN full transcript redaction.
-3. Optional Phase 5 high-volume dry-run performance pass.
+## Dual track
 
-## Safety boundary
-Authorized, bounded mail-load tester only.
+| Track | Status |
+|-------|--------|
+| Engine (bugs A–I, FEAT-022) | Core FIXED; FEAT-022 timings on `MailTestResult` |
+| **EXT-AUDIT A–F** | **Active** — Beast_Bomber + Bombers source-audited; continue remaining repos |
+
+Spam/Stress **modules are not in code yet** — audit/design only.
+
+## Engine backlog
+FEAT-HEALTH · FEAT-REPORT · FEAT-RUNID · FEAT-VERIFY · optional live NET matrix
+
+## Safety
+Authorized, bounded SMTP load tester. Mechanism research ≠ shipping unrestricted flood tools.
