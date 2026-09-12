@@ -7,6 +7,8 @@ public sealed class SmartPaceController
 {
     private readonly MailTestOptions _options;
     private readonly object _lock = new();
+    /// <summary>Serializes actual SEND spacing so concurrent workers cannot both claim the same slot.</summary>
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
     private int _successCount;
     private int _messagesInCurrentBurst;
     private int _currentIntervalMs;
@@ -99,55 +101,79 @@ public sealed class SmartPaceController
 
     public async ValueTask<SendPaceLease> AcquireSendSlotAsync(CancellationToken ct)
     {
-        while (true)
+        // Exclusive gate: only one worker holds the actual-SEND spacing slot at a time.
+        // Released when the lease is disposed (after SendAsync returns).
+        await _sendGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            TimeSpan delay;
-            lock (_lock)
+            while (true)
             {
-                var intervalMs = _currentIntervalMs;
-                if (_options.EnableWarmup && intervalMs > 0)
+                ct.ThrowIfCancellationRequested();
+                TimeSpan delay;
+                lock (_lock)
                 {
-                    var phases = GetWarmupPhases();
-                    if (_warmupPhaseIndex < phases.Length)
+                    var intervalMs = _currentIntervalMs;
+                    if (_options.EnableWarmup && intervalMs > 0)
                     {
-                        var factor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
-                        intervalMs = (int)(intervalMs * factor);
+                        var phases = GetWarmupPhases();
+                        if (_warmupPhaseIndex < phases.Length)
+                        {
+                            var factor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
+                            intervalMs = (int)(intervalMs * factor);
+                        }
                     }
-                }
-                if (_options.EnableJitter && _options.JitterPercent > 0 && intervalMs > 0)
-                {
-                    var jitter = _options.JitterPercent / 100.0;
-                    var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
-                    intervalMs = (int)Math.Max(0, intervalMs * factor);
-                }
+                    if (_options.EnableJitter && _options.JitterPercent > 0 && intervalMs > 0)
+                    {
+                        var jitter = _options.JitterPercent / 100.0;
+                        var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
+                        intervalMs = (int)Math.Max(0, intervalMs * factor);
+                    }
 
-                if (intervalMs <= 0 || _lastActualSendTicks == 0)
-                {
-                    _lastActualSendTicks = Stopwatch.GetTimestamp();
-                    return new SendPaceLease();
-                }
+                    if (intervalMs <= 0 || _lastActualSendTicks == 0)
+                    {
+                        _lastActualSendTicks = Stopwatch.GetTimestamp();
+                        return new SendPaceLease(this);
+                    }
 
-                var now = Stopwatch.GetTimestamp();
-                var intervalTicks = (long)(intervalMs * (double)_freq / 1000.0);
-                var earliest = _lastActualSendTicks + intervalTicks;
-                if (now >= earliest)
-                {
-                    _lastActualSendTicks = now;
-                    return new SendPaceLease();
-                }
+                    var now = Stopwatch.GetTimestamp();
+                    var intervalTicks = (long)(intervalMs * (double)_freq / 1000.0);
+                    var earliest = _lastActualSendTicks + intervalTicks;
+                    if (now >= earliest)
+                    {
+                        _lastActualSendTicks = now;
+                        return new SendPaceLease(this);
+                    }
 
-                var waitTicks = earliest - now;
-                delay = TimeSpan.FromMilliseconds(Math.Max(1, waitTicks * 1000.0 / _freq));
+                    var waitTicks = earliest - now;
+                    delay = TimeSpan.FromMilliseconds(Math.Max(1, waitTicks * 1000.0 / _freq));
+                }
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            await Task.Delay(delay, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            _sendGate.Release();
+            throw;
         }
     }
 
     public sealed class SendPaceLease : IAsyncDisposable, IDisposable
     {
-        public void Dispose() { }
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        private SmartPaceController? _owner;
+
+        internal SendPaceLease(SmartPaceController owner) => _owner = owner;
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?._sendGate.Release();
+        }
     }
 
     private TimeSpan ComputeAbsoluteBlock(string recipient)
