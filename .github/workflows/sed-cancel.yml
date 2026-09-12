@@ -1,0 +1,42 @@
+name: Sed Cancel Fix
+
+on:
+  push:
+    paths: ['.github/workflows/sed-cancel.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sed replace
+        run: |
+          python3 -c "
+          from pathlib import Path
+          p = Path('src/MailLoadTester.Core/SmtpTestRunner.cs')
+          t = p.read_text()
+          needle = '// Cancellation is coordinated by batchCts/outer ct.'
+          insert = '''// Workers must surface user cancel to the run result (BUG 1.5).
+                        cancelled = true;'''
+          if 'Workers must surface user cancel' in t:
+              print('already done')
+          elif needle in t:
+              t = t.replace(needle, insert, 1)
+              p.write_text(t)
+              print('replaced')
+          else:
+              raise SystemExit('needle missing')
+          "
+      - name: Show diff
+        run: git diff --stat && git diff | head -40
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/MailLoadTester.Core/SmtpTestRunner.cs
+          git status
+          if git diff --cached --quiet; then echo "NO CHANGES"; else git commit -m "fix(runner): Cancelled=true when workers abort (1.5)" && git push origin HEAD:main; fi
