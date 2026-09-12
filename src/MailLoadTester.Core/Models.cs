@@ -183,8 +183,12 @@ public static class Validation
             throw new ArgumentException("SMTP server je povinný (pokud nepoužíváš Direct MX).");
         if (!string.IsNullOrEmpty(o.EmlTemplatePath) && ContainsPathTraversal(o.EmlTemplatePath))
             throw new ArgumentException("EML cesta nesmí obsahovat '..'.");
+        if (!string.IsNullOrEmpty(o.EmlTemplatePath))
+            PathSecurity.EnsureNoReparsePoints(o.EmlTemplatePath);
         if (!string.IsNullOrEmpty(o.SessionLogPath) && ContainsPathTraversal(o.SessionLogPath))
             throw new ArgumentException("Cesta session logu nesmí obsahovat '..'.");
+        if (!string.IsNullOrEmpty(o.SessionLogPath))
+            PathSecurity.EnsureNoReparsePoints(o.SessionLogPath);
         if (o.Port is < 1 or > 65535)
             throw new ArgumentException("Port musí být 1–65535.");
         if (o.MessageCount is < 1 or > 10000)
@@ -247,6 +251,7 @@ public static class Validation
         {
             if (ContainsPathTraversal(path))
                 throw new ArgumentException("Příloha cesta nesmí obsahovat '..'.");
+            PathSecurity.EnsureNoReparsePoints(path);
             if (!File.Exists(path))
                 throw new ArgumentException($"Příloha neexistuje: {path}");
         }
@@ -254,6 +259,7 @@ public static class Validation
         {
             if (ContainsPathTraversal(path))
                 throw new ArgumentException("Inline příloha cesta nesmí obsahovat '..'.");
+            PathSecurity.EnsureNoReparsePoints(path);
             if (!File.Exists(path))
                 throw new ArgumentException($"Inline příloha neexistuje: {path}");
         }
@@ -305,6 +311,7 @@ public static class Validation
         {
             if (ContainsPathTraversal(o.ClientCertificatePath))
                 throw new ArgumentException("Cesta klientského certifikátu nesmí obsahovat '..'.");
+            PathSecurity.EnsureNoReparsePoints(o.ClientCertificatePath);
             if (!File.Exists(o.ClientCertificatePath))
                 throw new ArgumentException("Client certificate neexistuje.");
         }
