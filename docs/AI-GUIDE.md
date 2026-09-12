@@ -12,12 +12,12 @@ README → docs/AI-GUIDE.md → source + tests → then detail docs if needed
 
 Authorized **SMTP / email load-testing** framework. User supplies target(s) and scenario parameters. Core engine already includes:
 
-- bounded workers, pacing (`AcquireSendSlotAsync`), adaptive concurrency, circuit breaker  
-- SMTP pool + health, proxy ban, IPv4/IPv6 rotation, DeliveryLedger / AutoRestart  
-- DryRun / TestMode / `--unauthorized`, PathSecurity, AUTH log redaction  
-- plugins (`IMailPayloadPlugin`), GUI, dashboard, FEAT-022 phase timings  
+- bounded workers, pacing (`AcquireSendSlotAsync`), adaptive concurrency, circuit breaker
+- SMTP pool + health, proxy ban, IPv4/IPv6 rotation, DeliveryLedger / AutoRestart
+- DryRun / TestMode / `--unauthorized`, PathSecurity, AUTH log redaction
+- plugins (`IMailPayloadPlugin`), GUI, dashboard, FEAT-022 phase timings
 
-It is **not** a multi-channel harassment toolkit and must not become unrestricted public-target flooding software.
+The project may investigate mechanisms originating in spam, bomber, flood, DoS, DDoS, scanner, or stress tooling. The origin/name of a mechanism does **not** decide whether it is useful. The implementation and the intended execution path must be inspected first.
 
 ## 2. Dual work tracks (do not confuse)
 
@@ -32,11 +32,11 @@ FEAT-022 (timing breakdown) was **not** a replacement for phases A–F. It was o
 
 ## 3. How to continue work
 
-1. `git pull` `main`; read this file.  
-2. Prefer **tests + source** over historical audit markdown (many `AUDIT-*.md` at repo root are archival).  
-3. If docs conflict with code → **fix code/tests**, mark doc discrepancy.  
-4. **Do not reconstruct project history** from multiple guides.  
-5. Never invent PASS/FIXED without commit SHA + green CI URL.  
+1. `git pull` `main`; read this file.
+2. Prefer **tests + source** over historical audit markdown (many `AUDIT-*.md` at repo root are archival).
+3. If docs conflict with code → **fix code/tests**, mark doc discrepancy.
+4. **Do not reconstruct project history** from multiple guides.
+5. Never invent PASS/FIXED without commit SHA + green CI URL.
 6. Small PRs: one mechanism or one fix → tests → CI.
 
 ## 4. External-repo audit (phases A–F)
@@ -49,18 +49,26 @@ Per mechanism decision:
 
 `ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`
 
-Separate **mechanism** (workers, pacing, retry taxonomy, session reuse…) from **abuse path** (credential theft, CAPTCHA/OTP bypass, stealth, auto-discovery of third-party infra for mass send, unrestricted flood). Redesign useful mechanisms behind load2 bounds; do not import abuse paths as unrestricted features.
+Separate **mechanism** (workers, pacing, retry taxonomy, session reuse…) from an **abuse path** (credential theft, CAPTCHA/OTP bypass, stealth/evasion, automated discovery of unrelated third-party infrastructure for mass abuse, or unrestricted destructive attack behavior). A useful mechanism can still be implemented when it is placed behind load2's explicit target/scope, authorization, pacing, concurrency, cancellation and observability controls.
 
 Already source-audited examples: `Beast_Bomber.md`, `Bombers.md`.
 
-## 5. Authorization / safety boundaries (always)
+## 5. Authorization / execution boundaries (always)
 
-- Explicit user target + scenario  
-- `--unauthorized` / DryRun / TestMode as implemented  
-- Bounded concurrency, actual-SEND pacing, cancellation, ledger  
-- No weakening of these to “match a bomber”
+- Explicit user target + scenario
+- `--unauthorized` / DryRun / TestMode as implemented
+- Bounded concurrency, actual-SEND pacing, cancellation, ledger
+- Do not weaken these controls merely to reproduce an external tool's behavior
 
-Lab stress (count / duration / rate / concurrency against an **authorized** target) may be designed later as scenarios on the **existing** pipeline — not as a separate unconstrained flooder.
+### Stress test versus distributed attack
+
+The project must distinguish the **test objective** from the **attack form**:
+
+- **SMTP/application-layer load test:** repeated sends, rate tests, concurrency tests, connection churn, retry/failure stress, multi-recipient scenarios, and similar mechanisms may be implemented as explicit load2 scenarios when the target and scope are authorized and the existing execution controls remain in force.
+- **Network transport stress test:** controlled testing of network transport capacity/behavior may be studied and, where technically relevant, represented through bounded lab/authorized scenarios. This is not the same thing as implementing a packet-flooding or reflection/amplification tool.
+- **Distributed attack:** a real distributed attack against arbitrary third-party systems is not a load2 feature. Do not add an unrestricted DDoS launcher, botnet/orchestrator, reflection/amplification workflow, or equivalent public-target attack path.
+
+The distinction is important: **DDoS is a distribution/attack model, not a synonym for every high-concurrency load test.** A controlled distributed test can be represented as multiple authorized load generators feeding a bounded scenario, with explicit scope, limits, cancellation and observability.
 
 ## 6. Current backlog (short)
 
@@ -73,10 +81,10 @@ Lab stress (count / duration / rate / concurrency against an **authorized** targ
 
 ## 7. Definition of Done
 
-- Code on `main`  
-- Tests covering the contract  
-- Green CI (and CodeQL when it runs)  
-- Doc status matches **source**, not chat memory  
+- Code on `main`
+- Tests covering the contract
+- Green CI (and CodeQL when it runs)
+- Doc status matches **source**, not chat memory
 
 ## 8. Detail index (optional reading)
 
