@@ -3,29 +3,26 @@
 **Authority:** source + tests on `main`.
 
 ## Priority 0 — safety (unchanged)
-Authorization, DryRun/TestMode, PathSecurity, AUTH redaction, bounded workers, pacing, ledger. No opaque MSBuild loaders. No force-push CI.
+Authorization boundaries, no opaque MSBuild loaders, no force-push CI.
 
-## Priority 1 — FEAT-HEALTH — **v1 DONE**
+## Priority 1 — FEAT-HEALTH v1 — DONE
+`TransportHealthRegistry` + runner record success/final failure. `IsAvailable` not yet used for selection.
+
+## Priority 2 — FEAT-REPORT v1 — DONE (pending green CI on tip)
 
 | Piece | Status |
 |-------|--------|
-| `TransportHealthRegistry` | ✅ `src/MailLoadTester.Core/TransportHealthRegistry.cs` |
-| States Healthy / Degraded / Quarantined | ✅ |
-| Thread-safe concurrent updates | ✅ tests |
-| Failure classification | ✅ `ClassifyFailure` |
-| Quarantine + success recovery + expiry | ✅ tests |
-| Runner wire (`host:port` success/final fail) | ✅ `SmtpTestRunner` |
-| CI | registry+tests [CI #189](https://github.com/sirvan0010-alt/load2/actions/runs/34724791426) |
+| `RunReport` / `RunReportOptions` / `RunReportBuilder` | ✅ no passwords in sanitized options |
+| `MailTestResult.RunId` | ✅ |
+| `MailTestResult.EndpointHealth` | ✅ snapshots at end of run |
+| Deterministic JSON (`ToJson`) | ✅ sorted health keys |
+| Tests secret redaction / empty / dry-run | ✅ `RunReportTests` |
+| Built on existing `MailTestResult` | ✅ not a parallel metrics system |
 
-**Already existed (not replaced):** CircuitBreaker, ProxyRotator ban, pool idle NOOP, 4xx/5xx counters.
+**Usage:** after `RunAsync`, `RunReportBuilder.Create(result.RunId!, started, finished, options, result, result.EndpointHealth)` then `ToJson`.
 
-**Still open for later health iterations:** multi-account selection from health, MX failover using `IsAvailable`, expose snapshots on `MailTestResult` / FEAT-REPORT.
+## Priority 3+
+Multi-account session pool · health-based endpoint selection · connection-churn scenario · provider registry refinement
 
-## Priority 2 — FEAT-REPORT (next)
-RunId, machine-readable summary, phase timings already on result (FEAT-022).
-
-## Priority 3+ 
-Multi-account session pool · connection-churn scenario · provider registry refinement · DNS/TLS diagnostics
-
-## Not in SMTP-first scope
-SMS/WhatsApp/Call senders · public OTP endpoints · CAPTCHA/OTP bypass · credential harvest · unrestricted DDoS
+## Out of SMTP-first scope
+SMS/WhatsApp/Call senders · public OTP endpoints · unrestricted flood tools
