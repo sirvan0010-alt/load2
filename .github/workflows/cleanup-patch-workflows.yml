@@ -1,0 +1,46 @@
+name: Cleanup Patch Workflows
+
+on:
+  push:
+    paths: ['.github/workflows/cleanup-patch-workflows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete obsolete workflows
+        run: |
+          set -e
+          for f in \
+            apply-fixes.yml \
+            force-cancel-fix.yml \
+            patch-cancel-flag.yml \
+            patch-green.yml \
+            patch-lift.yml \
+            patch-runner.yml \
+            patch-sed.yml \
+            patch-test-compile.yml \
+            patch-tests.yml \
+            sed-cancel.yml \
+            cleanup-patch-workflows.yml
+          do
+            if [ -f ".github/workflows/$f" ]; then
+              git rm -f ".github/workflows/$f"
+              echo "removed $f"
+            fi
+          done
+          # keep only ci.yml
+          ls -la .github/workflows/
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --cached --quiet; then echo none; else
+            git commit -m "chore(ci): remove obsolete one-shot patch workflows"
+            git push
+          fi
