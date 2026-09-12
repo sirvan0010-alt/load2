@@ -68,6 +68,51 @@ public sealed class MailPayloadPluginTests
         Assert.Equal("42", message.Headers["X-Plugin-Test"]);
     }
 
+    [Fact]
+    public async Task Pipeline_WrapsPluginException_AndDoesNotCallLaterPlugins()
+    {
+        var calls = new List<string>();
+        var pipeline = new MailPayloadPluginPipeline(new IMailPayloadPlugin[]
+        {
+            new DelegatePlugin(0, "ok", (_, _) =>
+            {
+                calls.Add("ok");
+                return Task.CompletedTask;
+            }),
+            new DelegatePlugin(1, "boom", (_, _) =>
+                throw new InvalidOperationException("plugin-broke")),
+            new DelegatePlugin(2, "later", (_, _) =>
+            {
+                calls.Add("later");
+                return Task.CompletedTask;
+            })
+        });
+
+        var ex = await Assert.ThrowsAsync<MailPayloadPluginException>(() =>
+            pipeline.ApplyAsync(new MimeMessage(),
+                new MailPayloadPluginContext(7, "r@example.test", 0, CancellationToken.None)));
+
+        Assert.Equal("boom", ex.PluginName);
+        Assert.Equal(1, ex.PluginOrder);
+        Assert.Contains("plugin-broke", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<InvalidOperationException>(ex.InnerException);
+        Assert.Equal(new[] { "ok" }, calls);
+    }
+
+    [Fact]
+    public async Task Pipeline_DoesNotWrapOperationCanceledException()
+    {
+        var pipeline = new MailPayloadPluginPipeline(new[]
+        {
+            new DelegatePlugin(0, "cancel-inside", (_, _) =>
+                throw new OperationCanceledException())
+        });
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            pipeline.ApplyAsync(new MimeMessage(),
+                new MailPayloadPluginContext(1, "r@example.test", 0, CancellationToken.None)));
+    }
+
     private sealed class RecordingPlugin : IMailPayloadPlugin
     {
         private readonly List<string> _calls;

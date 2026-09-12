@@ -6,6 +6,14 @@ namespace MailLoadTester;
 /// Executes payload plugins in deterministic order. The pipeline is intentionally
 /// transport-agnostic: SMTP admission, pacing, retries and authorization remain
 /// exclusively under SmtpTestRunner/SmtpConnectionPool.
+///
+/// Lifecycle / error policy (I-5):
+/// - Discovery runs once per test run; broken assemblies/types are skipped by the loader.
+/// - Plugins execute in Order, then Name order.
+/// - Cancellation is observed before each plugin and is never wrapped.
+/// - A plugin exception fails the current message (fail-fast); later plugins are not run.
+/// - There is no plugin-only retry loop; only the runner's existing SMTP MaxRetries may
+///   re-enter BuildMessage → pipeline for the same message index.
 /// </summary>
 public sealed class MailPayloadPluginPipeline
 {
@@ -32,7 +40,21 @@ public sealed class MailPayloadPluginPipeline
         foreach (var plugin in _plugins)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            await plugin.ApplyAsync(message, context).ConfigureAwait(false);
+            try
+            {
+                await plugin.ApplyAsync(message, context).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Preserve cancellation semantics for STOP / linked tokens.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Fail this message only. Do not continue to later plugins.
+                // Do not invent a plugin-retry path — SmtpTestRunner owns retries.
+                throw new MailPayloadPluginException(plugin.Name, plugin.Order, ex);
+            }
         }
     }
 }
