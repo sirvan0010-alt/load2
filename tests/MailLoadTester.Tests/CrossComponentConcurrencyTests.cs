@@ -109,7 +109,6 @@ public sealed class CrossComponentConcurrencyTests
         var adaptive = new AdaptiveConcurrencyLimiter(maxConcurrency, 1, maxConcurrency);
         var pace = new SmartPaceController(PaceOptions(intervalMs: 15));
         var maxObserved = 0;
-        var completedSends = 0;
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
         var tasks = Enumerable.Range(0, 40).Select(async _ =>
@@ -126,7 +125,6 @@ public sealed class CrossComponentConcurrencyTests
 
                     await using var lease = await pace.AcquireSendSlotAsync(cts.Token);
                     await Task.Delay(2, cts.Token);
-                    Interlocked.Increment(ref completedSends);
                 }
                 finally
                 {
@@ -146,7 +144,6 @@ public sealed class CrossComponentConcurrencyTests
 
         using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         await using var recovery = await pace.AcquireSendSlotAsync(cts2.Token);
-        Assert.True(completedSends >= 0);
     }
 
     [Fact]
@@ -191,7 +188,7 @@ public sealed class CrossComponentConcurrencyTests
         const int intervalMs = 40;
         var adaptive = new AdaptiveConcurrencyLimiter(maxConcurrency, 1, maxConcurrency);
         var pace = new SmartPaceController(PaceOptions(intervalMs));
-        using var firstSendReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstSendReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancelQueued = new CancellationTokenSource();
         using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
