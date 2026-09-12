@@ -5,24 +5,23 @@
 | A–F | Core bugs | ✅ FIXED |
 | G | Security | 🟡 SEC-001 FIXED; SEC-002 partial |
 | H | Concurrency / TLS | 🟡 partial FIXED — CI #66 |
-| **I** | **Plugin / release** | 🟡 **IN PROGRESS — I-1/I-3 implemented; I-4 next** |
+| **I** | **Plugin / release** | 🟡 **IN PROGRESS — I-1…I-5 done; I-6 next** |
 
 ## Phase I — Plugin / release
 - I-1 plugin contract: ✅
 - I-2 deterministic cancellation-aware pipeline: ✅
 - I-3 optional `plugins/` discovery: ✅
-- I-4 integrate pipeline into `BuildMessage` → SMTP SEND: ⏳
-- I-5 lifecycle/error policy: ⏳
+- I-4 integrate pipeline into `BuildMessage` → SMTP SEND: ✅
+- I-5 lifecycle/error policy: ✅ (`MailPayloadPluginException`, fail-fast, no plugin-only retry)
 - I-6 integration/regression tests: ⏳
 - I-7 release/package documentation: ⏳
 
 ## Remaining deferred
 - NET-AUDIT-001 live source-IP/proxy/IPv6 matrix
 - SEC-003 / SEC-004 full CLI gate
-- Full plugin discovery lifecycle if plugins ship
 
 ## Execution order after Phase I
-1. Complete I-4 through I-7.
+1. Complete I-6 through I-7.
 2. Complete SEC-002 and full SEC-003/SEC-004 CLI gate.
 3. Close remaining Phase H audit evidence without changing already-fixed concurrency/TLS code unless fresh regression evidence appears.
 4. Execute NET-AUDIT-001 only with real evidence; never infer network behavior from source code alone.
