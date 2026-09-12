@@ -10,7 +10,7 @@ The goal is **technical transfer**, not repository endorsement.
 
 External projects may be named bomber, spammer, flooder, DDoS, scanner, POC, stress tool, or something else. The name does not decide the result. The AI must inspect the implementation and classify mechanisms individually.
 
-If load2 later needs a spam/load/flood/DDoS-style test capability, do not throw the relevant research away. Instead identify the underlying scheduling, transport, concurrency, repetition, endpoint, failure, and observability mechanisms and determine how they can be represented as an explicitly authorized, bounded load2 test scenario.
+If load2 later needs a spam/load/flood/DoS/DDoS-style test capability, do not throw the relevant research away. Identify the underlying scheduling, transport, concurrency, repetition, endpoint, failure, and observability mechanisms and determine how they can be represented as explicitly authorized, bounded load2 test scenarios.
 
 ## 2. Non-negotiable distinction
 
@@ -21,13 +21,13 @@ Separate:
 
 The first category is research material and may be ADOPT/ADAPT/HARDEN/SIMULATE/EXTRACT/REFERENCE.
 
-The second category is not imported as an unrestricted abuse feature. If its technical property is useful for authorized testing, redesign it behind load2's scope, authorization, pacing, concurrency, cancellation and safety controls.
+The second category is not imported as an unrestricted abuse feature. If its technical property is useful for authorized testing, redesign it behind load2's scope, authorization, pacing, concurrency, cancellation and observability controls.
 
 ## 3. Source-of-truth procedure
 
 Before auditing anything:
 
-1. Read `docs/AI-PROJECT-GUIDE.md`.
+1. Read `docs/AI-GUIDE.md`.
 2. Read `docs/LOAD2-GAP-MATRIX.md`.
 3. Read `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`.
 4. Establish the current `main` commit SHA.
@@ -69,7 +69,7 @@ If a source cannot be inspected, mark the item `PARTIAL` or `PENDING`; never inf
 
 ## 5. Deep analysis of offensive modules
 
-When a repository contains spam/flood/DDoS/bomber modules, explicitly inspect them rather than skipping them.
+When a repository contains spam/flood/DoS/DDoS/bomber modules, explicitly inspect them rather than skipping them.
 
 Trace the complete execution path:
 
@@ -157,11 +157,18 @@ Examples:
 | CAPTCHA/OTP bypass | `REJECT` |
 | stealth/evasion | `REJECT` |
 
-## 8. Special rule for future spam/DDoS modules
+## 8. Special rule for future spam/DoS/DDoS modules
 
-If the project owner later requests a dedicated stress/flood/DDoS test module, treat it as a **scenario-engineering problem** rather than importing a bomber unchanged.
+If the project owner later requests a dedicated stress/flood/DoS/DDoS test module, treat it as a **scenario-engineering problem**, not as a reason to discard the external research.
 
-The architecture should be:
+First distinguish the test layer:
+
+1. **SMTP/application-layer stress:** repeated sends, rate, concurrency, connection churn, retry/failure stress and multi-recipient scenarios can be represented directly in load2 where technically relevant.
+2. **Network transport stress:** transport-capacity/behavior testing can be studied and represented through controlled, bounded, explicitly authorized infrastructure. This is different from implementing a raw packet-flooding or reflection/amplification attack tool.
+3. **Distributed testing:** a distributed load test can be legitimate when multiple authorized load generators target an explicitly authorized scope under a bounded scenario and observable orchestration.
+4. **Unrestricted distributed attack:** an unrestricted DDoS launcher against arbitrary third parties is outside load2's intended execution path and must not be added as such.
+
+The architecture for an authorized stress scenario is:
 
 ```text
 Authorized target/scope
@@ -189,9 +196,9 @@ Observable execution
 Evidence / report / replay artifact
 ```
 
-The test must have explicit limits and cancellation. It must be observable and reproducible. The module must not silently turn a controlled test into unrestricted public-target flooding.
-
 For network-layer DoS research, prefer controlled lab infrastructure, local test services, disposable endpoints, synthetic targets, or other explicitly authorized environments.
+
+The important rule is: **do not equate DDoS with load testing, but do not equate every distributed or high-concurrency mechanism with abuse either. Classify the actual mechanism and execution path.**
 
 ## 9. Audit document format
 
