@@ -10,7 +10,6 @@ public static class ProviderPresets
         string Id,
         string DisplayName,
         string Description,
-        // Tempo
         int IntervalMs,
         bool EnableJitter,
         int JitterPercent,
@@ -22,12 +21,10 @@ public static class ProviderPresets
         double BackoffMultiplier,
         int MaxIntervalMs,
         int MaxConcurrency,
-        // Ochrana
         bool DetectGreylist,
         int GreylistRetryMinutes,
         bool EnableWarmup,
         string WarmupPhases,
-        // SMTP tip
         int SuggestedPort,
         SmtpSecurity SuggestedSecurity);
 
@@ -81,4 +78,42 @@ public static class ProviderPresets
 
     public static Preset? Find(string id)
         => All.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Apply tempo/protection defaults from a preset onto options.
+    /// Does not touch credentials, recipients, host name, or authorization flags.
+    /// </summary>
+    public static MailTestOptions ApplyTo(MailTestOptions o, Preset preset)
+    {
+        ArgumentNullException.ThrowIfNull(o);
+        ArgumentNullException.ThrowIfNull(preset);
+        return o with
+        {
+            IntervalMs = preset.IntervalMs,
+            EnableJitter = preset.EnableJitter,
+            JitterPercent = preset.JitterPercent,
+            EnableBurstMode = preset.EnableBurstMode,
+            BurstSize = preset.BurstSize,
+            BurstPauseSeconds = preset.BurstPauseSeconds,
+            EnableProgressiveBackoff = preset.EnableProgressiveBackoff,
+            BackoffAfterSuccesses = preset.BackoffAfterSuccesses,
+            BackoffMultiplier = preset.BackoffMultiplier,
+            MaxIntervalMs = preset.MaxIntervalMs,
+            MaxConcurrency = preset.MaxConcurrency,
+            DetectGreylist = preset.DetectGreylist,
+            GreylistRetryMinutes = preset.GreylistRetryMinutes,
+            EnableWarmup = preset.EnableWarmup,
+            WarmupPhases = preset.WarmupPhases,
+            Port = preset.SuggestedPort,
+            Security = preset.SuggestedSecurity,
+            ProviderPreset = preset.Id
+        };
+    }
+
+    public static MailTestOptions ApplyTo(MailTestOptions o, string presetId)
+    {
+        var preset = Find(presetId)
+            ?? throw new ArgumentException($"Unknown provider preset '{presetId}'.", nameof(presetId));
+        return ApplyTo(o, preset);
+    }
 }
