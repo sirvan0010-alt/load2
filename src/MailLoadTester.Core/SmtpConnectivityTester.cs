@@ -20,8 +20,8 @@ public static class SmtpConnectivityTester
 
         // X509Certificate2 is IDisposable; SmtpClient does not own ClientCertificates entries.
         using var cert = ClientCertificateHelper.Load(o.ClientCertificatePath, o.ClientCertificatePassword);
-        if (cert != null)
-            client.ClientCertificates.Add(cert);
+        if (cert is { } clientCert)
+            client.ClientCertificates.Add(clientCert);
 
         string proxyLabel = "žádná";
         if (!string.IsNullOrWhiteSpace(o.ProxyList))
@@ -77,7 +77,7 @@ public static class SmtpConnectivityTester
         }
 
         await client.DisconnectAsync(true, ct).ConfigureAwait(false);
-        return $"SMTP spojení OK\r\nServer: {o.SmtpHost}:{o.Port}\r\nZabezpečení: {o.Security}\r\nIgnoreCertErrors: {o.IgnoreCertificateErrors}\r\nProxy: {proxyLabel}\r\nSource IP: {(string.IsNullOrEmpty(o.SourceIp) ? "výchozí" : o.SourceIp)}\r\nmTLS: {(cert != null ? "ano" : "ne")}\r\nAuth method: {o.AuthMethod}\r\n{auth}";
+        return $"SMTP spojení OK\r\nServer: {o.SmtpHost}:{o.Port}\r\nZabezpečení: {o.Security}\r\nIgnoreCertErrors: {o.IgnoreCertificateErrors}\r\nProxy: {proxyLabel}\r\nSource IP: {(string.IsNullOrEmpty(o.SourceIp) ? "výchozí" : o.SourceIp)}\r\nmTLS: {(cert is not null ? "ano" : "ne")}\r\nAuth method: {o.AuthMethod}\r\n{auth}";
     }
 
     internal static SecureSocketOptions ToSocketOptions(SmtpSecurity security) => security switch
