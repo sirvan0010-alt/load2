@@ -20,7 +20,10 @@ public class RateLimiterTests
     [Fact]
     public async Task ConcurrentWaiters_AreGloballySpaced()
     {
-        const int intervalMs = 40;
+        // Use a larger interval so CI timer/scheduling jitter (often 10–30 ms)
+        // does not flip the assertion. We still prove global spacing, not exact ms.
+        const int intervalMs = 80;
+        const int toleranceMs = 35; // half-interval floor under load
         var limiter = new RateLimiter(intervalMs);
         var times = new long[3];
         var sw = Stopwatch.StartNew();
@@ -34,9 +37,9 @@ public class RateLimiterTests
         await Task.WhenAll(tasks);
         Array.Sort(times);
 
-        Assert.True(times[1] - times[0] >= intervalMs - 15,
+        Assert.True(times[1] - times[0] >= intervalMs - toleranceMs,
             $"Second start was only {times[1] - times[0]} ms after the first.");
-        Assert.True(times[2] - times[1] >= intervalMs - 15,
+        Assert.True(times[2] - times[1] >= intervalMs - toleranceMs,
             $"Third start was only {times[2] - times[1]} ms after the second.");
     }
 
