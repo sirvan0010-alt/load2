@@ -49,18 +49,19 @@ public sealed class PathSecurityTests
             {
                 Directory.CreateSymbolicLink(link, target.FullName);
             }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            catch (Exception linkEx) when (linkEx is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
             {
+                // Symlink creation often requires elevation; skip when unsupported.
                 return;
             }
 
             var input = Path.Combine(link, "file.eml");
-            var ex = Assert.Throws<ArgumentException>(() => PathSecurity.EnsureNoReparsePoints(input));
-            Assert.Contains("symlink/junction/reparse", ex.Message, StringComparison.OrdinalIgnoreCase);
+            var rejected = Assert.Throws<ArgumentException>(() => PathSecurity.EnsureNoReparsePoints(input));
+            Assert.Contains("symlink/junction/reparse", rejected.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
-            try { Directory.Delete(link, false); } catch { }
+            try { Directory.Delete(link, false); } catch { /* ignore */ }
             root.Delete(true);
             target.Delete(true);
         }
