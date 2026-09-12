@@ -128,10 +128,12 @@ public class ValidationTests
     [Fact]
     public void CustomHeadersMustBeXHeaders()
     {
-        // Reserved names / non X-* should be rejected when policy is active.
-        // Always reject header names with whitespace.
-        var bad = Base(headers: new Dictionary<string, string> { ["Bad Header"] = "x" });
-        Assert.Throws<ArgumentException>(() => Validation.Validate(bad));
+        // SEC-002: reserved MIME names must not be injectable via CustomHeaders.
+        var o = Base(headers: new Dictionary<string, string> { ["Subject"] = "bad" });
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+        // Valid X-* header is accepted.
+        var ok = Base(headers: new Dictionary<string, string> { ["X-Test-Id"] = "42" });
+        Validation.Validate(ok);
     }
 
     [Fact]
@@ -145,16 +147,13 @@ public class ValidationTests
     public void ExplainSmtpErrorContainsHintForTimeout()
     {
         var msg = Validation.ExplainSmtpError(new TimeoutException("timed out"));
-        Assert.True(
-            msg.Contains("časový limit", StringComparison.OrdinalIgnoreCase) ||
-            msg.Contains("Timeout", StringComparison.OrdinalIgnoreCase),
-            $"Unexpected timeout explanation: {msg}");
+        Assert.Contains("časový limit", msg);
     }
 
     [Fact]
     public void ExplainSmtpErrorFallsBackToMessage()
     {
         var msg = Validation.ExplainSmtpError(new InvalidOperationException("custom failure"));
-        Assert.Contains("custom failure", msg);
+        Assert.Equal("custom failure", msg);
     }
 }
