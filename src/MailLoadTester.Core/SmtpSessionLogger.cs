@@ -16,6 +16,7 @@ public sealed class SmtpSessionLogger : IDisposable
 
     public SmtpSessionLogger(string path, bool append = false)
     {
+        PathSecurity.EnsureNoReparsePoints(path);
         _path = path;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         if (append && File.Exists(_path))
