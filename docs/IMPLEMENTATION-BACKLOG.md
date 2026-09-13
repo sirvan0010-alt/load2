@@ -2,27 +2,27 @@
 
 **Authority:** source + tests on `main`.
 
-## Priority 0 — safety (unchanged)
-Authorization boundaries, no opaque MSBuild loaders, no force-push CI.
+## Done
 
-## Priority 1 — FEAT-HEALTH v1 — DONE
-`TransportHealthRegistry` + runner record success/final failure. `IsAvailable` not yet used for selection.
+| Item | Notes |
+|------|-------|
+| FEAT-HEALTH | TransportHealthRegistry |
+| FEAT-REPORT | RunReport / RunId |
+| Multi-account | Registry + PoolHub + runner branch |
+| Connection churn | ConnectionChurnRunner |
+| Provider presets | ApplyTo |
+| TransportDiagnostics | DNS/MX/SMTP/EHLO |
+| **TargetSet / ScenarioLimits / SmtpScenario** | validated targets + file load + PathSecurity |
+| **DurationSeconds** | linked CTS in RunSingleAsync |
+| **GUI Test connection** | uses TransportDiagnostics |
 
-## Priority 2 — FEAT-REPORT v1 — DONE (pending green CI on tip)
+## Next
 
-| Piece | Status |
-|-------|--------|
-| `RunReport` / `RunReportOptions` / `RunReportBuilder` | ✅ no passwords in sanitized options |
-| `MailTestResult.RunId` | ✅ |
-| `MailTestResult.EndpointHealth` | ✅ snapshots at end of run |
-| Deterministic JSON (`ToJson`) | ✅ sorted health keys |
-| Tests secret redaction / empty / dry-run | ✅ `RunReportTests` |
-| Built on existing `MailTestResult` | ✅ not a parallel metrics system |
+1. GUI Accounts editor (Accounts list → options)
+2. Per-target / per-provider throttling in scenario layer
+3. Queue/requeue with hard limits
+4. Retry/classification expansion vs Health + Ledger
+5. Global concurrency gate — only if audit proves multi-pool overshoot
 
-**Usage:** after `RunAsync`, `RunReportBuilder.Create(result.RunId!, started, finished, options, result, result.EndpointHealth)` then `ToJson`.
-
-## Priority 3+
-Multi-account session pool · health-based endpoint selection · connection-churn scenario · provider registry refinement
-
-## Out of SMTP-first scope
-SMS/WhatsApp/Call senders · public OTP endpoints · unrestricted flood tools
+## Out of scope for SMTP-first
+SMS/WhatsApp/Call senders · public abuse endpoints · unrestricted flood
