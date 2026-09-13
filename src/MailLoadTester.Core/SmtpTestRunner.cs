@@ -103,6 +103,11 @@ public sealed class SmtpTestRunner
     {
         CancellationTokenSource? durationCts = null;
         var queueMetrics = new ScenarioQueueMetrics();
+        var retryMetrics = new RetryMetrics();
+        // A4: global retry budget = MaxRetries * MessageCount (hard cap against retry storms).
+        var retryBudget = Math.Max(0, options.MaxRetries) * Math.Max(1, options.MessageCount);
+        var retriesUsed = 0;
+        var fsm = new TestStateMachine();
         var fsm = new TestStateMachine();
         var pace = new SmartPaceController(options);
         var observed = options.CollectObservedResponses ? new ObservedResponseCollector() : null;
