@@ -102,6 +102,7 @@ public sealed class SmtpTestRunner
         DeliveryLedger ledger)
     {
         CancellationTokenSource? durationCts = null;
+        var queueMetrics = new ScenarioQueueMetrics();
         var fsm = new TestStateMachine();
         var pace = new SmartPaceController(options);
         var observed = options.CollectObservedResponses ? new ObservedResponseCollector() : null;
@@ -425,7 +426,7 @@ public sealed class SmtpTestRunner
                 }
             }
 
-                     var queueMetrics = new ScenarioQueueMetrics();  for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
+            for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
             {
                 ct.ThrowIfCancellationRequested();
                 int batchEnd = options.BatchMode
@@ -858,7 +859,7 @@ public sealed class SmtpTestRunner
                 {
                     try
                     {
-                                               await foreach (var i in workChannel.Reader.ReadAllAsync(workerCt).ConfigureAwait(false))
+                        await foreach (var i in workChannel.Reader.ReadAllAsync(workerCt).ConfigureAwait(false))
                         {
                             queueMetrics.RecordDequeued();
                             try
@@ -876,7 +877,7 @@ public sealed class SmtpTestRunner
                     catch (OperationCanceledException) when (workerCt.IsCancellationRequested)
                     {
                         // Workers must surface user cancel to the run result (BUG 1.5).
-              cancelled = true;
+                        cancelled = true;
                     }
                     catch
                     {
@@ -892,7 +893,7 @@ public sealed class SmtpTestRunner
 
                 try
                 {
-                        for (var i = batchStart; i <= batchEnd; i++)
+                    for (var i = batchStart; i <= batchEnd; i++)
                     {
                         if (!workChannel.Writer.TryWrite(i))
                         {
@@ -923,7 +924,7 @@ public sealed class SmtpTestRunner
                 finally
                 {
                     workChannel.Writer.TryComplete();
-                while (workChannel.Reader.TryRead(out _))
+                    while (workChannel.Reader.TryRead(out _))
                         queueMetrics.RecordDrained();
                 }
 
