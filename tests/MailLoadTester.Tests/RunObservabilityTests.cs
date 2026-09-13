@@ -28,7 +28,7 @@ public class RunObservabilityTests
         AvgSmtpSendMs: 5,
         RunId: "abc",
         QueueMetrics: new ScenarioQueueMetricsSnapshot(0, 8, 100, 100, 90, 0, 0, 2),
-        RetryMetrics: new RetryMetricsSnapshot(3, 5, 1, 1, 2, 0, new Dictionary<int, int> { [1] = 3 }),
+        RetryMetrics: new RetryMetricsSnapshot(3, 5, 1, 1, 2, 0, new[] { 0, 3, 2 }),
         OutcomeCounts: new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 2, 0, 1));
 
     [Fact]
