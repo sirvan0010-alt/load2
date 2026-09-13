@@ -6,6 +6,7 @@ namespace MailLoadTester;
 public sealed class SmartPaceController
 {
     private readonly MailTestOptions _options;
+    private readonly ProviderThrottleSettings _providerThrottle;
     private readonly object _lock = new();
     /// <summary>Serializes actual SEND spacing so concurrent workers cannot both claim the same slot.</summary>
     private readonly SemaphoreSlim _sendGate = new(1, 1);
@@ -15,6 +16,7 @@ public sealed class SmartPaceController
     private int _warmupPhaseIndex;
     private int _warmupMessagesInPhase;
     private readonly ConcurrentDictionary<string, RecipientWindow> _recipientWindows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, RecipientWindow> _providerWindows = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _burstPauseUntil = DateTimeOffset.MinValue;
     private DateTimeOffset _greylistPauseUntil = DateTimeOffset.MinValue;
     private int _greylistHits;
@@ -36,15 +38,19 @@ public sealed class SmartPaceController
     private TimeSpan RecipientWindowSpan =>
         TimeSpan.FromMinutes(Math.Max(1, _options.PerRecipientWindowMinutes));
 
+    private TimeSpan ProviderWindowSpan =>
+        TimeSpan.FromMinutes(Math.Max(1, _providerThrottle.WindowMinutes));
+
     private static void PurgeCommitted(RecipientWindow win, DateTimeOffset now, TimeSpan window)
     {
         while (win.Committed.Count > 0 && now - win.Committed.Peek() >= window)
             win.Committed.Dequeue();
     }
 
-    public SmartPaceController(MailTestOptions options)
+    public SmartPaceController(MailTestOptions options, ProviderThrottleSettings? providerThrottle = null)
     {
         _options = options;
+        _providerThrottle = providerThrottle ?? ProviderThrottleSettings.FromEnvironment();
         _currentIntervalMs = Math.Max(0, options.IntervalMs);
     }
 
@@ -75,11 +81,12 @@ public sealed class SmartPaceController
 
     public async Task WaitBeforeSendAsync(string recipient, CancellationToken ct)
     {
+        var providerKey = GetProviderKey(recipient);
         while (true)
         {
             ct.ThrowIfCancellationRequested();
             TimeSpan block;
-            lock (_lock) { block = ComputeAbsoluteBlock(recipient); }
+            lock (_lock) { block = ComputeAbsoluteBlock(recipient, providerKey); }
             if (block <= TimeSpan.Zero) break;
             var slice = TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds));
             await Task.Delay(slice, ct).ConfigureAwait(false);
@@ -91,7 +98,20 @@ public sealed class SmartPaceController
             {
                 ct.ThrowIfCancellationRequested();
                 TimeSpan block;
-                lock (_lock) { block = ComputeAbsoluteBlock(recipient); }
+                lock (_lock) { block = ComputeAbsoluteBlock(recipient, providerKey); }
+                if (block <= TimeSpan.Zero) block = TimeSpan.FromMilliseconds(50);
+                var slice = TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds));
+                await Task.Delay(slice, ct).ConfigureAwait(false);
+            }
+        }
+
+        if (_providerThrottle.Enabled)
+        {
+            while (!TryReserveProvider(providerKey))
+            {
+                ct.ThrowIfCancellationRequested();
+                TimeSpan block;
+                lock (_lock) { block = ComputeProviderBlock(providerKey); }
                 if (block <= TimeSpan.Zero) block = TimeSpan.FromMilliseconds(50);
                 var slice = TimeSpan.FromMilliseconds(Math.Min(500, block.TotalMilliseconds));
                 await Task.Delay(slice, ct).ConfigureAwait(false);
@@ -101,8 +121,6 @@ public sealed class SmartPaceController
 
     public async ValueTask<SendPaceLease> AcquireSendSlotAsync(CancellationToken ct)
     {
-        // Exclusive gate: only one worker holds the actual-SEND spacing slot at a time.
-        // Released when the lease is disposed (after SendAsync returns).
         await _sendGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -176,7 +194,7 @@ public sealed class SmartPaceController
         }
     }
 
-    private TimeSpan ComputeAbsoluteBlock(string recipient)
+    private TimeSpan ComputeAbsoluteBlock(string recipient, string providerKey)
     {
         var now = DateTimeOffset.UtcNow;
         if (now < _greylistPauseUntil) return _greylistPauseUntil - now;
@@ -193,7 +211,29 @@ public sealed class SmartPaceController
                     return win.Committed.Peek() + RecipientWindowSpan - now;
             }
         }
+        if (_providerThrottle.Enabled)
+            return ComputeProviderBlock(providerKey);
         return TimeSpan.Zero;
+    }
+
+    private TimeSpan ComputeProviderBlock(string providerKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (!_providerWindows.TryGetValue(providerKey, out var win))
+            return TimeSpan.Zero;
+        PurgeCommitted(win, now, ProviderWindowSpan);
+        if (win.Committed.Count + win.Reserved >= _providerThrottle.MaxMessages && win.Committed.Count > 0)
+            return win.Committed.Peek() + ProviderWindowSpan - now;
+        return TimeSpan.Zero;
+    }
+
+    private static string GetProviderKey(string recipient)
+    {
+        var value = recipient.Trim();
+        var at = value.LastIndexOf('@');
+        if (at < 0 || at == value.Length - 1)
+            return value.ToLowerInvariant();
+        return value[(at + 1)..].TrimEnd('.').ToLowerInvariant();
     }
 
     public bool TryReserveRecipient(string recipient)
@@ -212,28 +252,48 @@ public sealed class SmartPaceController
         }
     }
 
+    private bool TryReserveProvider(string providerKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        lock (_lock)
+        {
+            var win = _providerWindows.GetOrAdd(providerKey, _ => new RecipientWindow());
+            PurgeCommitted(win, now, ProviderWindowSpan);
+            if (win.Committed.Count + win.Reserved >= _providerThrottle.MaxMessages)
+                return false;
+            win.Reserved++;
+            return true;
+        }
+    }
+
     public void CommitRecipient(string recipient)
     {
-        if (!_options.EnablePerRecipientLimit) return;
         var key = recipient.Trim().ToLowerInvariant();
         lock (_lock)
         {
-            if (!_recipientWindows.TryGetValue(key, out var win)) return;
-            var now = DateTimeOffset.UtcNow;
-            PurgeCommitted(win, now, RecipientWindowSpan);
-            if (win.Reserved > 0) win.Reserved--;
-            win.Committed.Enqueue(now);
+            if (_options.EnablePerRecipientLimit && _recipientWindows.TryGetValue(key, out var win))
+            {
+                var now = DateTimeOffset.UtcNow;
+                PurgeCommitted(win, now, RecipientWindowSpan);
+                if (win.Reserved > 0) win.Reserved--;
+                win.Committed.Enqueue(now);
+            }
+
+            if (_providerThrottle.Enabled)
+                CommitProviderLocked(GetProviderKey(recipient));
         }
     }
 
     public void ReleaseRecipient(string recipient)
     {
-        if (!_options.EnablePerRecipientLimit) return;
         var key = recipient.Trim().ToLowerInvariant();
         lock (_lock)
         {
-            if (!_recipientWindows.TryGetValue(key, out var win)) return;
-            if (win.Reserved > 0) win.Reserved--;
+            if (_options.EnablePerRecipientLimit && _recipientWindows.TryGetValue(key, out var win) && win.Reserved > 0)
+                win.Reserved--;
+
+            if (_providerThrottle.Enabled && _providerWindows.TryGetValue(GetProviderKey(recipient), out var providerWin) && providerWin.Reserved > 0)
+                providerWin.Reserved--;
         }
     }
 
@@ -266,6 +326,15 @@ public sealed class SmartPaceController
                 _burstPauseUntil = DateTimeOffset.UtcNow.AddSeconds(Math.Max(1, _options.BurstPauseSeconds));
             }
         }
+    }
+
+    private void CommitProviderLocked(string providerKey)
+    {
+        if (!_providerWindows.TryGetValue(providerKey, out var win)) return;
+        var now = DateTimeOffset.UtcNow;
+        PurgeCommitted(win, now, ProviderWindowSpan);
+        if (win.Reserved > 0) win.Reserved--;
+        win.Committed.Enqueue(now);
     }
 
     public void RecordGreylist()
