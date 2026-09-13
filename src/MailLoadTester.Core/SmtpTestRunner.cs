@@ -35,6 +35,9 @@ public sealed class SmtpTestRunner
         var sumTimeouts = 0;
         var totalElapsed = TimeSpan.Zero;
         var lastError = "";
+        ScenarioQueueMetricsSnapshot? aggregatedQueueMetrics = null;
+        RetryMetricsSnapshot? aggregatedRetryMetrics = null;
+        SmtpOutcomeCountsSnapshot? aggregatedOutcomeCounts = null;
 
         while (true)
         {
@@ -48,6 +51,13 @@ public sealed class SmtpTestRunner
             totalElapsed += result.Elapsed;
             if (!string.IsNullOrEmpty(result.LastError))
                 lastError = result.LastError;
+
+            aggregatedQueueMetrics =
+                AutoRestartMetrics.AggregateQueue(aggregatedQueueMetrics, result.QueueMetrics);
+            aggregatedRetryMetrics =
+                AutoRestartMetrics.AggregateRetry(aggregatedRetryMetrics, result.RetryMetrics);
+            aggregatedOutcomeCounts =
+                AutoRestartMetrics.AggregateOutcomes(aggregatedOutcomeCounts, result.OutcomeCounts);
 
             if (result.Cancelled) break;
 
@@ -90,7 +100,10 @@ public sealed class SmtpTestRunner
             Elapsed = totalElapsed,
             LastError = lastError,
             ThroughputPerSec = elapsedSec > 0 ? ledger.CountAccepted() / elapsedSec : 0,
-            AutoRestartAttempts = Math.Max(0, attempt - 1)
+            AutoRestartAttempts = Math.Max(0, attempt - 1),
+            QueueMetrics = aggregatedQueueMetrics,
+            RetryMetrics = aggregatedRetryMetrics,
+            OutcomeCounts = aggregatedOutcomeCounts
         };
     }
 
