@@ -153,7 +153,9 @@ public sealed record MailTestResult(
     /// <summary>A3: bounded scenario Channel instrumentation for this run (null if unavailable).</summary>
     ScenarioQueueMetricsSnapshot? QueueMetrics = null,
     /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
-    RetryMetricsSnapshot? RetryMetrics = null);
+    RetryMetricsSnapshot? RetryMetrics = null,
+    /// <summary>A5: unified SMTP outcome counts for this run.</summary>
+    SmtpOutcomeCountsSnapshot? OutcomeCounts = null);
 
 public static class Validation
 {
