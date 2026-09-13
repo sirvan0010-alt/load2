@@ -1,30 +1,12 @@
-using MailKit.Net.Smtp;
-
 namespace MailLoadTester;
 
 /// <summary>
-/// A4: minimal retry decision + backoff. Full SMTP classification taxonomy is A5;
-/// this only answers "may we retry this exception?" without a second limiter.
+/// A4/A5: retry decision + backoff. Retryability comes from <see cref="SmtpOutcomeClassifier"/> (A5).
 /// </summary>
 public static class RetryPolicy
 {
-    /// <summary>
-    /// Transient / potentially recoverable failures. Permanent 5xx, auth policy rejects,
-    /// and unknown errors are not retryable here.
-    /// </summary>
-    public static bool IsRetryable(Exception ex)
-    {
-        if (ex is OperationCanceledException) return false;
-        if (ex is SmtpCommandException sce)
-        {
-            var code = (int)sce.StatusCode;
-            // 4xx = transient; 5xx = permanent for A4 (A5 may refine Throttled vs Policy).
-            return code is >= 400 and < 500;
-        }
-        if (ex is SmtpProtocolException) return true;
-        if (ex is IOException or TimeoutException) return true;
-        return false;
-    }
+    /// <summary>Delegates to unified classifier — do not duplicate status-code rules here.</summary>
+    public static bool IsRetryable(Exception ex) => SmtpOutcomeClassifier.IsRetryable(ex);
 
     /// <summary>Exponential backoff with jitter; capped. Honours CancellationToken at await site.</summary>
     public static TimeSpan GetDelay(int attempt)
