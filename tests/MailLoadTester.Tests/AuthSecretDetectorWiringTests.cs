@@ -34,6 +34,7 @@ public sealed class AuthSecretDetectorWiringTests
     public void WiredDetector_RedactsClientBytesInSessionLog()
     {
         var path = Path.Combine(Path.GetTempPath(), "mlt-auth-redact-" + Guid.NewGuid().ToString("N") + ".log");
+        const string secret = "SuperSecretAuthToken";
         try
         {
             using (var session = new SmtpSessionLogger(path))
@@ -42,8 +43,8 @@ public sealed class AuthSecretDetectorWiringTests
                 using var client = new SmtpClient(logger);
                 Assert.NotNull(logger.AuthenticationSecretDetector);
 
-                var secret = System.Text.Encoding.ASCII.GetBytes("SuperSecretAuthToken");
-                logger.LogClient(secret, 0, secret.Length);
+                var bytes = System.Text.Encoding.ASCII.GetBytes(secret);
+                logger.LogClient(bytes, 0, bytes.Length);
             }
 
             for (var i = 0; i < 20; i++)
@@ -52,9 +53,11 @@ public sealed class AuthSecretDetectorWiringTests
                     break;
                 Thread.Sleep(50);
             }
+
             Assert.True(File.Exists(path));
             var content = File.ReadAllText(path);
             Assert.Contains("C: ", content);
+            Assert.DoesNotContain(secret, content, StringComparison.Ordinal);
         }
         finally
         {
