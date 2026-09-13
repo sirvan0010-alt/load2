@@ -425,7 +425,7 @@ public sealed class SmtpTestRunner
                 }
             }
 
-            for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
+                     var queueMetrics = new ScenarioQueueMetrics();  for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
             {
                 ct.ThrowIfCancellationRequested();
                 int batchEnd = options.BatchMode
@@ -858,8 +858,20 @@ public sealed class SmtpTestRunner
                 {
                     try
                     {
-                        await foreach (var i in workChannel.Reader.ReadAllAsync(workerCt).ConfigureAwait(false))
-                            await ProcessMessageAsync(i, workerId).ConfigureAwait(false);
+                                               await foreach (var i in workChannel.Reader.ReadAllAsync(workerCt).ConfigureAwait(false))
+                        {
+                            queueMetrics.RecordDequeued();
+                            try
+                            {
+                                await ProcessMessageAsync(i, workerId).ConfigureAwait(false);
+                                queueMetrics.RecordCompleted();
+                            }
+                            catch (OperationCanceledException) when (workerCt.IsCancellationRequested)
+                            {
+                                queueMetrics.RecordCancelled();
+                                throw;
+                            }
+                        }
                     }
                     catch (OperationCanceledException) when (workerCt.IsCancellationRequested)
                     {
@@ -880,8 +892,15 @@ public sealed class SmtpTestRunner
 
                 try
                 {
-                    for (var i = batchStart; i <= batchEnd; i++)
-                        await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                        for (var i = batchStart; i <= batchEnd; i++)
+                    {
+                        if (!workChannel.Writer.TryWrite(i))
+                        {
+                            queueMetrics.RecordFullWait();
+                            await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                        }
+                        queueMetrics.RecordEnqueued();
+                    }
                     workChannel.Writer.TryComplete();
                     await Task.WhenAll(workers).ConfigureAwait(false);
                 }
@@ -904,6 +923,8 @@ public sealed class SmtpTestRunner
                 finally
                 {
                     workChannel.Writer.TryComplete();
+                while (workChannel.Reader.TryRead(out _))
+                        queueMetrics.RecordDrained();
                 }
 
                 if (cancelled)
@@ -983,7 +1004,8 @@ public sealed class SmtpTestRunner
             AvgPaceWaitMs: AverageOrZero(paceWaits),
             AvgSmtpSendMs: AverageOrZero(smtpSends),
             RunId: runId,
-            EndpointHealth: endpointHealth.SnapshotAll());
+            EndpointHealth: endpointHealth.SnapshotAll(),
+            QueueMetrics: queueMetrics.Snapshot());
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
