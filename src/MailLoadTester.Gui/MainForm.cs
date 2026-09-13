@@ -1049,9 +1049,21 @@ public sealed partial class MainForm : Form
         {
             var options = BuildOptions();
             Validation.Validate(options);
-            var result = await SmtpConnectivityTester.TestAsync(options, cts.Token);
+            var report = await TransportDiagnostics.RunAsync(
+                options,
+                new TransportDiagnosticOptions(
+                    CheckDnsPolicy: true,
+                    CheckMx: false,
+                    CheckSmtp: true,
+                    TryAuthenticate: options.UseAuthentication,
+                    DryRun: options.DryRun),
+                cts.Token);
+            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? "" : "
+
+" + report.Error);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                MessageBox.Show(result, "SMTP Test", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
+                    report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {

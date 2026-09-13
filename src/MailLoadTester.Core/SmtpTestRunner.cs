@@ -101,6 +101,7 @@ public sealed class SmtpTestRunner
         int attemptIndex,
         DeliveryLedger ledger)
     {
+        CancellationTokenSource? durationCts = null;
         var fsm = new TestStateMachine();
         var pace = new SmartPaceController(options);
         var observed = options.CollectObservedResponses ? new ObservedResponseCollector() : null;
@@ -212,6 +213,13 @@ public sealed class SmtpTestRunner
         fsm.Transition(TestPhase.Validating, "Validating options");
         try { Validation.Validate(options); }
         catch { fsm.ForceFailure("Validation failed"); throw; }
+
+        if (options.DurationSeconds > 0)
+        {
+            durationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            durationCts.CancelAfter(TimeSpan.FromSeconds(options.DurationSeconds));
+            ct = durationCts.Token;
+        }
 
         // Load EML template only after validation and with hard file/attachment quotas.
         // This prevents a large embedded MIME attachment from being decoded into an
@@ -940,6 +948,7 @@ public sealed class SmtpTestRunner
             }
             if (pool != null)
                 await pool.DisposeAsync().ConfigureAwait(false);
+            durationCts?.Dispose();
             sessionLogger?.Dispose();
             dashboard?.Dispose();
         }

@@ -105,7 +105,9 @@ public sealed record MailTestOptions(
     /// Optional multi-account list. Null/empty/single-entry keeps the classic single-pool path
     /// (Username/Password on options). Two or more entries activate SmtpAccountPoolHub.
     /// </summary>
-    IReadOnlyList<SmtpAccount>? Accounts = null);
+    IReadOnlyList<SmtpAccount>? Accounts = null,
+    /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
+    int DurationSeconds = 0);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
@@ -212,6 +214,8 @@ public static class Validation
             throw new ArgumentException("Port musí být 1–65535.");
         if (o.MessageCount is < 1 or > 10000)
             throw new ArgumentException("Počet zpráv musí být 1–10000.");
+        if (o.DurationSeconds is < 0 or > 86_400)
+            throw new ArgumentException("DurationSeconds musí být 0–86400.");
         if (o.IntervalMs is < 0 or > 3_600_000)
             throw new ArgumentException("Interval je mimo povolený rozsah (0–3600000 ms).");
         if (o.UseAuthentication && string.IsNullOrWhiteSpace(o.Username))
