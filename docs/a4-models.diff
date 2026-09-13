@@ -1,0 +1,13 @@
+--- Models.cs
++++ Models.cs
+@@ -151,7 +151,9 @@
+     /// <summary>FEAT-HEALTH snapshots at end of run (may be empty).</summary>
+     IReadOnlyList<EndpointHealthSnapshot>? EndpointHealth = null,
+     /// <summary>A3: bounded scenario Channel instrumentation for this run (null if unavailable).</summary>
+-    ScenarioQueueMetricsSnapshot? QueueMetrics = null);
++    ScenarioQueueMetricsSnapshot? QueueMetrics = null,
++    /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
++    RetryMetricsSnapshot? RetryMetrics = null);
+ 
+ public static class Validation
+ {

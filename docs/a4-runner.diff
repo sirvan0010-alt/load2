@@ -1,0 +1,101 @@
+--- SmtpTestRunner.cs
++++ SmtpTestRunner.cs
+@@ -103,6 +103,10 @@
+     {
+         CancellationTokenSource? durationCts = null;
+         var queueMetrics = new ScenarioQueueMetrics();
++        var retryMetrics = new RetryMetrics();
++        // A4: global retry budget = MaxRetries * MessageCount (hard cap against retry storms).
++        var retryBudget = Math.Max(0, options.MaxRetries) * Math.Max(1, options.MessageCount);
++        var retriesUsed = 0;
+         var fsm = new TestStateMachine();
+         var pace = new SmartPaceController(options);
+         var observed = options.CollectObservedResponses ? new ObservedResponseCollector() : null;
+@@ -685,6 +689,8 @@
+                                 }
+ 
+                                 success = true;
++                                if (attempt > 0)
++                                    retryMetrics.RecordSuccessAfterRetry();
+                                 circuit?.RecordSuccess();
+                                 adaptive?.RecordAttempt(true);
+                                 pace.CommitRecipient(recipient);
+@@ -708,7 +714,7 @@
+                                 }
+                                 throw;
+                             }
+-                            catch (Exception ex) when (IsTransient(ex) && attempt < options.MaxRetries)
++                            catch (Exception ex) when (RetryPolicy.IsRetryable(ex) && attempt < options.MaxRetries)
+                             {
+                                 if (client is not null)
+                                 {
+@@ -726,6 +732,15 @@
+                                 lastEx = ex;
+                                 retryable = true;
+                                 Interlocked.Increment(ref retries);
++                                retryMetrics.RecordRetryableFailure();
++                                // A4: connection already discarded above — backoff without holding a lease.
++                                var used = Interlocked.Increment(ref retriesUsed);
++                                if (used > retryBudget)
++                                {
++                                    retryMetrics.RecordBudgetExhausted();
++                                    break;
++                                }
++                                retryMetrics.RecordRetryAttempt(attempt + 1);
+                                 circuit?.RecordFailure(ex);
+                                 adaptive?.RecordAttempt(false);
+                                 if (ex is SmtpCommandException sce)
+@@ -748,7 +763,7 @@
+                                     $"Retry {attempt + 1}/{options.MaxRetries}",
+                                     MessageStep.FailedTransient, i, workerId,
+                                     DeliveryStepKind.Error, false);
+-                                await Task.Delay(GetRetryDelay(attempt), workerCt).ConfigureAwait(false);
++                                await Task.Delay(RetryPolicy.GetDelay(attempt), workerCt).ConfigureAwait(false);
+                             }
+                             catch (Exception ex)
+                             {
+@@ -823,6 +838,10 @@
+                         }
+                         else
+                         {
++                            if (retryable)
++                                retryMetrics.RecordExhausted();
++                            else
++                                retryMetrics.RecordPermanentFailure();
+                             ledger.MarkFailed(i);
+                             if (lastEx != null && !multiAccount)
+                                 endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(lastEx));
+@@ -1006,7 +1025,8 @@
+             AvgSmtpSendMs: AverageOrZero(smtpSends),
+             RunId: runId,
+             EndpointHealth: endpointHealth.SnapshotAll(),
+-            QueueMetrics: queueMetrics.Snapshot());
++            QueueMetrics: queueMetrics.Snapshot(),
++            RetryMetrics: retryMetrics.Snapshot());
+     }
+ 
+     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+@@ -1111,21 +1131,9 @@
+         return message;
+     }
+ 
+-    static bool IsTransient(Exception ex)
+-    {
+-        if (ex is SmtpCommandException sce)
+-            return (int)sce.StatusCode is >= 400 and < 500;
+-        if (ex is SmtpProtocolException) return true;
+-        if (ex is IOException or TimeoutException) return true;
+-        return false;
+-    }
++    static bool IsTransient(Exception ex) => RetryPolicy.IsRetryable(ex);
+ 
+-    static TimeSpan GetRetryDelay(int attempt)
+-    {
+-        var baseMs = Math.Min(8_000, 500 * Math.Pow(2, attempt));
+-        var jitter = Random.Shared.NextDouble() * 0.4 - 0.2;
+-        return TimeSpan.FromMilliseconds(Math.Max(100, baseMs * (1 + jitter)));
+-    }
++    static TimeSpan GetRetryDelay(int attempt) => RetryPolicy.GetDelay(attempt);
+ 
+     static double? EstimateEta(int done, int total, DateTime start, Stopwatch sw)
+     {
