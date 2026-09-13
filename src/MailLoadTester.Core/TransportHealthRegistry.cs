@@ -129,16 +129,9 @@ public sealed class TransportHealthRegistry
         return list;
     }
 
+    /// <summary>A5: delegates to <see cref="SmtpOutcomeClassifier"/> — single taxonomy.</summary>
     public static string ClassifyFailure(Exception ex)
-    {
-        if (ex is MailKit.Net.Smtp.SmtpCommandException sce)
-            return $"smtp_{(int)sce.StatusCode / 100}xx";
-        if (ex is TimeoutException) return "timeout";
-        if (ex is IOException) return "io";
-        if (ex is MailKit.Security.AuthenticationException) return "auth";
-        if (ex is OperationCanceledException) return "cancelled";
-        return ex.GetType().Name;
-    }
+        => SmtpOutcomeClassifier.ToHealthCategory(ex);
 
     private sealed class Slot
     {
