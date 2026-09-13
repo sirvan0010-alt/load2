@@ -2,10 +2,12 @@
 
 **Read this first.** Other docs are references, not parallel instruction sets.
 
+**MASTER CARD:** GitHub Issue **#4 — MASTER CARD — load2 plan, SMTP limits & sender reputation runbook** is the persistent working card for the current plan and operational reference. It is not above source authority: implementation status is always determined by `main` source + tests + green CI.
+
 **SOURCE OF TRUTH:** `sirvan0010-alt/load2` branch **`main`** — **source code + tests** win over any document.
 
 ```
-README → docs/AI-GUIDE.md → source + tests → then detail docs if needed
+README → docs/AI-GUIDE.md → MASTER CARD (#4) → source + tests → detail docs if needed
 ```
 
 ## 1. What load2 is
@@ -24,20 +26,21 @@ The project may investigate mechanisms originating in spam, bomber, flood, DoS, 
 | Track | Purpose | Status |
 |-------|---------|--------|
 | **A–F External audit** | Source-level audit of external repos → mechanism inventory → ADOPT/… → optional implementation | Ongoing (`docs/external-repos/`, EXT-AUDIT) |
-| **Engine backlog** | Harden/extend current Core from gap matrix (FEAT-022 done, FEAT-HEALTH/REPORT/…) | Parallel, only after clear need |
+| **Engine backlog** | Harden/extend current Core from gap matrix and implementation backlog | Parallel, ordered by current backlog / MASTER CARD |
 
-FEAT-022 (timing breakdown) was **not** a replacement for phases A–F. It was one concrete gap from `LOAD2-GAP-MATRIX.md` while audit continues.
+The **MASTER CARD (#4)** records the active execution order and operational reference. It must be kept synchronized when the implementation plan or verified status changes.
 
-**Spam/Stress scenario modules are not implemented yet** — only audited/designed. Do not claim they exist in code.
+**Spam/Stress scenario modules are not implemented yet** unless source + tests prove otherwise. Do not claim they exist in code.
 
 ## 3. How to continue work
 
-1. `git pull` `main`; read this file.
+1. `git pull` `main`; read this file and the MASTER CARD (#4).
 2. Prefer **tests + source** over historical audit markdown (many `AUDIT-*.md` at repo root are archival).
 3. If docs conflict with code → **fix code/tests**, mark doc discrepancy.
 4. **Do not reconstruct project history** from multiple guides.
 5. Never invent PASS/FIXED without commit SHA + green CI URL.
 6. Small PRs: one mechanism or one fix → tests → CI.
+7. After a verified plan/status change, update the MASTER CARD and any index document that points to it.
 
 ## 4. External-repo audit (phases A–F)
 
@@ -70,14 +73,20 @@ The project must distinguish the **test objective** from the **attack form**:
 
 The distinction is important: **DDoS is a distribution/attack model, not a synonym for every high-concurrency load test.** A controlled distributed test can be represented as multiple authorized load generators feeding a bounded scenario, with explicit scope, limits, cancellation and observability.
 
-## 6. Current backlog (short)
+## 6. Current backlog
 
-| Priority | Item |
-|----------|------|
-| Audit | Continue EXT-AUDIT (next repos after Bombers, e.g. POC-bomber) |
-| Engine | FEAT-HEALTH · FEAT-REPORT · FEAT-RUNID · FEAT-VERIFY |
-| Done | FEAT-022 phase timings (`AvgPrepWaitMs` … `AvgSmtpSendMs`) |
-| Deferred | Live NET matrix without fixtures |
+The current execution order is maintained in the MASTER CARD (#4) and the implementation backlog. At the verified state recorded in the card:
+
+```text
+A1 throttling                       ✅ FIXED — commit 175b379; CI #208 + CodeQL SUCCESS
+A2 multi-account regression tests   ← NEXT
+A3 bounded scenario queue
+A4 retry / requeue (same queue + SmartPace)
+A5 unified response classification
+A6 global concurrency audit only if overshoot is proven
+```
+
+Do not skip an earlier item merely because a later feature is interesting. EXT-AUDIT remains a parallel track and must not be mixed into unrelated engine changes.
 
 ## 7. Definition of Done
 
@@ -85,11 +94,13 @@ The distinction is important: **DDoS is a distribution/attack model, not a synon
 - Tests covering the contract
 - Green CI (and CodeQL when it runs)
 - Doc status matches **source**, not chat memory
+- MASTER CARD reflects the verified plan/status
 
 ## 8. Detail index (optional reading)
 
 | Doc | Role |
 |-----|------|
+| **GitHub Issue #4 — MASTER CARD** | Persistent active plan + SMTP limits + sender-reputation operational reference |
 | `docs/AI-EXTERNAL-REPO-AUDIT-RUNBOOK.md` | Full audit procedure |
 | `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md` | Repo table + transfer posture |
 | `docs/LOAD2-GAP-MATRIX.md` | Mechanism vs load2 |
