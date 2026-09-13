@@ -1,0 +1,28 @@
+name: Apply queueMetrics scope fix
+on:
+  push:
+    paths:
+      - 'tools/apply_queue_metrics_scope_fix.py'
+      - '.github/workflows/apply-queue-metrics-scope-fix.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/apply_queue_metrics_scope_fix.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/MailLoadTester.Core/SmtpTestRunner.cs
+          if git diff --cached --quiet; then echo none; else
+            git commit -m "fix(runner): ScenarioQueueMetrics at method scope (CS0103)"
+            git push
+          fi
+          git rm -f tools/apply_queue_metrics_scope_fix.py .github/workflows/apply-queue-metrics-scope-fix.yml || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(ci): remove queueMetrics scope-fix tooling"
+            git push
+          fi
