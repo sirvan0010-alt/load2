@@ -152,6 +152,8 @@ public sealed record MailTestResult(
     IReadOnlyList<EndpointHealthSnapshot>? EndpointHealth = null,
     /// <summary>A3: bounded scenario Channel instrumentation for this run (null if unavailable).</summary>
     ScenarioQueueMetricsSnapshot? QueueMetrics = null);
+    /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
+    RetryMetricsSnapshot? RetryMetrics = null);
 
 public static class Validation
 {
