@@ -41,7 +41,8 @@ public class SmtpOutcomeClassifierTests
     [Fact]
     public void Auth_5xx_not_retryable()
     {
-        var ex = Smtp(SmtpStatusCode.AuthenticationFailed, "535 auth failed");
+        // 535 Authentication credentials invalid (enum name varies by MailKit version)
+        var ex = Smtp((SmtpStatusCode)535, "535 auth failed");
         Assert.Equal(SmtpOutcome.Authentication, SmtpOutcomeClassifier.Classify(ex));
         Assert.False(SmtpOutcomeClassifier.IsRetryable(ex));
     }
@@ -58,7 +59,6 @@ public class SmtpOutcomeClassifierTests
     public void Permanent_5xx_not_retryable()
     {
         var ex = Smtp(SmtpStatusCode.TransactionFailed, "554 failed");
-        // 554 often policy — either PolicyRejected or Permanent; must not be retryable
         var o = SmtpOutcomeClassifier.Classify(ex);
         Assert.True(o is SmtpOutcome.PolicyRejected or SmtpOutcome.Permanent);
         Assert.False(SmtpOutcomeClassifier.IsRetryable(o));
