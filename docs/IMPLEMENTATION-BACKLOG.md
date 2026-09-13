@@ -11,13 +11,14 @@
 | GUI TransportDiagnostics on Test connection | ✅ |
 | GUI Accounts editor | ✅ tab Účty SMTP + SmtpAccountMapping → `MailTestOptions.Accounts` |
 | A1 destination-provider throttling | ✅ commit `175b379239a7c4c07c5d5953f628def1db30f621`; CI #208 + CodeQL SUCCESS |
+| A2 multi-account throttling regression | ✅ commit `b3e075fc099eb4fc124eadd42297158471265606`; CI #210 + CodeQL #95 SUCCESS |
 
 ## Current execution plan
 
 ```text
 A1 destination-provider throttling                 ✅ VERIFIED
-A2 multi-account throttling regression + metrics   ← CURRENT
-A3 bounded scenario queue + queue metrics
+A2 multi-account throttling regression + metrics   ✅ FIXED
+A3 bounded scenario queue + queue metrics          ← CURRENT
 A4 retry / requeue with hard limits + retry metrics
 A5 unified SMTP response classification + counters
 A6 global concurrency audit                         CONDITIONAL
@@ -31,23 +32,9 @@ Do not mark an item FIXED/PASS until the implementation is on `main`, its tests 
 
 ## A2 — Multi-account regression + metrics
 
-**Goal:** prove that multiple SMTP accounts cannot bypass the existing recipient/destination-provider pacing contract and that the resulting behavior is observable in the existing result/report pipeline.
+**Status: FIXED** — `b3e075fc099eb4fc124eadd42297158471265606`; CI #210 and CodeQL #95 green.
 
-### Required regression matrix
-
-1. Two accounts / one destination provider → shared provider window is enforced.
-2. Same recipient / two accounts → recipient limit remains effective.
-3. Different destination providers → provider windows remain independent.
-4. Failed reservation → provider reservation is released; no throttle leak.
-5. Cancellation during throttle wait → no reservation leak and no connection leak.
-6. Throttling disabled → existing behavior is unchanged.
-7. Multi-account persistent SMTP session behavior remains unchanged.
-8. DryRun remains network-free.
-9. Verify the relevant destination-provider throttling behavior is represented correctly by existing run/result/report metrics; do not introduce a second metrics or limiter subsystem.
-
-**Implementation rule:** extend `SmartPaceController` and the existing report/result path. No second independent rate limiter.
-
-**Status:** implementation committed in `b3e075fc099eb4fc124eadd42297158471265606`; CI verification must be green before marking A2 FIXED.
+The regression matrix proves that multiple SMTP accounts cannot bypass the existing recipient/destination-provider pacing contract. The implementation reuses the shared `SmartPaceController`; no second limiter or parallel pacing stack was introduced.
 
 ---
 
@@ -91,6 +78,12 @@ Add only the metrics that naturally belong to the queue implementation:
 - cancelled/drained
 
 These must flow through existing progress/reporting rather than creating a parallel telemetry stack.
+
+### A3 source-audit finding
+
+The current `SmtpTestRunner` already uses a bounded `Channel<int>` per batch with `BoundedChannelFullMode.Wait`, `SingleWriter = true`, `SingleReader = false`, and `MaxConcurrency * 2` capacity. Workers consume it through `ReadAllAsync(CancellationToken)`, and producer completion is coordinated with worker completion. This is the existing queue foundation; A3 must instrument and test this pipeline rather than introduce a second queue or replace it blindly.
+
+The existing runner also keeps `SmartPaceController` as the actual SEND pacing gate and uses the shared `DeliveryLedger`; A3 must not add another limiter or alter those semantics.
 
 ### Acceptance
 
