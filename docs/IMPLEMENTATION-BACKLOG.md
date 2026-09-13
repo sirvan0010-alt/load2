@@ -4,25 +4,23 @@
 
 ## Done
 
-| Item | Notes |
-|------|-------|
-| FEAT-HEALTH | TransportHealthRegistry |
-| FEAT-REPORT | RunReport / RunId |
-| Multi-account | Registry + PoolHub + runner branch |
-| Connection churn | ConnectionChurnRunner |
-| Provider presets | ApplyTo |
-| TransportDiagnostics | DNS/MX/SMTP/EHLO |
-| **TargetSet / ScenarioLimits / SmtpScenario** | validated targets + file load + PathSecurity |
-| **DurationSeconds** | linked CTS in RunSingleAsync |
-| **GUI Test connection** | uses TransportDiagnostics |
+| Item | Status |
+|------|--------|
+| Health / Report / Multi-account / Churn / Provider / Diagnostics | ✅ |
+| TargetSet / ScenarioLimits / DurationSeconds | ✅ |
+| GUI TransportDiagnostics on Test connection | ✅ |
+| **GUI Accounts editor** | ✅ tab Účty SMTP + SmtpAccountMapping → `MailTestOptions.Accounts` |
 
 ## Next
 
-1. GUI Accounts editor (Accounts list → options)
-2. Per-target / per-provider throttling in scenario layer
-3. Queue/requeue with hard limits
-4. Retry/classification expansion vs Health + Ledger
-5. Global concurrency gate — only if audit proves multi-pool overshoot
+1. **Per-target / per-provider throttling** (extend existing PerRecipientLimiter / SmartPace — no second limiter stack)
+2. Bounded scenario queue
+3. Retry / requeue with hard limits
+4. Response classification unification
+5. Global concurrency audit only if multi-pool overshoot proven
 
-## Out of scope for SMTP-first
-SMS/WhatsApp/Call senders · public abuse endpoints · unrestricted flood
+## GUI Accounts notes
+
+- Empty list → classic single-host options path
+- 2+ enabled accounts → SmtpAccountPoolHub
+- Passwords never in RunReport JSON
