@@ -355,6 +355,7 @@ public sealed partial class MainForm : Form
 
         tabSmtp.Controls.Add(tblSmtp);
         tabs.TabPages.Add(tabSmtp);
+        InitAccountsTab(tabs);
 
         // --- Tab: Zpráva ---
         var tabMsg = new TabPage("Zpráva") { Padding = new Padding(12) };
@@ -852,7 +853,8 @@ public sealed partial class MainForm : Form
             // SEC-003/004: GUI Start without Test mode is an explicit operator acknowledgement.
             // CLI --unauthorized also grants live send outside Test mode.
             Unauthorized: !chkTestMode.Checked
-                || AuthorizationGate.HasUnauthorizedFlag(Environment.GetCommandLineArgs()));
+                || AuthorizationGate.HasUnauthorizedFlag(Environment.GetCommandLineArgs()),
+            Accounts: BuildAccountsFromUi());
     }
 
     private async Task OnStartAsync()
