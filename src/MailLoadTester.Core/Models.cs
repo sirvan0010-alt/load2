@@ -151,7 +151,7 @@ public sealed record MailTestResult(
     /// <summary>FEAT-HEALTH snapshots at end of run (may be empty).</summary>
     IReadOnlyList<EndpointHealthSnapshot>? EndpointHealth = null,
     /// <summary>A3: bounded scenario Channel instrumentation for this run (null if unavailable).</summary>
-    ScenarioQueueMetricsSnapshot? QueueMetrics = null);
+    ScenarioQueueMetricsSnapshot? QueueMetrics = null,
     /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
     RetryMetricsSnapshot? RetryMetrics = null);
 
@@ -398,42 +398,36 @@ public static class Validation
         }
         if (o.EnableSendingTimeWindow)
         {
-            if (o.SendingWindowFromHour is < 0 or > 23 || o.SendingWindowToHour is < 0 or > 23)
-                throw new ArgumentException("Časové okno musí být 0–23 hodin.");
+            if (o.SendingWindowFromHour is < 0 or > 23)
+                throw new ArgumentException("SendingWindowFromHour musí být 0–23.");
+            if (o.SendingWindowToHour is < 0 or > 23)
+                throw new ArgumentException("SendingWindowToHour musí být 0–23.");
         }
-        if (o.EnableWarmup && string.IsNullOrWhiteSpace(o.WarmupPhases))
-            throw new ArgumentException("Warmup phases nesmí být prázdné.");
-        if (o.GreylistRetryMinutes is < 1 or > 1440)
-            throw new ArgumentException("Greylist retry musí být 1–1440 minut.");
-        if (o.MaxGreylistRetries is < 0 or > 20)
-            throw new ArgumentException("Max greylist retries musí být 0–20.");
+    }
+
+    public static bool IsSafeCustomHeaderName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (!name.StartsWith("X-", StringComparison.OrdinalIgnoreCase)) return false;
+        foreach (var c in name)
+        {
+            if (!(char.IsLetterOrDigit(c) || c is '-' or '_')) return false;
+        }
+        return true;
     }
 
     public static string ExplainSmtpError(Exception ex)
     {
-        if (ex is null) return "";
-        if (ex is MailPayloadPluginException mpe)
-            return mpe.Message;
-        if (ex is MailKit.Net.Smtp.SmtpCommandException sce)
-            return $"{(int)sce.StatusCode} {sce.Message}".Trim();
-        if (ex is MailKit.Net.Smtp.SmtpProtocolException)
-            return "SMTP protokol: " + ex.Message;
-        if (ex is TimeoutException)
-            return "Vypršel časový limit: " + ex.Message;
         if (ex is OperationCanceledException)
-            return "Zrušeno uživatelem / tokenem";
-        if (ex is IOException)
-            return "IO: " + ex.Message;
-        if (ex is MailKit.Security.AuthenticationException)
-            return "AUTH: " + ex.Message;
-        return string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
-    }
-
-    static bool IsSafeCustomHeaderName(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key)) return false;
-        if (key.Any(char.IsWhiteSpace) || key.Any(c => c < 33 || c > 126)) return false;
-        if (!key.StartsWith("X-", StringComparison.OrdinalIgnoreCase)) return false;
-        return key.All(c => char.IsLetterOrDigit(c) || c == '-');
+            return "Operace zrušena (časový limit nebo STOP).";
+        if (ex is TimeoutException)
+            return "Vypršel časový limit spojení/odpovědi SMTP.";
+        if (ex is System.Net.Sockets.SocketException se)
+            return $"Síťová chyba: {se.SocketErrorCode} — {se.Message}";
+        if (ex is MailKit.Net.Smtp.SmtpCommandException sce)
+            return $"SMTP {(int)sce.StatusCode}: {sce.Message}";
+        if (ex is MailKit.Net.Smtp.SmtpProtocolException)
+            return $"SMTP protokol: {ex.Message}";
+        return ex.Message;
     }
 }
