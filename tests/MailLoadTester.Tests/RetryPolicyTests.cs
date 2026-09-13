@@ -1,3 +1,4 @@
+using MailKit;
 using MailKit.Net.Smtp;
 using Xunit;
 
@@ -5,18 +6,19 @@ namespace MailLoadTester.Tests;
 
 public class RetryPolicyTests
 {
+    static SmtpCommandException Smtp(SmtpStatusCode code, string message) =>
+        new(SmtpErrorCode.UnexpectedStatusCode, code, message);
+
     [Fact]
     public void IsRetryable_4xx_true()
     {
-        var ex = new SmtpCommandException(SmtpStatusCode.ServiceNotAvailable, "421 temp");
-        Assert.True(RetryPolicy.IsRetryable(ex));
+        Assert.True(RetryPolicy.IsRetryable(Smtp(SmtpStatusCode.ServiceNotAvailable, "421 temp")));
     }
 
     [Fact]
     public void IsRetryable_5xx_false()
     {
-        var ex = new SmtpCommandException(SmtpStatusCode.MailboxUnavailable, "550 no");
-        Assert.False(RetryPolicy.IsRetryable(ex));
+        Assert.False(RetryPolicy.IsRetryable(Smtp(SmtpStatusCode.MailboxUnavailable, "550 no")));
     }
 
     [Fact]
