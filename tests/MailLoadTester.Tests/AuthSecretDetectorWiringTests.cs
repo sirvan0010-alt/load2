@@ -6,6 +6,9 @@ namespace MailLoadTester.Tests;
 /// <summary>
 /// SEC-AUDIT-001 follow-up: MailKit SmtpClient(IProtocolLogger) must attach
 /// AuthenticationSecretDetector so SessionProtocolLogger can redact AUTH material.
+/// Redaction behavior itself is covered by ProtocolLogRedactionTests with a
+/// deterministic detector; an arbitrary raw client payload is not guaranteed to
+/// be classified as authentication material by MailKit's detector.
 /// </summary>
 public sealed class AuthSecretDetectorWiringTests
 {
@@ -23,41 +26,6 @@ public sealed class AuthSecretDetectorWiringTests
             {
                 Assert.NotNull(logger.AuthenticationSecretDetector);
             }
-        }
-        finally
-        {
-            try { File.Delete(path); } catch { /* ignore */ }
-        }
-    }
-
-    [Fact]
-    public void WiredDetector_RedactsClientBytesInSessionLog()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "mlt-auth-redact-" + Guid.NewGuid().ToString("N") + ".log");
-        const string secret = "SuperSecretAuthToken";
-        try
-        {
-            using (var session = new SmtpSessionLogger(path))
-            {
-                var logger = new SessionProtocolLogger(session);
-                using var client = new SmtpClient(logger);
-                Assert.NotNull(logger.AuthenticationSecretDetector);
-
-                var bytes = System.Text.Encoding.ASCII.GetBytes(secret);
-                logger.LogClient(bytes, 0, bytes.Length);
-            }
-
-            for (var i = 0; i < 20; i++)
-            {
-                if (File.Exists(path) && File.ReadAllText(path).Length > 0)
-                    break;
-                Thread.Sleep(50);
-            }
-
-            Assert.True(File.Exists(path));
-            var content = File.ReadAllText(path);
-            Assert.Contains("C: ", content);
-            Assert.DoesNotContain(secret, content, StringComparison.Ordinal);
         }
         finally
         {
