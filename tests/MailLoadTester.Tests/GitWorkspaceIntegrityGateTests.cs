@@ -15,7 +15,7 @@ public sealed class GitWorkspaceIntegrityGateTests
             commit,
             string.Empty);
 
-        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, commit);
+        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, commit, CancellationToken.None);
 
         Assert.True(result.IsVerified);
         Assert.Equal(commit, result.ActualCommit);
@@ -31,7 +31,7 @@ public sealed class GitWorkspaceIntegrityGateTests
         const string actual = "fedcba9876543210fedcba9876543210fedcba98";
         var git = new StubGitExecutor(workspace.Path, workspace.Path, actual, string.Empty);
 
-        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, expected);
+        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, expected, CancellationToken.None);
 
         Assert.Equal(WorkspaceIntegrityStatus.Blocked, result.Status);
         Assert.Contains("does not match", result.Reason, StringComparison.OrdinalIgnoreCase);
@@ -44,7 +44,7 @@ public sealed class GitWorkspaceIntegrityGateTests
         const string commit = "0123456789abcdef0123456789abcdef01234567";
         var git = new StubGitExecutor(workspace.Path, workspace.Path, commit, " M src/file.cs\n?? untracked.txt\n");
 
-        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, commit);
+        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(workspace.Path, commit, CancellationToken.None);
 
         Assert.Equal(WorkspaceIntegrityStatus.Blocked, result.Status);
         Assert.False(result.IsClean);
@@ -58,7 +58,7 @@ public sealed class GitWorkspaceIntegrityGateTests
         var git = new StubGitExecutor();
         var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
 
-        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(missing, commit);
+        var result = await new GitWorkspaceIntegrityGate(git).VerifyAsync(missing, commit, CancellationToken.None);
 
         Assert.Equal(WorkspaceIntegrityStatus.Blocked, result.Status);
         Assert.Equal(0, git.Calls);
