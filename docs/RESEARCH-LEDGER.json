@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 1,
-  "updatedAt": "2026-09-14T20:45:00Z",
-  "description": "Machine-readable research ledger for external repositories and extractable mechanisms. Unknown facts remain PENDING. No invented revisions or mechanisms. Mechanism entries below are inventory placeholders pending source-level audit of the referenced repositories.",
+  "schemaVersion": 2,
+  "updatedAt": "2026-09-14T21:10:00Z",
+  "description": "Machine-readable research ledger for external repositories and extractable mechanisms. Repository coverage is derived from EXT-AUDIT-001; mechanism facts remain source-backed and unknown facts remain PENDING. No invented revisions or mechanisms.",
+  "sourceOfTruth": "sirvan0010-alt/load2:main",
   "lifecycleStates": [
     "PENDING",
     "AUDITED",
@@ -23,185 +24,192 @@
     "REFERENCE",
     "REJECT"
   ],
+  "auditCoverage": {
+    "sourceDocument": "docs/EXTERNAL-REPO-TRANSFER-AUDIT.md",
+    "auditId": "EXT-AUDIT-001",
+    "repositoryCount": 15,
+    "repositories": [
+      "REP-001", "REP-002", "REP-003", "REP-004", "REP-005",
+      "REP-006", "REP-007", "REP-008", "REP-009", "REP-010",
+      "REP-011", "REP-012", "REP-013", "REP-014", "REP-015"
+    ],
+    "coverageStatus": "REPOSITORY_COVERAGE_COMPLETE_MECHANISM_EXTRACTION_PARTIAL"
+  },
   "repositories": [
     {
       "id": "REP-001",
       "name": "slowhttptest",
-      "status": "PENDING",
+      "status": "AUDITED",
       "sourceUrl": "https://github.com/shekyan/slowhttptest",
       "revision": null,
-      "notes": "Public Application Layer DoS simulator (Apache-2.0). Queued for mechanism-level extraction only. No claims about internal symbols until source audit at a pinned revision.",
-      "mechanisms": [
-        "M-001",
-        "M-002",
-        "M-003",
-        "M-004",
-        "M-005",
-        "M-006",
-        "M-007"
-      ]
+      "auditDocument": "docs/external-repos/slowhttptest.md",
+      "notes": "Repository is included in EXT-AUDIT-001. Exact revision remains unpinned in this ledger until the source-level extraction pass records it.",
+      "mechanisms": ["M-001", "M-002", "M-003", "M-004", "M-005", "M-006", "M-007"]
     },
     {
       "id": "REP-002",
       "name": "GoldenEye",
-      "status": "PENDING",
+      "status": "AUDITED",
       "sourceUrl": "https://github.com/jseidl/GoldenEye",
       "revision": null,
-      "notes": "HTTP stress test tool (Keep-Alive + NoCache vector). Alternate Go port exists (zvdy/goldeneye). Queued for mechanism-level extraction only. Pin revision before AUDITED.",
-      "mechanisms": [
-        "M-008",
-        "M-009",
-        "M-010",
-        "M-011",
-        "M-012"
-      ]
+      "auditDocument": "docs/external-repos/GoldenEye.md",
+      "notes": "Repository is included in EXT-AUDIT-001. Exact revision remains unpinned in this ledger until the source-level extraction pass records it.",
+      "mechanisms": ["M-008", "M-009", "M-010", "M-011", "M-012"]
+    },
+    {
+      "id": "REP-003",
+      "name": "Beast_Bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/un1cum/Beast_Bomber",
+      "revision": null,
+      "auditDocument": "docs/external-repos/Beast_Bomber.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-004",
+      "name": "Bombers",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/bhattsameer/Bombers",
+      "revision": null,
+      "auditDocument": "docs/external-repos/Bombers.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-005",
+      "name": "POC-bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/tr0uble-mAker/POC-bomber",
+      "revision": null,
+      "auditDocument": "docs/external-repos/POC-bomber.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-006",
+      "name": "smsbomb",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/yyasha/smsbomb",
+      "revision": null,
+      "auditDocument": null,
+      "notes": "Included in EXT-AUDIT-001. Individual audit document is not currently asserted here without a verified repository path.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-007",
+      "name": "bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/devops-kung-fu/bomber",
+      "revision": null,
+      "auditDocument": "docs/external-repos/devops-kung-fu-bomber.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-008",
+      "name": "Python---Email-Bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/ncorbuk/Python---Email-Bomber",
+      "revision": null,
+      "auditDocument": null,
+      "notes": "Included in EXT-AUDIT-001. Individual audit document is not currently asserted here without a verified repository path.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-009",
+      "name": "X_BOMB",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/hackerxphantom/X_BOMB",
+      "revision": null,
+      "auditDocument": "docs/external-repos/hackerxphantom-X_BOMB.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-010",
+      "name": "XLR8_BOMBER",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/anubhavanonymous/XLR8_BOMBER",
+      "revision": null,
+      "auditDocument": "docs/external-repos/anubhavanonymous-XLR8_BOMBER.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-011",
+      "name": "fast-mail-bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/juzeon/fast-mail-bomber",
+      "revision": null,
+      "auditDocument": "docs/external-repos/juzeon-fast-mail-bomber.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-012",
+      "name": "Email-Bomber",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/mohinparamasivam/Email-Bomber",
+      "revision": null,
+      "auditDocument": null,
+      "notes": "Included in EXT-AUDIT-001. Individual audit document is not currently asserted here without a verified repository path.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-013",
+      "name": "sms-bomber-tool",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/OpticHalberdier/sms-bomber-tool",
+      "revision": null,
+      "auditDocument": "docs/external-repos/OpticHalberdier-sms-bomber-tool.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-014",
+      "name": "Mail-Bomber-Full-Version",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/brolyklade7/Mail-Bomber-Full-Version",
+      "revision": null,
+      "auditDocument": "docs/external-repos/brolyklade7-Mail-Bomber-Full-Version.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-015",
+      "name": "bomberman-rl-pinkbombers",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/niushamjd/bomberman-rl-pinkbombers",
+      "revision": null,
+      "auditDocument": null,
+      "notes": "Included in EXT-AUDIT-001. Individual audit document is not currently asserted here without a verified repository path.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-016",
+      "name": "Email-Bomber-SMTP",
+      "status": "AUDITED",
+      "sourceUrl": "https://github.com/Trehwmm/Email-Bomber-SMTP",
+      "revision": null,
+      "auditDocument": "docs/external-repos/Trehwmm-Email-Bomber-SMTP.md",
+      "notes": "Repository-level audit is recorded by EXT-AUDIT-001. Mechanism-level ledger extraction is pending unless separately represented below.",
+      "mechanisms": []
     }
   ],
   "mechanisms": [
-    {
-      "id": "M-001",
-      "name": "connection-lifecycle-control",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "connection",
-      "description": "How connections are opened, held, and closed under prolonged partial HTTP exchange.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Extract lifecycle states only; do not port attack orchestration."
-    },
-    {
-      "id": "M-002",
-      "name": "connection-rate-control",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "rate",
-      "description": "Connections-per-second and ramp behaviour for opening sockets.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Compare with load2 SmartPaceController / MaxConcurrency model after audit."
-    },
-    {
-      "id": "M-003",
-      "name": "partial-slow-io",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "io",
-      "description": "Partial write / slow read patterns and interval between follow-up data.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Relevant only as controlled lab diagnostic of server timeout behaviour under authorization."
-    },
-    {
-      "id": "M-004",
-      "name": "timeout-and-probe-model",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "timeout",
-      "description": "Probe connection timeout, test duration limits, and failure detection.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": null
-    },
-    {
-      "id": "M-005",
-      "name": "worker-concurrency-model",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "concurrency",
-      "description": "How concurrent connections/workers are bounded and scheduled.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": null
-    },
-    {
-      "id": "M-006",
-      "name": "scenario-parametrization",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "scenario",
-      "description": "CLI/config parameters that define test shape (verb, interval, duration, connection count).",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": null
-    },
-    {
-      "id": "M-007",
-      "name": "measurement-and-reporting",
-      "repositoryId": "REP-001",
-      "status": "PENDING",
-      "category": "metrics",
-      "description": "What is measured (sockets, service impact, timing) and how results are reported.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Compare with MailTestResult / RunObservability projections."
-    },
-    {
-      "id": "M-008",
-      "name": "worker-socket-pool",
-      "repositoryId": "REP-002",
-      "status": "PENDING",
-      "category": "concurrency",
-      "description": "Workers vs sockets concurrency model (defaults historically workers=50, sockets=30).",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Audit actual source before treating defaults as evidence."
-    },
-    {
-      "id": "M-009",
-      "name": "http-method-and-header-variation",
-      "repositoryId": "REP-002",
-      "status": "PENDING",
-      "category": "protocol",
-      "description": "GET/POST/random method selection and header/user-agent variation for request diversity.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Reusable as scenario diversity only inside authorized load2 bounds."
-    },
-    {
-      "id": "M-010",
-      "name": "keepalive-session-reuse",
-      "repositoryId": "REP-002",
-      "status": "PENDING",
-      "category": "connection",
-      "description": "HTTP Keep-Alive usage for connection persistence across requests.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Map against load2 persistent SMTP session model only at mechanism level."
-    },
-    {
-      "id": "M-011",
-      "name": "multiprocess-or-worker-scheduling",
-      "repositoryId": "REP-002",
-      "status": "PENDING",
-      "category": "concurrency",
-      "description": "Process/thread/worker scheduling and shutdown behaviour under load.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": null
-    },
-    {
-      "id": "M-012",
-      "name": "ssl-verification-policy",
-      "repositoryId": "REP-002",
-      "status": "PENDING",
-      "category": "tls",
-      "description": "Optional disable of SSL certificate verification and related TLS client policy.",
-      "decision": null,
-      "load2Mapping": null,
-      "evidence": [],
-      "notes": "Any adaptation must preserve explicit security policy in load2; default-safe behaviour required."
-    }
+    {"id":"M-001","name":"connection-lifecycle-control","repositoryId":"REP-001","status":"PENDING","category":"connection","description":"How connections are opened, held, and closed under prolonged partial HTTP exchange.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Extract lifecycle states only; do not port attack orchestration."},
+    {"id":"M-002","name":"connection-rate-control","repositoryId":"REP-001","status":"PENDING","category":"rate","description":"Connections-per-second and ramp behaviour for opening sockets.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Compare with load2 SmartPaceController / MaxConcurrency model after audit."},
+    {"id":"M-003","name":"partial-slow-io","repositoryId":"REP-001","status":"PENDING","category":"io","description":"Partial write / slow read patterns and interval between follow-up data.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Relevant only as controlled lab diagnostic of server timeout behaviour under authorization."},
+    {"id":"M-004","name":"timeout-and-probe-model","repositoryId":"REP-001","status":"PENDING","category":"timeout","description":"Probe connection timeout, test duration limits, and failure detection.","decision":null,"load2Mapping":null,"evidence":[],"notes":null},
+    {"id":"M-005","name":"worker-concurrency-model","repositoryId":"REP-001","status":"PENDING","category":"concurrency","description":"How concurrent connections/workers are bounded and scheduled.","decision":null,"load2Mapping":null,"evidence":[],"notes":null},
+    {"id":"M-006","name":"scenario-parametrization","repositoryId":"REP-001","status":"PENDING","category":"scenario","description":"CLI/config parameters that define test shape (verb, interval, duration, connection count).","decision":null,"load2Mapping":null,"evidence":[],"notes":null},
+    {"id":"M-007","name":"measurement-and-reporting","repositoryId":"REP-001","status":"PENDING","category":"metrics","description":"What is measured (sockets, service impact, timing) and how results are reported.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Compare with MailTestResult / RunObservability projections."},
+    {"id":"M-008","name":"worker-socket-pool","repositoryId":"REP-002","status":"PENDING","category":"concurrency","description":"Workers vs sockets concurrency model.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Audit actual source before treating defaults as evidence."},
+    {"id":"M-009","name":"http-method-and-header-variation","repositoryId":"REP-002","status":"PENDING","category":"protocol","description":"Request method and header variation for scenario diversity.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Evaluate only as bounded scenario diversity."},
+    {"id":"M-010","name":"keepalive-session-reuse","repositoryId":"REP-002","status":"PENDING","category":"connection","description":"HTTP Keep-Alive usage for connection persistence across requests.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Map at mechanism level against persistent SMTP session handling."},
+    {"id":"M-011","name":"multiprocess-or-worker-scheduling","repositoryId":"REP-002","status":"PENDING","category":"concurrency","description":"Process/thread/worker scheduling and shutdown behaviour under load.","decision":null,"load2Mapping":null,"evidence":[],"notes":null},
+    {"id":"M-012","name":"ssl-verification-policy","repositoryId":"REP-002","status":"PENDING","category":"tls","description":"TLS certificate verification policy and client configuration.","decision":null,"load2Mapping":null,"evidence":[],"notes":"Any adaptation must preserve explicit security policy and default-safe behaviour."}
   ],
   "rules": {
     "unknownStaysPending": true,
