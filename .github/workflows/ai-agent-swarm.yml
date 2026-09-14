@@ -22,6 +22,8 @@ on:
       - "AI_AGENT_REGISTRY.md"
       - "docs/AI_AGENT_EXTENSIONS.md"
       - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-RESULT-SCHEMA.json"
+      - "scripts/verify-agent-results.sh"
       - ".github/workflows/ai-agent-swarm.yml"
 
 permissions:
@@ -93,6 +95,7 @@ jobs:
           - Existing agent contract and architecture invariants
 
           ## Required output
+          - Machine-readable result conforming to docs/AI-SWARM-RESULT-SCHEMA.json
           - Findings grounded in repository evidence
           - Explicit status: READY | BLOCKED | NEEDS-EVIDENCE
           - Files/components in scope
@@ -130,8 +133,69 @@ jobs:
             grep -RIn --fixed-strings "\`$role\`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null
           done
           test -f docs/RESEARCH-LEDGER.json
+          test -f docs/AI-SWARM-RESULT-SCHEMA.json
+          test -f scripts/verify-agent-results.sh
           echo "Creation/review swarm contract is valid."
 
-# NOTE: this workflow is an agent coordination/task factory, not an LLM.
-# An actual model runner must consume these artifacts only after an explicit
-# provider, credential and patch-authorization policy is configured.
+  swarm-result-verifier:
+    name: Agent result verification gate
+    needs: task-factory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify verifier syntax and positive/negative behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-agent-results.sh
+          mkdir -p swarm-results
+          agents=(
+            ORCHESTRATOR RESEARCH_AGENT BUG_TRIAGE_AGENT FEATURE_ARCHITECT_AGENT
+            IMPLEMENTATION_AGENT REFACTOR_AGENT INTEGRATION_AGENT SECURITY_AGENT
+            EVIDENCE_AGENT REVIEW_AGENT TEST_AGENT DOCUMENTATION_AGENT RELEASE_AGENT
+          )
+          for agent in "${agents[@]}"; do
+            cat > "swarm-results/${agent}.json" <<EOF
+          {
+            "schema_version":"1.0",
+            "agent":"${agent}",
+            "task_id":"contract-test",
+            "repository":"sirvan0010-alt/load2",
+            "commit":"0000000000000000000000000000000000000000",
+            "status":"READY",
+            "findings":[{"claim":"contract test","evidence":["CI fixture"]}],
+            "changed_files":[],
+            "acceptance":[{"id":"AC-001","result":"PASS","evidence":["CI fixture"]}],
+            "verification":{"tests":["contract fixture"],"ci_required":true},
+            "security":{"authorization":"PASS","cancellation":"PASS","hard_limits":"PASS","secrets":"PASS"},
+            "handoff":"REVIEW_AGENT"
+          }
+          EOF
+          done
+          bash scripts/verify-agent-results.sh swarm-results
+
+          jq '.security.authorization = "FAIL"' swarm-results/SECURITY_AGENT.json > swarm-results/SECURITY_AGENT.invalid.json
+          mv swarm-results/SECURITY_AGENT.invalid.json swarm-results/SECURITY_AGENT.json
+          if bash scripts/verify-agent-results.sh swarm-results; then
+            echo "Negative verifier test unexpectedly passed" >&2
+            exit 1
+          fi
+          echo "Positive and negative agent-result verification tests passed."
+
+      - name: Require real results for implement-ready mode
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'implement-ready' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d swarm-results ]]; then
+            echo "IMPLEMENT-READY requires result artifacts from a real execution backend." >&2
+            exit 1
+          fi
+          echo "Implement-ready execution requires externally produced, schema-valid agent results."
+
+# NOTE: this workflow is an agent coordination/task factory plus a deterministic
+# result-contract verifier, not an LLM. An actual model runner must consume the
+# task artifacts and publish result JSON only after explicit provider, credential
+# and patch-authorization policy is configured.
