@@ -83,8 +83,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
         }
         catch
         {
-            // If one warm-up connection fails, successfully rented clients must
-            // still be returned; otherwise the pool can lose permits/connections.
             foreach (var task in tasks)
             {
                 if (task.Status == TaskStatus.RanToCompletion)
@@ -123,11 +121,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                     catch (ObjectDisposedException) { Forget(idleClient); throw; }
                     catch (Exception ex)
                     {
-                        // Classified as "expected fallback": a stale idle connection failing
-                        // to reconnect is a normal, common occurrence (server closed it,
-                        // network blip) — not swallowed silently, though, since a *pattern*
-                        // of these (e.g. every idle client suddenly failing) can indicate a
-                        // real outage worth seeing in the session log.
                         _sessionLogger?.LogInfo($"Idle client {idleClient.GetHashCode()} reconnect failed, discarding: {ex.Message}");
                         Forget(idleClient);
                     }
@@ -135,8 +128,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
 
                 if (idleClient.IsConnected)
                 {
-                    // 0 = health-check vypnutý. >0 = NOOP po N sekundách nečinnosti.
-                    // (Dříve 0 chybně znamenalo „vždy NOOP“.)
                     var shouldHealthCheck = false;
                     if (_options.IdleConnectionHealthCheckSeconds > 0 && idleSince > 0)
                     {
@@ -165,12 +156,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                         }
                     }
 
-                    // DisposeAsync can race with an idle client between the health-check
-                    // and this hand-off. Never return a client after shutdown has begun.
-                    // Pair the shutdown check with the lease hand-off. A plain
-                    // check-then-MarkLeased sequence has a TOCTOU window:
-                    // DisposeAsync can set _disposed after the check but before the
-                    // client becomes leased. Keep this transition atomic with shutdown.
                     bool shutdown;
                     lock (_lifecycleLock)
                     {
@@ -192,16 +177,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                 }
             }
 
-            // Konstruktor s IProtocolLogger je záměrně použitý místo nastavení
-            // ProtocolLogger až po new SmtpClient() — MailKit uvnitř tohoto
-            // konstruktoru sám napojí AuthenticationSecretDetector, takže hesla
-            // z AUTH PLAIN/LOGIN se do session logu nikdy nedostanou v čitelné
-            // podobě. Kdybychom ProtocolLogger nastavovali až přes property
-            // setter, tohle automatické propojení bychom si museli hlídat sami.
-            // Each SMTP connection gets its own protocol observer. A single observer
-            // shared by parallel workers would mix their C:/S: streams and one worker
-            // could drain another worker's pipeline events. The template is only an
-            // enable/disable flag; the actual observer is per client.
             ProtocolPathObserver? clientPathObserver = _pathObserverTemplate != null
                 ? new ProtocolPathObserver()
                 : null;
@@ -217,17 +192,13 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             var clientOwnedByPool = false;
             try
             {
-                // Ownership starts immediately after SmtpClient construction. Every
-                // configuration step below can throw (proxy parsing/creation,
-                // certificate collection, etc.); keeping all of it inside the same
-                // cleanup boundary prevents a half-configured client from leaking.
                 if (clientPathObserver != null)
                     _pathObservers[client] = clientPathObserver;
                 client.Timeout = Math.Max(_options.ConnectTimeoutMs, _options.ReadTimeoutMs);
                 if (_options.IgnoreCertificateErrors)
                     client.ServerCertificateValidationCallback = (_, _, _, _) => true;
                 if (_clientCert != null)
-                    client.ClientCertificates.Add(_clientCert);
+                    client.ClientCertificates.Add(_clientCert!);
 
                 if (_proxyRotator != null)
                 {
@@ -245,12 +216,8 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
 
                 _sessionLogger?.LogInfo($"Creating new connection to {_options.SmtpHost}:{_options.Port}");
                 await EnsureConnectedAsync(client, ct).ConfigureAwait(false);
-                _sessionLogger?.LogInfo($"Connected and authenticated");
+                _sessionLogger?.LogInfo("Connected and authenticated");
 
-                // The final shutdown check and lease registration must be one
-            // lifecycle-critical transition. Otherwise DisposeAsync can set
-            // _disposed after a check but before MarkLeased(), allowing a client
-            // to escape after shutdown has begun.
                 lock (_lifecycleLock)
                 {
                     if (Volatile.Read(ref _disposed) != 0)
@@ -282,7 +249,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
         }
     }
 
-    /// <summary>Vyzvedne pouze protocol events patřící konkrétnímu SMTP klientovi.</summary>
     public void ReportProxyBlocked(SmtpClient client)
     {
         if (_proxyRotator is null) return;
@@ -300,15 +266,9 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
 
     public void Return(SmtpClient client)
     {
-        // A client owns exactly one pool permit while leased. Duplicate Return/Discard
-        // calls must not inflate the semaphore count and silently exceed MaxConcurrency.
         if (!_leased.TryRemove(client, out _))
             return;
 
-        // Shutdown must be checked atomically with the hand-off back to the idle
-        // queue. A check followed by TryEnqueue is a TOCTOU race: DisposeAsync can
-        // drain _idle between those two operations, after which this client would be
-        // enqueued into a pool that is already disposed and never be observed again.
         bool returnToIdle;
         lock (_lifecycleLock)
         {
@@ -321,9 +281,7 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
         }
 
         if (!returnToIdle)
-        {
             Forget(client);
-        }
 
         _gate.Release();
     }
@@ -333,8 +291,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
         if (!_leased.TryRemove(client, out _))
             return;
         Forget(client);
-        // The permit belongs to the RentAsync call even if shutdown started.
-        // Always release it so a waiter cannot remain blocked forever.
         _gate.Release();
     }
 
@@ -355,17 +311,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
     {
         if (!client.IsConnected)
         {
-            // _clientCert is attached to client.ClientCertificates (at creation time,
-            // persists across reconnects) and is actively read during the TLS
-            // handshake inside ConnectAsync below. The client isn't visible in
-            // _leased until this whole method returns successfully, so without this
-            // counter DisposeAsync could dispose _clientCert while a handshake on
-            // another thread is still using it. See _inFlightConnects declaration.
-            // Atomically pair the disposed-state check with entering the in-flight
-            // connection window. A simple `if (_disposed == 0)` followed by an
-            // Interlocked.Increment() leaves a narrow shutdown race: DisposeAsync can
-            // observe zero and dispose _clientCert just before a pre-existing RentAsync
-            // increments the counter and starts using that certificate.
             lock (_lifecycleLock)
             {
                 if (Volatile.Read(ref _disposed) != 0)
@@ -374,7 +319,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             }
             try
             {
-                // Source bind priorita: IPv6 rotace → IPv4 rotace → fixní SourceIp → default
                 if (_ipv6Rotator != null)
                 {
                     var ip = _ipv6Rotator.GetNextRandomIp();
@@ -402,9 +346,7 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                 if (_options.UseAuthentication)
                 {
                     if (_options.AuthMethod == SmtpAuthMethod.Auto)
-                    {
                         await client.AuthenticateAsync(_options.Username, _options.Password, ct).ConfigureAwait(false);
-                    }
                     else
                     {
                         var sasl = AuthMethodHelper.CreateSasl(_options.AuthMethod, _options.Username, _options.Password);
@@ -458,31 +400,6 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             await SafeDisposeAsync(c).ConfigureAwait(false);
         }
 
-        // Do not enumerate/dispose _all here: _all also contains leased clients.
-        // A leased client is owned by a worker until Return/Discard. Removing it
-        // from _leased during shutdown would make the later Return a no-op and
-        // leak the semaphore permit. Once shutdown starts, Return/Discard will
-        // dispose the client and release exactly its original permit.
-        //
-        // The runner normally awaits all workers before disposing the pool, but
-        // keeping this invariant inside the pool makes the class safe against
-        // accidental concurrent shutdown as well.
-
-        // Do not dispose SemaphoreSlim while RentAsync callers may still be
-        // waiting on it. Active renters release their permit through Return /
-        // Discard, at which point a waiter wakes, observes _disposed and exits.
-
-        // _clientCert wraps a native crypto handle (and, without EphemeralKeySet,
-        // could persist private-key material to disk). It is also read by MailKit
-        // during the TLS handshake. Never dispose it while a handshake is still
-        // inside EnsureConnectedAsync: a timeout in this wait would turn a
-        // resource-leak protection into a use-after-dispose race.
-        //
-        // The runner cancels active workers before reaching pool disposal, so a
-        // normal shutdown should release this counter promptly. We deliberately
-        // wait for the in-flight window instead of using a hard timeout: disposing
-        // the certificate is a safety boundary, and it is better for DisposeAsync
-        // to remain pending than to invalidate a certificate still used by TLS.
         while (Volatile.Read(ref _inFlightConnects) > 0)
             await Task.Delay(10).ConfigureAwait(false);
 
