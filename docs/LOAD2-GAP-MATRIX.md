@@ -1,142 +1,99 @@
 # load2 — External mechanism gap matrix
 
-**Authority:** `sirvan0010-alt/load2` / `main`
+**Authority:** `sirvan0010-alt/load2` / `main`  
+**Current baseline:** TRACK A A1–A8 **ALL COMPLETE**.
 
-## 0. Interpretation rule for external repositories
+## 0. Interpretation rule
 
-External repositories are audited by **mechanism**, not by their project label.
+External repositories are audited **by mechanism**, not by project label. A repository named bomber, flooder, scanner, POC, stress tool or similar is not automatically rejected.
 
-A repository named `bomber`, `flooder`, `scanner`, `POC` or similar is **not automatically rejected**. We inspect its actual implementation and ask:
+For each mechanism, distinguish reusable engineering from an abuse-specific execution path. Reusable scheduling, concurrency, pacing, retry, provider health, session lifecycle, diagnostics and observability may be adopted/adapted when they improve authorized load2 testing.
 
-> What concrete mechanism does this code implement, and can that mechanism improve an authorized SMTP/load/security test in `load2`?
+Decision tags:
 
-The audit therefore covers both defensive and offensive implementations: scheduling, concurrency, provider fan-out, repeated delivery, endpoint rotation, retry behavior, failure handling, protocol robustness, diagnostics, DNS/TLS checks and scenario orchestration.
+`HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`
 
-The implementation boundary is the **authorization and scope model**, not the repository's marketing name. `--unauthorized`, DryRun/TestMode, bounded concurrency, pacing, cancellation and explicit target/scope validation remain mandatory control mechanisms.
+`REJECT` applies to the mechanism, not automatically to an entire repository.
 
-### Decision tags
+## 1. TRACK A status
 
-| Tag | Meaning |
+| Area | Current status |
 |---|---|
-| **HAVE** | Capability already exists in `load2`; compare implementations and add tests/hardening only when useful. |
-| **GAP** | Useful capability is missing; candidate for implementation. |
-| **ADOPT** | External mechanism is suitable for direct architectural/function adoption after source audit. |
-| **ADAPT** | Useful mechanism needs to be redesigned for existing `load2` abstractions. |
-| **HARDEN** | Existing `load2` capability should be strengthened using evidence from the external implementation. |
-| **EXTRACT** | Extract an architectural pattern without importing the original code. |
-| **SIMULATE** | Implement a bounded test/failure-injection equivalent rather than an unrestricted action. |
-| **REFERENCE** | Useful for comparison/research; no direct implementation currently justified. |
-| **REJECT** | Reject the mechanism itself when its primary function is theft, credential/token harvesting, CAPTCHA/OTP bypass, stealth/evasion, arbitrary public-target discovery for abuse, or unrestricted destructive DoS/DDoS/flooding. |
+| A1 destination-provider throttling | ✅ FIXED |
+| A2 multi-account throttling regression | ✅ FIXED |
+| A3 bounded scenario queue + metrics | ✅ FIXED |
+| A4 retry policy + budget + RetryMetrics | ✅ FIXED |
+| A5 unified SMTP outcome classification | ✅ FIXED |
+| A6 global concurrency audit | ✅ PASS — no architecture change |
+| A7 RunObservability / RunReport | ✅ FIXED |
+| A8 final baseline/documentation | ✅ COMPLETE |
+| FEAT-022 phase timing | ✅ IMPLEMENTED |
 
-**Important:** `REJECT` applies to a **mechanism**, not automatically to an entire repository. A repository may contain several mechanisms with different decisions.
+See `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` for the authoritative baseline record.
 
----
+## 2. Current capability map
 
-## FEAT-022 — IMPLEMENTED
-
-Phase timing averages on `MailTestResult` (successful messages):
-
-| Field | Meaning |
-|---|---|
-| `AvgPrepWaitMs` | `WaitBeforeSendAsync` (absolute/recipient gates) |
-| `AvgAdaptiveWaitMs` | rate limiter + adaptive acquire |
-| `AvgPoolWaitMs` | `SmtpConnectionPool.RentAsync` |
-| `AvgPaceWaitMs` | `AcquireSendSlotAsync` |
-| `AvgSmtpSendMs` | `SmtpClient.SendAsync` |
-
-Commits: `d0af677` (runner+model) · tests `e8732d6` · `TimingBreakdownTests`
-
----
-
-## Current capability map
-
-| Mechanism | load2 status | Evidence / next action |
+| Mechanism | load2 status | Current evidence / treatment |
 |---|---|---|
-| bounded worker queue | HAVE | `Channel<T>` + fixed worker count; preserve invariant |
-| adaptive concurrency | HAVE | existing adaptive controller; cross-component tests |
-| global actual-SEND pacing | HAVE | `SmartPaceController` + exclusive send gate |
-| per-recipient pacing | HAVE | `WaitBeforeSendAsync` / recipient limiter |
-| SMTP session pool | HAVE | `SmtpConnectionPool` |
-| circuit breaker | HAVE | existing SMTP/network failure protection |
-| proxy endpoint quarantine | HAVE | `ProxyRotator` blocked endpoint handling + tests |
-| delivery ledger / AutoRestart deduplication | HAVE | logical-message delivery ledger |
-| timing breakdown | HAVE | FEAT-022 |
-| SMTP endpoint soft health score | GAP | FEAT-HEALTH |
-| machine-readable JSON run summary | GAP | FEAT-REPORT |
-| RunId + configuration snapshot | GAP | FEAT-RUNID |
-| Verify/Execute plugin separation | GAP | FEAT-VERIFY |
-| provider/transport registry | GAP | audit current SMTP + Direct-MX abstractions first |
-| endpoint canonicalization/deduplication | GAP | extract from provider/node tools |
-| scenario model | GAP | explicit authorized target scope |
-| failure classification | GAP | formalize beyond exception-only retry decisions |
-| replayable run artifacts | GAP | redacted machine-readable artifacts |
-| DNS enrichment (MX/SPF/DKIM/DMARC) | GAP | separate diagnostics layer |
-| TLS evidence enrichment | GAP | separate transport/security diagnostics |
-| failure injection | GAP | SIMULATE in controlled/lab fixtures |
+| bounded worker queue | HAVE | bounded `Channel<T>` + fixed workers |
+| adaptive concurrency | HAVE | bounded by `MaxConcurrency` |
+| actual-SEND pacing | HAVE | `SmartPaceController` / `AcquireSendSlotAsync` |
+| per-recipient pacing | HAVE | existing recipient gate/limiter |
+| destination-provider throttling | HAVE | SmartPace provider windows |
+| SMTP session pool | HAVE | persistent `SmtpConnectionPool` |
+| multi-account SMTP pools | HAVE | `SmtpAccountRegistry` / `SmtpAccountPoolHub` |
+| endpoint health/quarantine | HAVE | `TransportHealthRegistry` |
+| delivery ledger / AutoRestart | HAVE | `DeliveryLedger` |
+| connection churn | HAVE | bounded scenario runner |
+| scenario model / target sets | HAVE | `TargetSet` + `ScenarioLimits` |
+| retry policy + retry budget | HAVE | `RetryPolicy` + `RetryMetrics` |
+| unified SMTP outcome classification | HAVE | `SmtpOutcomeClassifier` + `OutcomeCounts` |
+| queue metrics | HAVE | `ScenarioQueueMetrics` |
+| run report | HAVE | `RunReportBuilder` |
+| run observability projection | HAVE | `RunObservability` |
+| FEAT-022 timing breakdown | HAVE | phase timing fields on result/report |
+| DNS/MX/SPF/DMARC diagnostics | HAVE | read-only diagnostics layer where implemented |
+| SMTP/TLS diagnostics | HAVE | `TransportDiagnostics` |
+| provider/transport registry | PARTIAL / POST-BASELINE | evaluate external candidates against existing abstractions before extending |
+| endpoint canonicalization/deduplication | POST-BASELINE | only add if source-level gap is proven |
+| replayable run artifacts | POST-BASELINE | extend only with concrete product requirement |
+| failure injection | POST-BASELINE | controlled/lab scenarios only |
+| GUI summary binding | POST-BASELINE | use `RunObservability.FromReport` |
+| live NET-AUDIT-001 | POST-BASELINE | authorized endpoints/fixtures only |
 
----
+## 3. External audit
 
-## Remaining backlog
+The retained external repositories are handled independently from TRACK A. Their useful mechanisms are recorded in `docs/external-repos/*.md` and summarized in `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`.
 
-| Prio | ID | Work |
-|---|---|---|
-| 2 | FEAT-HEALTH | Soft SMTP endpoint health score |
-| 3 | FEAT-REPORT | JSON run summary |
-| 4 | FEAT-RUNID | RunId + config snapshot |
-| 5 | FEAT-VERIFY | Plugin `VerifyAsync` |
-| — | NET-AUDIT-001 | Live network/TLS matrix when fixtures exist |
-| — | EXT-AUDIT-001 | Source-level audit of every retained external repository |
+Audit method:
 
-### EXT-AUDIT-001 is mandatory
+```text
+source audit
+  → mechanism inventory
+  → load2 comparison
+  → decision tag
+  → focused implementation only when justified
+  → tests
+  → CI / CodeQL
+  → documentation sync
+```
 
-For every retained external repository, the deep-dive must identify, where the source supports it:
+README-only claims are not implementation evidence. Unknowns remain explicitly unknown.
 
-- exact entry point(s);
-- relevant file path(s), class/function/method/symbol;
-- inputs and configuration;
-- network/protocol behavior;
-- concurrency and queue model;
-- provider/endpoint selection;
-- rate limiting and retry behavior;
-- timeout and cancellation behavior;
-- payload/message generation;
-- target handling;
-- logging/reporting/persistence;
-- dependencies and runtime assumptions;
-- useful mechanism(s) and exact `load2` mapping;
-- decision tag and reason;
-- tests required before adoption.
+## 4. Authorized stress-testing boundary
 
-A README-only review is **not** a source-level audit. If source cannot be inspected, the item remains explicitly marked `AUDIT PENDING` rather than being presented as proven.
+The framework may implement controlled SMTP/application stress mechanisms such as repeated-send scenarios, rate/concurrency tests, connection churn, retry/failure stress and multi-target scenarios when targets and scope are explicitly authorized and existing controls remain intact.
 
----
+Network transport stress may be represented through bounded lab/authorized scenarios. A distributed authorized test is not automatically equivalent to an attack.
 
-## Safety / authorization boundary
+Do not import credential/token theft, CAPTCHA/OTP bypass, stealth/evasion for abuse, arbitrary public-target discovery for flooding, provider-abuse bypass, reflection/amplification or unrestricted destructive DoS/DDoS launchers.
 
-The project is an authorized testing framework. It may implement controlled equivalents of offensive testing mechanics when they are useful for testing owned, lab or explicitly authorized targets.
+## 5. Rules for future work
 
-Examples of mechanisms that may be investigated/adapted in controlled form:
-
-- repeated-send test scenarios with explicit limits;
-- high-concurrency scheduler stress;
-- provider failover and endpoint quarantine;
-- multi-provider/transport orchestration inside explicit scope;
-- bounded retry-storm simulation;
-- malformed-message/protocol robustness tests on controlled infrastructure;
-- SMTP/TLS failure injection;
-- DNS misconfiguration tests on controlled domains;
-- open-relay verification on explicitly authorized servers;
-- rate-limit detection and reporting;
-- cancellation/recovery stress;
-- deterministic scenario replay.
-
-The following mechanisms remain **REJECT** regardless of which external repository contains them:
-
-- credential/token theft or harvesting;
-- CAPTCHA/OTP bypass;
-- stealth/evasion whose purpose is concealing abuse;
-- arbitrary public-target discovery for flooding/abuse;
-- unrestricted destructive DoS/DDoS launchers;
-- mechanisms whose primary purpose is defeating provider abuse controls.
-
-This distinction must be preserved in all future AI instructions and documentation: **do not reject an entire repository because it is offensive; audit and classify its individual mechanisms.**
+- Do not reopen A1–A8 as unfinished without concrete regression evidence.
+- Do not add a second pacing/limiting stack when the existing `SmartPaceController` covers the contract.
+- Do not add a second queue when the bounded scenario `Channel` covers the contract.
+- Retry paths must use the existing pacing/concurrency controls.
+- Keep `MailTestResult` as the source of truth and `RunReport`/`RunObservability` as projections.
+- Preserve cancellation, hard limits, DryRun/TestMode and `--unauthorized` behavior.
+- Never introduce secrets into source, logs or reports.
