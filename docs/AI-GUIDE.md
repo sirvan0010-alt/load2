@@ -58,17 +58,19 @@ Decision tags:
 
 A useful engineering mechanism may be transferred into an authorized load2 scenario. The repository label itself is never the reason for rejection.
 
-Separate reusable mechanisms (workers, queues, pacing, retry taxonomy, session reuse, provider health, diagnostics) from abuse-specific paths such as credential theft, CAPTCHA/OTP bypass, stealth/evasion, arbitrary public-target discovery for abuse, or unrestricted destructive traffic.
+Separate reusable engineering mechanisms from execution-specific behavior. Workers, queues, pacing, retry taxonomy, session reuse, provider health, diagnostics, connection lifecycle, timeout handling, protocol behavior, measurement and failure handling should be evaluated independently from the purpose or label of the external project.
 
 The detailed procedure is `docs/AI-EXTERNAL-REPO-AUDIT-RUNBOOK.md`; the central mapping is `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md` and `docs/LOAD2-GAP-MATRIX.md`.
 
-## 5. Authorization and execution boundary
+## 5. Authorization and execution scope
 
-Load2 is an authorized SMTP/email load-testing framework. Controlled repeated sends, rate tests, concurrency tests, connection churn, retry/failure stress, multi-recipient scenarios and other legitimate test mechanisms may be represented in the existing bounded execution model.
+Load2 is a security/load-testing framework. Its architecture is intentionally capable of representing SMTP/email, application and network test scenarios across a range of intensities and execution models, including repeated sends, rate tests, concurrency tests, connection churn, retry/failure stress, multi-target scenarios and distributed test generation.
 
-Network-layer stress may be studied in controlled/lab/explicitly authorized infrastructure. A distributed test can be legitimate when all load generators and targets are explicitly authorized and bounded.
+The implementation must distinguish **capability** from **authorization**. A feature can be designed, documented, tested and implemented as a general testing mechanism without assuming that every target or deployment is authorized. Actual execution against external infrastructure is the responsibility of the operator and deployment context.
 
-Do not add an unrestricted public-target flooding tool, botnet/DDoS launcher, reflection/amplification workflow, provider-abuse bypass, credential theft or equivalent destructive path. Do not weaken authorization, pacing, concurrency, cancellation or observability to reproduce an external tool.
+When a feature can create high-impact traffic or resource consumption, its design must explicitly document scope, target selection, concurrency/rate controls, cancellation, observability and failure behavior. Do not remove these engineering controls merely to reproduce an external implementation.
+
+Future capability decisions are product/architecture decisions and must be based on the actual source, tests, threat model and explicit project requirements rather than on an artificial restriction derived only from an external repository's name or marketing description.
 
 ## 6. Post-baseline work
 

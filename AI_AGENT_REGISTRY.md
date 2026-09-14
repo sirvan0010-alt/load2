@@ -129,7 +129,68 @@ Owns human-readable operation (GUI + CLI).
 - Configuration clarity (target, credentials, rate limits, scenario).
 - Export and summary formats that do not require deep protocol knowledge.
 
-### 13. Existing verification gates (retained)
+### 13. `RESEARCH_AGENT`
+Owns source-backed technical research before implementation.
+- Inspect external repositories at source level, not README-only.
+- Pin exact revisions and record entry points, dependencies and concrete mechanisms.
+- Classify mechanisms `ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`.
+- Never treat external research as authoritative over load2 `main`.
+
+### 14. `NETWORK_STRESS_AGENT`
+Owns bounded network/application stress design for authorized laboratory use.
+- Separate connection-rate from concurrency.
+- Analyze timeout, partial-I/O, lifecycle and cleanup behavior.
+- Preserve explicit duration, connection-count, rate and authorization limits.
+- May study stress-test projects as research inputs, but must not create an unrestricted public-target DoS/DDoS path.
+
+### 15. `INTEGRATION_AGENT`
+Owns cross-layer integration and handoffs.
+- Verify TargetSet → Channel → workers → pacing → SMTP pool → `AcquireSendSlotAsync` → outcome → ledger/report mapping.
+- Detect duplicate queues, pacing, retry, metrics or observability systems.
+- Reject changes that bypass cancellation, authorization or hard limits.
+
+### 16. `RELEASE_AGENT`
+Owns release-readiness after implementation and verification.
+- Verify CI, CodeQL, dependency/action hygiene, packaging and documentation.
+- Verify no credentials or build artifacts are committed.
+- Never infer production readiness from green CI alone.
+
+### 17. `IMPLEMENTATION_AGENT`
+Owns conversion of an approved, evidence-backed task into the smallest repository change.
+- Implement only an explicit acceptance contract.
+- Reuse existing pacing, queue, retry, metrics and reporting components.
+- Keep patches focused and reversible.
+- Add focused tests with implementation changes.
+- Never implement a hypothesis as a fact.
+
+### 18. `BUG_TRIAGE_AGENT`
+Owns defect decomposition and blocker identification.
+- Separate symptom, root cause, contributing factor and missing test coverage.
+- Define the smallest useful fix boundary.
+- Return `BLOCKED` or `NEEDS-EVIDENCE` when reproduction is insufficient.
+
+### 19. `REFACTOR_AGENT`
+Owns safe structural improvement without changing intended behavior.
+- Detect duplicated pacing, queue, retry, telemetry and lifecycle logic.
+- Prefer extraction behind existing interfaces.
+- Require characterization/regression tests for risky movement.
+- Preserve error semantics, cancellation and observability.
+
+### 20. `DOCUMENTATION_AGENT`
+Owns synchronization between implementation, evidence and documentation.
+- Update docs only from current source/test/CI evidence.
+- Preserve provenance and evidence states.
+- Remove stale claims when implementation changes.
+- Never upgrade evidence merely because documentation changed.
+
+### 21. `REVIEW_AGENT`
+Owns adversarial pre-merge review.
+- Check architecture boundaries and unintended duplicate systems.
+- Look for missing cancellation, cleanup, error propagation and observability.
+- Check evidence claims against actual tests and pinned sources.
+- Produce actionable findings rather than superficial approval.
+
+### 22. Existing verification gates (retained)
 - Build / CI
 - CodeQL Security
 - Dependency / Actions Hygiene
@@ -145,17 +206,23 @@ USER REQUEST / SCHEDULED IMPROVEMENT SCAN
     ↓
 ORCHESTRATOR
     ↓
-┌──────────────── specialist analysis ────────────────┐
-│ SMTP_PROTOCOL │ LOAD_ENGINE │ NETWORK │ METRICS │   │
-│ SCENARIO      │ EVIDENCE    │ SECURITY│ FEATURE │   │
-│ EFFICIENCY    │ TEST        │ UX                    │
-└───────────────────────┬─────────────────────────────┘
-                        ↓
-                   evidence + CI
-                        ↓
-                   ORCHESTRATOR
-                        ↓
-            next blocker / proposal issue
+RESEARCH / BUG_TRIAGE / FEATURE_ARCHITECT
+    ↓
+IMPLEMENTATION / REFACTOR / domain specialists
+    ↓
+INTEGRATION
+    ↓
+SECURITY + EVIDENCE + REVIEW
+    ↓
+TEST
+    ↓
+CI + CodeQL + Architecture + Actions/Dependency
+    ↓
+DOCUMENTATION
+    ↓
+RELEASE
+    ↓
+ORCHESTRATOR → next blocker / verified result
 ```
 
 ## Feature proposal loop
@@ -163,19 +230,21 @@ ORCHESTRATOR
 ```text
 OBSERVE operator/developer problem or opportunity
         ↓
-FEATURE_ARCHITECT proposes (10-point format)
+FEATURE_ARCHITECT proposes
         ↓
-SECURITY_AGENT (authorization + safety) review
+SECURITY_AGENT + EVIDENCE_AGENT review
         ↓
-EVIDENCE_AGENT checks factual basis
+Domain feasibility review
         ↓
-SMTP_PROTOCOL / LOAD_ENGINE / NETWORK / METRICS feasibility
+ORCHESTRATOR approves implementation task
         ↓
-TEST_AGENT defines verification
+IMPLEMENTATION_AGENT / REFACTOR_AGENT
         ↓
-ORCHESTRATOR decides next step
+INTEGRATION + REVIEW + TEST
         ↓
-(optional) GitHub issue via feature-architect workflow
+CI / CodeQL / release gates
+        ↓
+DOCUMENTATION_AGENT
 ```
 
 ## Priority model
