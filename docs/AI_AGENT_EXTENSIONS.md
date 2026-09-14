@@ -47,6 +47,54 @@ Owns release-readiness after implementation and verification.
 - Verify no credentials, build artifacts or generated binaries are committed.
 - Produce a concise release evidence summary; never infer production readiness from green CI alone.
 
+### 18. `IMPLEMENTATION_AGENT`
+Owns conversion of an approved, evidence-backed task into the smallest repository change.
+
+- Implement only a task that has an explicit acceptance contract.
+- Reuse existing pacing, queue, retry, metrics and reporting components rather than creating parallel systems.
+- Keep the patch focused and reversible.
+- Add or update focused tests with the implementation.
+- Never implement a research hypothesis as a fact.
+- Never bypass authorization, cancellation, hard limits or existing safety gates.
+
+`IMPLEMENTATION_AGENT` may prepare code changes, but it does not decide whether a proposal is safe, evidenced or release-ready.
+
+### 19. `BUG_TRIAGE_AGENT`
+Owns defect decomposition and blocker identification.
+
+- Reproduce or model the reported failure from repository evidence.
+- Separate symptom, root cause, contributing factor and missing test coverage.
+- Assign severity and the smallest useful fix boundary.
+- Link the defect to existing architecture and lifecycle invariants.
+- Return `BLOCKED` or `NEEDS-EVIDENCE` when reproduction/evidence is insufficient.
+
+### 20. `REFACTOR_AGENT`
+Owns safe structural improvement without changing externally intended behavior.
+
+- Detect duplicated pacing, queue, retry, telemetry and lifecycle logic.
+- Prefer extraction behind existing interfaces over parallel abstractions.
+- Require characterization/regression tests before risky movement.
+- Measure or document any expected runtime/build benefit.
+- Preserve error semantics, cancellation and observability.
+
+### 21. `DOCUMENTATION_AGENT`
+Owns synchronization between implementation, evidence and operator documentation.
+
+- Update docs only from current source/test/CI evidence.
+- Preserve provenance and distinguish `SOURCE`, `TESTED`, `CI_VERIFIED`, `LOAD_VERIFIED` and `PRODUCTION_OBSERVED` claims.
+- Remove stale claims when implementation changes.
+- Keep research conclusions separate from adopted implementation behavior.
+- Never upgrade an evidence state merely because documentation was updated.
+
+### 22. `REVIEW_AGENT`
+Owns adversarial pre-merge review of proposed changes.
+
+- Check architecture boundaries and unintended duplicate systems.
+- Look for missing cancellation, cleanup, error propagation and observability.
+- Check evidence claims against actual tests and pinned sources.
+- Check security/authorization assumptions.
+- Produce actionable findings, not a superficial approval.
+
 ## Collaboration contract
 
 ```text
@@ -54,26 +102,52 @@ USER / ISSUE / SCHEDULE
         ↓
 ORCHESTRATOR
         ↓
-RESEARCH_AGENT (when external evidence is relevant)
+RESEARCH_AGENT / BUG_TRIAGE_AGENT
         ↓
 FEATURE_ARCHITECT / domain specialists
         ↓
-NETWORK_STRESS / SMTP_PROTOCOL / LOAD_ENGINE / NETWORK / METRICS / SCENARIO
+IMPLEMENTATION_AGENT / REFACTOR_AGENT
         ↓
 INTEGRATION_AGENT
         ↓
-SECURITY_AGENT + EVIDENCE_AGENT
+SECURITY_AGENT + EVIDENCE_AGENT + REVIEW_AGENT
         ↓
 TEST_AGENT
         ↓
 CI + CodeQL + Architecture + Actions/Dependency + Release gates
+        ↓
+DOCUMENTATION_AGENT
         ↓
 RELEASE_AGENT
         ↓
 ORCHESTRATOR → next blocker / verified result
 ```
 
-### Conflict resolution
+## Collaboration artifact contract
+
+Each implementation task should be representable as a deterministic handoff containing:
+
+- task id and requested outcome;
+- owner and specialist roles;
+- current source-of-truth revision;
+- problem statement;
+- evidence and provenance;
+- acceptance criteria;
+- files/components in scope;
+- forbidden boundaries / safety constraints;
+- focused test plan;
+- required gates;
+- resulting status and next blocker.
+
+The repository workflow may generate these artifacts automatically. Such artifacts are **agent coordination contracts**, not proof that an LLM performed the work.
+
+## Important distinction: workflow agents vs AI agents
+
+GitHub Actions can enforce the contract, run deterministic analysis, generate handoffs and execute tests. They do not become an autonomous reasoning model merely because a job is named `AGENT`.
+
+A future LLM runner can consume the handoff artifact and return a patch/proposal artifact. Until a model provider and explicit credentials are configured, the workflow must remain deterministic and must not pretend that a model reviewed or implemented code.
+
+## Conflict resolution
 
 1. Current `main` source and tests beat documentation.
 2. Current source/test evidence beats historical audit text.
