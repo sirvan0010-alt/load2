@@ -1,148 +1,92 @@
 # load2 — AI Guide (single entry point)
 
-**Read this first.** Other docs are references, not parallel instruction sets.
+**Read this first.** Other documents are references, not parallel instruction sets.
 
-**MASTER CARD:** GitHub Issue **#4 — MASTER CARD — load2 plan, SMTP limits & sender reputation runbook** is the persistent working card for the current plan and operational reference. It is not above source authority: implementation status is always determined by `main` source + tests + green CI.
+**MASTER CARD:** GitHub Issue **#4 — MASTER CARD — load2 plan, SMTP limits & sender reputation runbook**.
 
-**SOURCE OF TRUTH:** `sirvan0010-alt/load2` branch **`main`** — **source code + tests** win over any document.
+**SOURCE OF TRUTH:** `sirvan0010-alt/load2`, branch **`main`**. Source code + tests take precedence over every document, including this guide and the Master Card.
 
+```text
+README → docs/AI-GUIDE.md → MASTER CARD (#4) → source + tests → detail docs
 ```
-README → docs/AI-GUIDE.md → MASTER CARD (#4) → source + tests → detail docs if needed
-```
 
-## 1. What load2 is
+## 1. Current baseline
 
-Authorized **SMTP / email load-testing** framework. User supplies target(s) and scenario parameters. Core engine already includes:
+`TRACK A` is **CLOSED**. `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` record **A1 → A8 ALL COMPLETE**.
 
-- bounded workers, pacing (`AcquireSendSlotAsync`), adaptive concurrency, circuit breaker
-- SMTP pool + health, proxy ban, IPv4/IPv6 rotation, DeliveryLedger / AutoRestart
-- DryRun / TestMode / `--unauthorized`, PathSecurity, AUTH log redaction
-- plugins (`IMailPayloadPlugin`), GUI, dashboard, FEAT-022 phase timings
+| ID | Status |
+|---|---|
+| A1 destination-provider throttling | ✅ FIXED |
+| A2 multi-account throttling regression | ✅ FIXED |
+| A3 bounded scenario queue + metrics | ✅ FIXED |
+| A4 retry policy + budget + RetryMetrics | ✅ FIXED |
+| A5 unified SMTP outcome classification | ✅ FIXED |
+| A6 global concurrency audit | ✅ PASS — no architecture change |
+| A7 RunObservability / RunReport projection | ✅ FIXED |
+| A8 final baseline + documentation sync | ✅ COMPLETE |
 
-The project may investigate mechanisms originating in spam, bomber, flood, DoS, DDoS, scanner, or stress tooling. The origin/name of a mechanism does **not** decide whether it is useful. The implementation and the intended execution path must be inspected first.
+Do **not** reopen A4–A8 because of stale historical notes. A new regression requires concrete source/test/CI evidence and a separate post-baseline item.
 
-## 2. Dual work tracks (do not confuse)
+## 2. Engine invariants
 
-| Track | Purpose | Status |
-|-------|---------|--------|
-| **A–F External audit** | Source-level audit of external repos → mechanism inventory → ADOPT/… → optional implementation | Ongoing (`docs/external-repos/`, EXT-AUDIT) |
-| **Engine backlog** | Harden/extend current Core from gap matrix and implementation backlog | Parallel, ordered by current backlog / MASTER CARD |
-
-The **MASTER CARD (#4)** records the active execution order and operational reference. It must be kept synchronized when the implementation plan or verified status changes.
-
-**Spam/Stress scenario modules are not implemented yet** unless source + tests prove otherwise. Do not claim they exist in code.
+- One pacing system: `SmartPaceController`.
+- Bounded `Channel` + bounded workers governed by `MaxConcurrency`.
+- `AcquireSendSlotAsync` gates every real SEND, including retries.
+- `DeliveryLedger` keeps `Accepted` terminal across AutoRestart.
+- `RetryPolicy` uses the unified `SmtpOutcomeClassifier` and global retry budget.
+- One outcome taxonomy feeds retry, health, counters and reporting.
+- `MailTestResult` is the source of truth; `RunReport` and `RunObservability` are projections.
+- Persistent SMTP sessions remain the normal transport model.
+- `CancellationToken`, DryRun/TestMode, `--unauthorized`, hard limits and secret redaction remain mandatory.
 
 ## 3. How to continue work
 
-1. `git pull` `main`; read this file and the MASTER CARD (#4).
-2. Prefer **tests + source** over historical audit markdown (many `AUDIT-*.md` at repo root are archival).
-3. If docs conflict with code → **fix code/tests**, mark doc discrepancy.
-4. **Do not reconstruct project history** from multiple guides.
-5. Never invent PASS/FIXED without commit SHA + green CI URL.
-6. Small PRs: one mechanism or one fix → tests → CI.
-7. After a verified plan/status change, update the MASTER CARD and any index document that points to it.
+1. Inspect current `main` before changing anything.
+2. Prefer source + tests + current CI over historical audit documents.
+3. Do not invent a feature or status without evidence.
+4. Do not duplicate existing retry/histogram/observability work.
+5. Make the smallest compatible change, add focused tests, then verify CI/CodeQL when applicable.
+6. Synchronize documentation after verified implementation changes.
 
-## 4. External-repo audit (phases A–F)
+## 4. External-repository audit
 
-Operational detail: `docs/AI-EXTERNAL-REPO-AUDIT-RUNBOOK.md` (reference). Summary:
+External repositories are audited **mechanism-by-mechanism**, regardless of whether their names describe bombers, flooders, scanners, stress tools or other aggressive tooling.
 
-**A** Inventory · **B** Source-level symbol map · **C** Study mechanisms including aggressive ones · **D** Transfer only if load2 needs them · **E** Write `docs/external-repos/<name>.md` · **F** Update gap matrix / backlog.
-
-Per mechanism decision:
+Decision tags:
 
 `ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`
 
-Separate **mechanism** (workers, pacing, retry taxonomy, session reuse…) from an **abuse path** (credential theft, CAPTCHA/OTP bypass, stealth/evasion, automated discovery of unrelated third-party infrastructure for mass abuse, or unrestricted destructive attack behavior). A useful mechanism can still be implemented when it is placed behind load2's explicit target/scope, authorization, pacing, concurrency, cancellation and observability controls.
+A useful engineering mechanism may be transferred into an authorized load2 scenario. The repository label itself is never the reason for rejection.
 
-Already source-audited examples: `Beast_Bomber.md`, `Bombers.md`.
+Separate reusable mechanisms (workers, queues, pacing, retry taxonomy, session reuse, provider health, diagnostics) from abuse-specific paths such as credential theft, CAPTCHA/OTP bypass, stealth/evasion, arbitrary public-target discovery for abuse, or unrestricted destructive traffic.
 
-## 5. Authorization / execution boundaries (always)
+The detailed procedure is `docs/AI-EXTERNAL-REPO-AUDIT-RUNBOOK.md`; the central mapping is `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md` and `docs/LOAD2-GAP-MATRIX.md`.
 
-- Explicit user target + scenario
-- `--unauthorized` / DryRun / TestMode as implemented
-- Bounded concurrency, actual-SEND pacing, cancellation, ledger
-- Do not weaken these controls merely to reproduce an external tool's behavior
+## 5. Authorization and execution boundary
 
-### Stress test versus distributed attack
+Load2 is an authorized SMTP/email load-testing framework. Controlled repeated sends, rate tests, concurrency tests, connection churn, retry/failure stress, multi-recipient scenarios and other legitimate test mechanisms may be represented in the existing bounded execution model.
 
-The project must distinguish the **test objective** from the **attack form**:
+Network-layer stress may be studied in controlled/lab/explicitly authorized infrastructure. A distributed test can be legitimate when all load generators and targets are explicitly authorized and bounded.
 
-- **SMTP/application-layer load test:** repeated sends, rate tests, concurrency tests, connection churn, retry/failure stress, multi-recipient scenarios, and similar mechanisms may be implemented as explicit load2 scenarios when the target and scope are authorized and the existing execution controls remain in force.
-- **Network transport stress test:** controlled testing of network transport capacity/behavior may be studied and, where technically relevant, represented through bounded lab/authorized scenarios. This is not the same thing as implementing a packet-flooding or reflection/amplification tool.
-- **Distributed attack:** a real distributed attack against arbitrary third-party systems is not a load2 feature. Do not add an unrestricted DDoS launcher, botnet/orchestrator, reflection/amplification workflow, or equivalent public-target attack path.
+Do not add an unrestricted public-target flooding tool, botnet/DDoS launcher, reflection/amplification workflow, provider-abuse bypass, credential theft or equivalent destructive path. Do not weaken authorization, pacing, concurrency, cancellation or observability to reproduce an external tool.
 
-The distinction is important: **DDoS is a distribution/attack model, not a synonym for every high-concurrency load test.** A controlled distributed test can be represented as multiple authorized load generators feeding a bounded scenario, with explicit scope, limits, cancellation and observability.
+## 6. Post-baseline work
 
-## 6. Current backlog
+TRACK A is closed. New work is post-baseline and must not be presented as unfinished TRACK A work.
 
-The following status is synchronized with the current `main` state and the verified work performed so far. Where a feature has partial implementation but does not yet satisfy the full Definition of Done, it is explicitly marked **IN PROGRESS** rather than FIXED.
+Current optional directions:
 
-```text
-A1 destination-provider throttling                 ✅ VERIFIED / FIXED
-A2 multi-account throttling regression + metrics   ✅ VERIFIED / FIXED
-A3 bounded scenario queue + queue metrics          ✅ IMPLEMENTED / VERIFIED
-A4 retry / requeue + hard limits + retry metrics   🔄 IN PROGRESS
-A5 unified SMTP response classification             ⏳ NOT COMPLETE
-A6 global concurrency audit                         ⏳ CONDITIONAL
-A7 final observability / report / GUI reconciliation ⏳ NOT COMPLETE
-A8 final verification / documentation / baseline    ⏳ NOT COMPLETE
-```
+1. GUI summary panel backed by `RunObservability.FromReport`.
+2. `NET-AUDIT-001` against explicitly authorized test endpoints.
+3. External-repository ADOPT/ADAPT candidates, independently of TRACK A.
+4. Release packaging/versioning as a product decision.
 
-### Current A4 note
+## 7. Evidence rule
 
-Retry-related implementation and tests are already present on `main`, including retry-path coverage, cancellation/retry handling, retry pacing stress coverage, and retry metrics/budget work. The retry histogram is also being implemented/validated separately on `main` and must not be duplicated. A4 remains **IN PROGRESS** until the complete A4 contract is verified and CI is green for the final state.
+A status of `FIXED`, `PASS`, `COMPLETE` or `VERIFIED` requires corresponding source/test/CI evidence. Historical audit files may document what happened, but they are not current TODO lists unless explicitly marked as such.
 
-Relevant recent commits include:
+The final TRACK A baseline currently recorded by `docs/A8-BASELINE.md` is the authoritative completion record for A1–A8.
 
-- `71b41f5` — retry metrics and budget calculation
-- `78bf3a2` — cancellation and retry pacing stress coverage
-- `30d6dbc` — cancellation during retry / AutoRestart guard
-- `764d3d9` — cancelled outcome propagation during worker abort
-- `09f31cf` — transient retry through the send path
-- `5e0689f` — latency histogram aggregation across AutoRestart
-- `f2108f8` — latency histogram merge-test correction
+## 8. Deprecated guide
 
-Do not treat individual retry or histogram commits as proof that all of A4 is complete. Verify the source, tests and CI together.
-
-### Next execution order
-
-```text
-A4 complete verification / remaining retry-requeue gaps
-    ↓
-A5 unified SMTP response classification
-    ↓
-A6 concurrency audit only if a real overshoot is proven
-    ↓
-A7 report / GUI / dashboard reconciliation
-    ↓
-A8 final verification + documentation + baseline
-```
-
-Do not start a second limiter, second queue, AIMD/adaptive-rate system, reputation runtime service, per-IP/subnet quota or other parallel pacing stack unless source-level evidence proves an actual gap requiring it.
-
-EXT-AUDIT remains a parallel track and must not be mixed into unrelated engine changes.
-
-## 7. Definition of Done
-
-- Code on `main`
-- Tests covering the contract
-- Green CI (and CodeQL when it runs)
-- Doc status matches **source**, not chat memory
-- MASTER CARD reflects the verified plan/status
-- No secrets introduced into source or reports
-- Existing authorization, DryRun/TestMode, `--unauthorized`, cancellation, hard limits and pacing remain intact
-
-## 8. Detail index (optional reading)
-
-| Doc | Role |
-|-----|------|
-| **GitHub Issue #4 — MASTER CARD** | Persistent active plan + SMTP limits + sender-reputation operational reference |
-| `docs/AI-EXTERNAL-REPO-AUDIT-RUNBOOK.md` | Full audit procedure |
-| `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md` | Repo table + transfer posture |
-| `docs/LOAD2-GAP-MATRIX.md` | Mechanism vs load2 |
-| `docs/external-repos/*.md` | Per-repo source audits |
-| `FEATURE-BACKLOG.md` | Feature proposals |
-| `PLAN.md` / `VERIFICATION.md` | High-level status (may lag; verify CI) |
-| Root `AUDIT-*.md` | Historical; do not treat as current TODO |
-
-Older: `docs/AI-PROJECT-GUIDE.md` → superseded by this file (kept as pointer only).
+`docs/AI-PROJECT-GUIDE.md` is a compatibility pointer only. Do not maintain parallel instructions there.
