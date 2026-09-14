@@ -10,7 +10,7 @@ public sealed class AiAgentRunnerTests
         var policy = new RecordingAuthorizationPolicy(false);
         var verifier = new AcceptingVerifier();
         var agent = new RecordingAgent();
-        var runner = new AiAgentRunner(policy, verifier);
+        var runner = CreateRunner(policy, verifier);
 
         var result = await runner.RunAsync(CreateTask(realTargetRequired: true, authorized: false), agent);
 
@@ -20,11 +20,28 @@ public sealed class AiAgentRunnerTests
     }
 
     [Fact]
+    public async Task RejectsExecutionWhenWorkspaceIntegrityFails()
+    {
+        var agent = new RecordingAgent();
+        var gate = new RecordingWorkspaceGate(false);
+        var runner = new AiAgentRunner(
+            new RecordingAuthorizationPolicy(true),
+            new AcceptingVerifier(),
+            gate);
+
+        var result = await runner.RunAsync(CreateTask(), agent);
+
+        Assert.Equal(AgentRunStatus.Blocked, result.Status);
+        Assert.Equal(0, agent.Calls);
+        Assert.Equal(1, gate.Calls);
+    }
+
+    [Fact]
     public async Task DoesNotAcceptAgentResultWithoutIndependentVerification()
     {
         var verifier = new RejectFirstThenAcceptVerifier();
         var agent = new RecordingAgent();
-        var runner = new AiAgentRunner(new RecordingAuthorizationPolicy(true), verifier);
+        var runner = CreateRunner(new RecordingAuthorizationPolicy(true), verifier);
 
         var result = await runner.RunAsync(CreateTask(maxIterations: 2), agent);
 
@@ -38,7 +55,7 @@ public sealed class AiAgentRunnerTests
     {
         var verifier = new RejectingVerifier();
         var agent = new RecordingAgent();
-        var runner = new AiAgentRunner(new RecordingAuthorizationPolicy(true), verifier);
+        var runner = CreateRunner(new RecordingAuthorizationPolicy(true), verifier);
 
         var result = await runner.RunAsync(CreateTask(maxIterations: 3), agent);
 
@@ -48,17 +65,39 @@ public sealed class AiAgentRunnerTests
     }
 
     [Fact]
+    public async Task PropagatesCancellationToWorkspaceGate()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var gate = new RecordingWorkspaceGate(true);
+        var runner = new AiAgentRunner(
+            new RecordingAuthorizationPolicy(true),
+            new AcceptingVerifier(),
+            gate);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            runner.RunAsync(CreateTask(), new RecordingAgent(), cts.Token));
+
+        Assert.Equal(0, gate.Calls);
+    }
+
+    [Fact]
     public async Task PropagatesCancellationToAgent()
     {
         using var cts = new CancellationTokenSource();
         var policy = new RecordingAuthorizationPolicy(true);
         var verifier = new AcceptingVerifier();
         var agent = new CancellingAgent(cts);
-        var runner = new AiAgentRunner(policy, verifier);
+        var runner = CreateRunner(policy, verifier);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             runner.RunAsync(CreateTask(), agent, cts.Token));
     }
+
+    private static AiAgentRunner CreateRunner(
+        IAiAgentAuthorizationPolicy policy,
+        IAiAgentResultVerifier verifier)
+        => new(policy, verifier, new RecordingWorkspaceGate(true));
 
     private static AiAgentTask CreateTask(
         bool realTargetRequired = false,
@@ -73,7 +112,31 @@ public sealed class AiAgentRunnerTests
             realTargetRequired,
             authorized,
             TimeSpan.FromSeconds(10),
-            maxIterations);
+            maxIterations,
+            "/tmp/load2-agent-test");
+
+    private sealed class RecordingWorkspaceGate(bool allowed) : IAiAgentWorkspaceIntegrityGate
+    {
+        public int Calls { get; private set; }
+
+        public Task<WorkspaceIntegrityResult> VerifyAsync(
+            string workspacePath,
+            string expectedCommit,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new WorkspaceIntegrityResult(
+                allowed ? WorkspaceIntegrityStatus.Verified : WorkspaceIntegrityStatus.Blocked,
+                workspacePath,
+                workspacePath,
+                expectedCommit,
+                allowed ? expectedCommit : string.Empty,
+                allowed,
+                allowed,
+                allowed ? "verified" : "rejected"));
+        }
+    }
 
     private sealed class RecordingAuthorizationPolicy(bool allowed) : IAiAgentAuthorizationPolicy
     {
