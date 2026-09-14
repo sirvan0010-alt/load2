@@ -44,7 +44,8 @@ public sealed class AiAgentModelAdapterTests
         false,
         false,
         TimeSpan.FromMinutes(1),
-        1);
+        1,
+        Path.GetFullPath(Path.GetTempPath()));
 
     private sealed class RecordingAdapter : IAiAgentModelAdapter
     {
