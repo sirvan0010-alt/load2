@@ -82,6 +82,8 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 
 `AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `GitWorkspaceIntegrityGate` verifies that an execution workspace is a real, clean Git worktree at the exact immutable SHA without mutating it. `IsolatedGitWorkspaceFactory` creates a separate local clone from an already verified source workspace, checks out the exact SHA in detached mode, and independently re-verifies the resulting workspace.
 
+`MiniSweAgentRuntime` now propagates an explicit configuration path and model selection into the provider-neutral launch contract. `MiniSweAgentDockerConfiguration` provides a fail-closed environment-based image configuration; it does not read or forward credentials. `DockerMiniSweAgentSandbox` is the concrete execution boundary.
+
 ## Phase 1 status
 
 ```text
@@ -90,7 +92,7 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 1.3 Sandbox Boundary               IMPLEMENTED + UNIT TESTS
 ```
 
-Phase 1.3 now has an explicit Docker-backed execution boundary. It uses a dedicated container, a bind-mounted isolated workspace, a read-only container root filesystem, dropped Linux capabilities, `no-new-privileges`, PID/CPU/memory limits, a no-exec temporary filesystem and `--network none`. The Docker daemon/host remains a trusted prerequisite; this implementation does not claim to sandbox the host itself.
+Phase 1.3 has an explicit Docker-backed execution boundary. It uses a dedicated container, a bind-mounted isolated workspace, a read-only container root filesystem, dropped Linux capabilities, `no-new-privileges`, PID/CPU/memory limits, a no-exec temporary filesystem and `--network none`. The Docker daemon/host remains a trusted prerequisite; this implementation does not claim to sandbox the host itself.
 
 ## Phase 2 status
 
@@ -102,10 +104,14 @@ Phase 1.3 now has an explicit Docker-backed execution boundary. It uses a dedica
 2.5 Environment allow-list             COMPLETE
 2.6 Output secret redaction            COMPLETE
 2.7 Runtime boundary tests             COMPLETE
-2.8 External runtime execution         NEXT — requires CI/container evidence
+2.8 External runtime execution         IMPLEMENTED + OPT-IN CI SMOKE TEST
 ```
 
-`ProcessMiniSweAgentSandbox` remains deliberately blocked by the capability gate because a normal host process is not an OS sandbox. `DockerMiniSweAgentSandbox` is the approved container boundary for the next integration step. It does not enable arbitrary network access: the container is hard-coded to network isolation and the runtime contract defaults to `Denied`.
+Phase 2.8 now has a reproducible external-runtime path. `tools/mini-swe-agent/Dockerfile` pins the upstream mini-SWE-agent source to commit `04d809ceab9df28f9adaed044884180159172930`. The integration workflow builds that image, then executes the real mini-SWE-agent CLI through `DockerMiniSweAgentSandbox` using a deterministic test model, so no model-provider credentials or network access are required.
+
+The smoke test is intentionally opt-in outside CI. It proves process/container execution, task/config propagation, network isolation, resource bounds, and the real external CLI boundary. It does **not** certify an arbitrary model, production workload, autonomous merge, or host isolation.
+
+`ProcessMiniSweAgentSandbox` remains deliberately blocked by the capability gate because a normal host process is not an OS sandbox. `DockerMiniSweAgentSandbox` remains the approved execution boundary and hard-codes network isolation.
 
 ## Safety constraints
 
