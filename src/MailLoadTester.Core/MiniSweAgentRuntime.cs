@@ -54,10 +54,17 @@ public interface IMiniSweAgentSandbox
 public sealed class MiniSweAgentRuntime
 {
     private readonly IMiniSweAgentSandbox _sandbox;
+    private readonly string? _configPath;
+    private readonly string? _model;
 
-    public MiniSweAgentRuntime(IMiniSweAgentSandbox sandbox)
+    public MiniSweAgentRuntime(
+        IMiniSweAgentSandbox sandbox,
+        string? configPath = null,
+        string? model = null)
     {
         _sandbox = sandbox ?? throw new ArgumentNullException(nameof(sandbox));
+        _configPath = string.IsNullOrWhiteSpace(configPath) ? null : configPath;
+        _model = string.IsNullOrWhiteSpace(model) ? null : model;
     }
 
     public async Task<MiniSweAgentRunResult> RunAsync(
@@ -82,7 +89,9 @@ public sealed class MiniSweAgentRuntime
             task.TimeBudget,
             task.MaxIterations,
             new Dictionary<string, string>(StringComparer.Ordinal),
-            AiAgentNetworkPolicy.Denied);
+            AiAgentNetworkPolicy.Denied,
+            _configPath,
+            _model);
 
         var result = await _sandbox.RunAsync(specification, cancellationToken)
             .ConfigureAwait(false);
