@@ -1,0 +1,156 @@
+name: Agent Collaboration Contract
+
+on:
+  push:
+    branches: [ "main", "fix/**", "feat/**" ]
+    paths:
+      - "AI_AGENT_REGISTRY.md"
+      - "docs/AI-GUIDE.md"
+      - "docs/AI_AGENT_EXTENSIONS.md"
+      - "docs/LOAD2-GAP-MATRIX.md"
+      - ".github/workflows/agent-collaboration.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "AI_AGENT_REGISTRY.md"
+      - "docs/AI-GUIDE.md"
+      - "docs/AI_AGENT_EXTENSIONS.md"
+      - "docs/LOAD2-GAP-MATRIX.md"
+      - ".github/workflows/agent-collaboration.yml"
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "Optional collaboration focus"
+        required: false
+        default: "contract"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Agent contract and source-of-truth gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Verify agent documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f AI_AGENT_REGISTRY.md
+          test -f docs/AI-GUIDE.md
+          test -f docs/AI_AGENT_EXTENSIONS.md
+          test -f docs/LOAD2-GAP-MATRIX.md
+
+          required=(
+            ORCHESTRATOR
+            SMTP_PROTOCOL_AGENT
+            LOAD_ENGINE_AGENT
+            NETWORK_AGENT
+            METRICS_AGENT
+            SCENARIO_AGENT
+            EVIDENCE_AGENT
+            SECURITY_AGENT
+            FEATURE_ARCHITECT_AGENT
+            EFFICIENCY_AGENT
+            TEST_AGENT
+            UX_AGENT
+            RESEARCH_AGENT
+            NETWORK_STRESS_AGENT
+            INTEGRATION_AGENT
+            RELEASE_AGENT
+          )
+
+          for role in "${required[@]}"; do
+            if ! grep -RIn --fixed-strings "\`$role\`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null; then
+              echo "ERROR: required role missing from agent contract: $role"
+              exit 1
+            fi
+          done
+
+          grep -q -- '--unauthorized' docs/AI-GUIDE.md
+          grep -q 'source code and tests' README.md
+          grep -q 'Source code and tests on \`main\` are authoritative' README.md
+          grep -q 'Current \`main\` source and tests beat documentation' docs/AI_AGENT_EXTENSIONS.md
+          echo "Agent contract is present and source-of-truth rules are intact."
+
+  specialist-handoffs:
+    name: Specialist handoff ${{ matrix.agent }}
+    needs: contract
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent:
+          - RESEARCH_AGENT
+          - NETWORK_STRESS_AGENT
+          - INTEGRATION_AGENT
+          - RELEASE_AGENT
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Generate deterministic handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p agent-handoffs
+          case "${{ matrix.agent }}" in
+            RESEARCH_AGENT)
+              scope="external source audit; mechanism classification; evidence provenance"
+              ;;
+            NETWORK_STRESS_AGENT)
+              scope="bounded TCP/network stress dimensions; timeouts; connection rate/concurrency; IPv4/IPv6"
+              ;;
+            INTEGRATION_AGENT)
+              scope="pipeline integrity; duplicate pacing/queue/retry/metrics detection; cross-layer boundaries"
+              ;;
+            RELEASE_AGENT)
+              scope="CI/CodeQL/action hygiene; packaging; documentation; release evidence"
+              ;;
+          esac
+          {
+            echo "# Agent handoff"
+            echo ""
+            echo "- Agent: ${{ matrix.agent }}"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Focus: ${{ github.event.inputs.focus || 'automatic' }}"
+            echo "- Scope: $scope"
+            echo "- Status: READY_FOR_ORCHESTRATOR"
+            echo ""
+            echo "## Required evidence"
+            echo "- current main/source state"
+            echo "- focused tests where implementation changes"
+            echo "- security/authorization review"
+            echo "- CI/CodeQL evidence where applicable"
+          } > "agent-handoffs/${{ matrix.agent }}.md"
+
+      - name: Upload handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-handoff-${{ matrix.agent }}
+          path: agent-handoffs/${{ matrix.agent }}.md
+          if-no-files-found: error
+
+  orchestrator:
+    name: Orchestrator handoff gate
+    needs: specialist-handoffs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Validate collaboration pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'ORCHESTRATOR' AI_AGENT_REGISTRY.md
+          grep -q 'SECURITY_AGENT' AI_AGENT_REGISTRY.md
+          grep -q 'EVIDENCE_AGENT' AI_AGENT_REGISTRY.md
+          grep -q 'TEST_AGENT' AI_AGENT_REGISTRY.md
+          grep -q 'INTEGRATION_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -q 'RELEASE_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -q 'NETWORK_STRESS_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -q 'CI + CodeQL' docs/AI_AGENT_EXTENSIONS.md
+          echo "ORCHESTRATOR collaboration contract validated."
