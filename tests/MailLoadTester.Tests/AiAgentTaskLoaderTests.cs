@@ -18,7 +18,8 @@ public sealed class AiAgentTaskLoaderTests
           "realTargetRequired": false,
           "authorized": true,
           "timeBudgetSeconds": 30,
-          "maxIterations": 2
+          "maxIterations": 2,
+          "workspacePath": " /work/load2-agent "
         }
         """;
 
@@ -30,6 +31,7 @@ public sealed class AiAgentTaskLoaderTests
         Assert.Equal(new[] { "compile" }, task.AcceptanceCriteria);
         Assert.Equal(TimeSpan.FromSeconds(30), task.TimeBudget);
         Assert.Equal(2, task.MaxIterations);
+        Assert.Equal("/work/load2-agent", task.WorkspacePath);
     }
 
     [Fact]
@@ -39,6 +41,26 @@ public sealed class AiAgentTaskLoaderTests
         {
           "taskId": "AI-002",
           "agentRole": "TEST_AGENT",
+          "commit": "0123456789abcdef0123456789abcdef01234567",
+          "allowedScopes": ["tests/**"],
+          "acceptanceCriteria": ["tests pass"],
+          "timeBudgetSeconds": 10,
+          "maxIterations": 1,
+          "workspacePath": "/work/load2-agent"
+        }
+        """;
+
+        Assert.Throws<InvalidDataException>(() => new AiAgentTaskLoader().Load(json));
+    }
+
+    [Fact]
+    public void RejectsMissingWorkspacePath()
+    {
+        const string json = """
+        {
+          "taskId": "AI-004",
+          "agentRole": "TEST_AGENT",
+          "repository": "sirvan0010-alt/load2",
           "commit": "0123456789abcdef0123456789abcdef01234567",
           "allowedScopes": ["tests/**"],
           "acceptanceCriteria": ["tests pass"],
@@ -74,7 +96,8 @@ public sealed class AiAgentTaskLoaderTests
           "allowedScopes": [],
           "acceptanceCriteria": ["tests pass"],
           "timeBudgetSeconds": 10,
-          "maxIterations": 1
+          "maxIterations": 1,
+          "workspacePath": "/work/load2-agent"
         }
         """;
 
