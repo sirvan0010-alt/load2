@@ -4,7 +4,7 @@
 
 `load2` will **reuse an established coding-agent runtime** rather than implementing a general-purpose LLM coding runtime inside the .NET core.
 
-The first integration prototype targets **mini-SWE-agent v2**. The upstream project explicitly recommends `mini-SWE-agent` as a small local coding-agent workflow and documents local/container-oriented execution. Its license is MIT.
+The first integration prototype targets **mini-SWE-agent v2**. The upstream project is intentionally small and supports local/container-oriented execution. Its license is MIT.
 
 The load2 repository remains responsible for the domain-specific control plane: immutable task identity, authorization, hard limits, cancellation, tool/scope policy, evidence normalization, independent verification, tests, CI/CodeQL and the final merge/release boundary.
 
@@ -82,15 +82,15 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 
 `AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `GitWorkspaceIntegrityGate` verifies that an execution workspace is a real, clean Git worktree at the exact immutable SHA without mutating it. `IsolatedGitWorkspaceFactory` creates a separate local clone from an already verified source workspace, checks out the exact SHA in detached mode, and independently re-verifies the resulting workspace.
 
-The isolation implementation is deliberately local-only: it does not fetch from remotes, and it does not claim OS-level sandboxing, filesystem confinement or network isolation. Those controls remain a separate sandbox responsibility.
-
 ## Phase 1 status
 
 ```text
 1.1 Workspace Integrity Gate       COMPLETE
 1.2 Isolated Git Workspace         IMPLEMENTED + UNIT TESTS
-1.3 Sandbox Boundary               NEXT
+1.3 Sandbox Boundary               IMPLEMENTED + UNIT TESTS
 ```
+
+Phase 1.3 now has an explicit Docker-backed execution boundary. It uses a dedicated container, a bind-mounted isolated workspace, a read-only container root filesystem, dropped Linux capabilities, `no-new-privileges`, PID/CPU/memory limits, a no-exec temporary filesystem and `--network none`. The Docker daemon/host remains a trusted prerequisite; this implementation does not claim to sandbox the host itself.
 
 ## Phase 2 status
 
@@ -102,18 +102,17 @@ The isolation implementation is deliberately local-only: it does not fetch from 
 2.5 Environment allow-list             COMPLETE
 2.6 Output secret redaction            COMPLETE
 2.7 Runtime boundary tests             COMPLETE
-2.8 External runtime execution         BLOCKED BY PHASE 1.3
+2.8 External runtime execution         NEXT — requires CI/container evidence
 ```
 
-Phase 2 deliberately does not claim OS-level isolation. `ProcessMiniSweAgentSandbox` clears inherited process environment and accepts only explicitly supplied variables, removes the previous implicit autonomous `--yolo` launch flag, propagates bounded cancellation, and redacts sensitive key/value lines from returned output. Its capability declaration correctly reports that it is **not** an isolated or filesystem-constrained sandbox, so `MiniSweAgentRuntime` refuses to execute through it until an approved sandbox boundary supplies those capabilities.
-
-This is intentional: the adapter contract is complete, while actual external-agent execution remains blocked until Phase 1.3 provides the required OS/container boundary.
+`ProcessMiniSweAgentSandbox` remains deliberately blocked by the capability gate because a normal host process is not an OS sandbox. `DockerMiniSweAgentSandbox` is the approved container boundary for the next integration step. It does not enable arbitrary network access: the container is hard-coded to network isolation and the runtime contract defaults to `Denied`.
 
 ## Safety constraints
 
 - Real-target work requires explicit authorization.
 - No hardcoded credentials or tokens.
 - The runtime process receives no inherited host environment; only explicitly supplied variables are passed.
+- Credential-like environment keys are rejected by the Docker boundary.
 - Secrets remain environment/configuration based and must be redacted from evidence.
 - Cancellation and hard limits are mandatory.
 - Non-target tasks default to network access denied.
