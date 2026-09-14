@@ -1,0 +1,36 @@
+--- a/src/MailLoadTester.Gui/MainForm.cs
++++ b/src/MailLoadTester.Gui/MainForm.cs
+@@ -990,6 +990,33 @@
+             if (!string.IsNullOrEmpty(result.LastError))
+                 AppendLog($"Poslední chyba: {result.LastError}", Color.Red);
+ 
++            // Post-baseline: single observability projection (queue / retry / outcomes).
++            var obs = RunObservability.FromResult(result);
++            AppendLog(RunObservability.FormatSummaryLine(obs), Color.LightCyan);
++            if (obs.Queue is { } q)
++            {
++                AppendLog(
++                    $"Fronta: enq={q.Enqueued} deq={q.Dequeued} done={q.Completed} peak={q.PeakQueueDepth} " +
++                    $"fullWaits={q.FullWaits} cancel={q.Cancelled} drained={q.Drained}",
++                    Color.LightGray);
++            }
++            if (obs.Retry is { } rm)
++            {
++                AppendLog(
++                    $"Retry: attempts={rm.RetryAttempts} retryable={rm.RetryableFailures} " +
++                    $"okAfterRetry={rm.SuccessAfterRetry} exhausted={rm.Exhausted} " +
++                    $"permanent={rm.PermanentFailures} budgetExhausted={rm.BudgetExhausted}",
++                    Color.LightGray);
++            }
++            if (obs.Outcomes is { } oc)
++            {
++                AppendLog(
++                    $"Outcomes: ok={oc.Success} transient={oc.Transient} throttled={oc.Throttled} " +
++                    $"timeout={oc.Timeout} auth={oc.Authentication} policy={oc.PolicyRejected} " +
++                    $"rcpt={oc.Recipient} permanent={oc.Permanent} cancel={oc.Cancelled} unknown={oc.Unknown}",
++                    Color.LightGray);
++            }
++
+             // Webhook
+             if (!string.IsNullOrWhiteSpace(txtWebhookUrl.Text))
+             {
