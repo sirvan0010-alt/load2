@@ -33,7 +33,7 @@ public interface IGitCommandExecutor
 /// Verifies that an agent workspace is a real, clean Git worktree at the exact immutable commit.
 /// The gate performs no checkout, fetch, reset, merge, or other repository mutation.
 /// </summary>
-public sealed class GitWorkspaceIntegrityGate
+public sealed class GitWorkspaceIntegrityGate : IAiAgentWorkspaceIntegrityGate
 {
     private readonly IGitCommandExecutor _git;
 
@@ -45,7 +45,7 @@ public sealed class GitWorkspaceIntegrityGate
     public async Task<WorkspaceIntegrityResult> VerifyAsync(
         string workspacePath,
         string expectedCommit,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(workspacePath))
             throw new ArgumentException("Workspace path is required.", nameof(workspacePath));
