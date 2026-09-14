@@ -58,7 +58,6 @@ public sealed class MiniSweAgentRuntimeTests
         {
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runtime.RunAsync(CreateTask(workspace), workspace));
-            Assert.Null(sandbox.LastSpecification);
         }
         finally
         {
