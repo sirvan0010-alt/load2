@@ -1,0 +1,31 @@
+name: Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    name: Final Release Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore
+        run: |
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+      - name: Build Release
+        run: |
+          dotnet build src/MailLoadTester.Core/MailLoadTester.Core.csproj -c Release --no-restore
+          dotnet build tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore
+      - name: Full regression suite
+        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --verbosity normal
