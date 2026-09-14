@@ -79,27 +79,27 @@ public sealed class AiAgentRunnerTests
     {
         public int Calls { get; private set; }
 
-        public ValueTask<bool> ValidateAsync(AiAgentTask task, CancellationToken cancellationToken)
+        public Task<bool> AuthorizeAsync(AiAgentTask task, CancellationToken cancellationToken)
         {
             Calls++;
-            return ValueTask.FromResult(allowed);
+            return Task.FromResult(allowed);
         }
     }
 
     private sealed class AcceptingVerifier : IAiAgentResultVerifier
     {
-        public ValueTask<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
-            => ValueTask.FromResult(true);
+        public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
+            => Task.FromResult(true);
     }
 
     private sealed class RejectingVerifier : IAiAgentResultVerifier
     {
         public int Calls { get; private set; }
 
-        public ValueTask<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
+        public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
         {
             Calls++;
-            return ValueTask.FromResult(false);
+            return Task.FromResult(false);
         }
     }
 
@@ -107,10 +107,10 @@ public sealed class AiAgentRunnerTests
     {
         public int Calls { get; private set; }
 
-        public ValueTask<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
+        public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
         {
             Calls++;
-            return ValueTask.FromResult(Calls > 1);
+            return Task.FromResult(Calls > 1);
         }
     }
 
