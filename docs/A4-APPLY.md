@@ -1,36 +1,20 @@
-# A4 apply instructions
+# A4 apply instructions — SUPERSEDED
 
-Foundation already on main (commit with RetryPolicy.cs + RetryMetrics.cs + tests).
+**Current status:** A4 is **FIXED / CLOSED** as part of TRACK A. Do not execute the instructions in this file against the current `main` branch.
 
-## 1) Models.cs (Chrome edit)
+The historical instructions below are retained only as an audit trail of the earlier A4 implementation step. The current implementation, tests and final status are authoritative.
 
-Find:
-```
-    ScenarioQueueMetricsSnapshot? QueueMetrics = null);
-```
+## Current authority
 
-Replace with:
-```
-    ScenarioQueueMetricsSnapshot? QueueMetrics = null,
-    /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
-    RetryMetricsSnapshot? RetryMetrics = null);
-```
+- `docs/IMPLEMENTATION-BACKLOG.md` → A4 ✅ FIXED
+- `docs/A8-BASELINE.md` → A4 ✅ FIXED
+- `docs/AI-GUIDE.md` → TRACK A CLOSED
+- GitHub Issue #4 → TRACK A CLOSED
 
-## 2) SmtpTestRunner.cs
+## Important
 
-Apply `docs/a4-runner.diff`:
-```bash
-git apply docs/a4-runner.diff
-```
-Or edit manually following the same diff (7 small sites).
+Do **not** run the old `git apply docs/a4-runner.diff` procedure or recreate the old `Models.cs` / `SmtpTestRunner.cs` edits. Those changes are already represented by the current `main` implementation.
 
-## 3) Commit
-```bash
-git add src/MailLoadTester.Core/Models.cs src/MailLoadTester.Core/SmtpTestRunner.cs
-git commit -m "feat(A4): wire RetryPolicy/RetryMetrics into SmtpTestRunner"
-git push
-```
+The retry histogram / AutoRestart work (`5e0689f`, `f2108f8`) is existing work and must not be duplicated.
 
-## 4) A4 FIXED when CI green
-
-A5 not started until A4 CI success.
+For new retry changes, create a separate post-baseline task only when a concrete source/test regression is demonstrated.
