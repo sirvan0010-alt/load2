@@ -4,19 +4,23 @@
 
 `load2` will **reuse an established coding-agent runtime** rather than implementing a general-purpose LLM coding runtime inside the .NET core.
 
+The first integration prototype targets **mini-SWE-agent v2**. The upstream project explicitly recommends `mini-swe-agent` as the default choice for a quick, simple local coding-agent workflow and documents local/container-oriented execution. Its current license is MIT.
+
 The load2 repository remains responsible for the domain-specific control plane: immutable task identity, authorization, hard limits, cancellation, tool/scope policy, evidence normalization, independent verification, tests, CI/CodeQL and the final merge/release boundary.
 
 ## Candidates reviewed
 
+### mini-SWE-agent
+
+Selected for the first prototype because it is intentionally small, provider-flexible and exposes a simple CLI/process boundary. Its v2 CLI accepts a task, configuration and model. The runtime can operate with local or containerized environments, while load2 keeps the security policy outside the runtime.
+
 ### SWE-agent
 
-SWE-agent provides a mature agent loop around an environment, model, tools, trajectories and configurable retry/review behavior. Its implementation exposes model configuration, tool configuration, environment handling, action parsing, hooks and retry loops. This is substantially more functionality than load2 should recreate.
-
-Evidence checked from the upstream `SWE-agent/SWE-agent` source at review time includes `AbstractAgent`, model configuration, tool configuration, environment setup, hooks, trajectories and retry-agent support.
+SWE-agent remains a valid alternative when load2 needs richer tool interfaces or history processing. Its mature agent/environment/model architecture confirms that generic coding-agent execution should not be recreated inside load2.
 
 ### OpenHands
 
-OpenHands is another mature coding-agent platform and remains a viable integration candidate. It is broader than a small embedded library, so integration should be treated as an external runtime boundary rather than copied wholesale into load2.
+OpenHands is another mature coding-agent platform and remains a viable future integration candidate. It is broader than required for the first load2 prototype, so it should remain an external runtime rather than being copied wholesale into load2.
 
 ### AutoGPT
 
@@ -24,7 +28,7 @@ AutoGPT is a broad autonomous-agent platform. It is useful as an orchestration r
 
 ## Selection rule
 
-The first implementation target should be the runtime that can satisfy all of these requirements with the least custom code:
+The selected runtime must satisfy these requirements with the least custom code:
 
 1. immutable repository/commit workspace;
 2. allow-listed shell/repository tools;
@@ -37,7 +41,7 @@ The first implementation target should be the runtime that can satisfy all of th
 9. clear licensing suitable for the project;
 10. safe integration with the load2 independent verification gate.
 
-No runtime is considered selected merely because it can edit code. The adapter must be proven against these gates.
+No runtime is considered production-ready merely because it can edit code. The adapter must be proven against these gates.
 
 ## Integration boundary
 
@@ -52,7 +56,10 @@ external coding-agent runtime
             +--> allow-listed tools
             +--> cancellation
             v
-      runtime execution
+      approved sandbox
+            |
+            v
+       runtime execution
             |
             v
    redacted result/artifacts
@@ -71,9 +78,11 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 
 ## Current implementation status
 
-`AiAgentRunner` and `IAiAgentModelAdapter` are retained temporarily as the load2 contract boundary. They are not treated as a reason to build a complete custom coding-agent runtime. The next implementation step is an external-runtime adapter/prototype and its verifier tests.
+`AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `MiniSweAgentRuntime` now provides the external-runtime integration boundary and an injectable sandbox contract. A process-backed implementation exists for controlled environments, but it deliberately does not claim OS-level sandboxing or network isolation.
 
-Until that adapter is proven, the existing deterministic task-factory workflow remains the authoritative automation path.
+The next gate is to provide and test an approved sandbox implementation that checks out the exact SHA, restricts filesystem/network access, controls the environment and emits redacted artifacts. Until that exists, real runtime execution is not considered verified.
+
+The existing deterministic task-factory workflow remains the authoritative automation path.
 
 ## Safety constraints
 
