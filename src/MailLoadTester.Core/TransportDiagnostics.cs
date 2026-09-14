@@ -153,7 +153,7 @@ public static class TransportDiagnostics
 
                 using var cert = ClientCertificateHelper.Load(options.ClientCertificatePath, options.ClientCertificatePassword);
                 if (cert is not null)
-                    client.ClientCertificates.Add(cert);
+                    client.ClientCertificates.Add(cert!);
 
                 if (!string.IsNullOrWhiteSpace(options.ProxyList))
                 {
