@@ -57,7 +57,8 @@ public sealed class AiAgentTaskLoader
             dto.RealTargetRequired,
             dto.Authorized,
             TimeSpan.FromSeconds(dto.TimeBudgetSeconds),
-            dto.MaxIterations);
+            dto.MaxIterations,
+            Required(dto.WorkspacePath, nameof(dto.WorkspacePath)));
     }
 
     private static string Required(string? value, string name)
@@ -95,5 +96,6 @@ public sealed class AiAgentTaskLoader
         bool RealTargetRequired,
         bool Authorized,
         int TimeBudgetSeconds,
-        int MaxIterations);
+        int MaxIterations,
+        string? WorkspacePath);
 }
