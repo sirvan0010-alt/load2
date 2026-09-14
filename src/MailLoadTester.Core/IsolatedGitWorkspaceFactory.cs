@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace MailLoadTester.Core;
 
 public sealed record IsolatedWorkspaceResult(
@@ -99,21 +97,7 @@ public sealed class IsolatedGitWorkspaceFactory : IIsolatedGitWorkspaceFactory
         }
         catch
         {
-            // Cleanup is best-effort; the original failure must remain the failure signal.
+            // Cleanup is best-effort; the original failure remains the failure signal.
         }
-    }
-}
-
-/// <summary>
-/// Explicitly lifecycle-owned workspace cleanup. Cleanup is idempotent and never
-/// touches a path that was not created by the factory instance's caller.
-/// </summary>
-public static class IsolatedGitWorkspaceCleanup
-{
-    public static void Delete(string workspacePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
-        if (Directory.Exists(workspacePath))
-            Directory.Delete(Path.GetFullPath(workspacePath), recursive: true);
     }
 }
