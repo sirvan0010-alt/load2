@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "load2 AI Swarm Agent Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agent", "task_id", "repository", "commit", "status", "findings", "acceptance", "verification", "security", "handoff"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "agent": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "repository": {"const": "sirvan0010-alt/load2"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "status": {"enum": ["READY", "BLOCKED", "NEEDS-EVIDENCE"]},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "evidence"],
+        "properties": {
+          "claim": {"type": "string", "minLength": 1},
+          "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "changed_files": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "result"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "result": {"enum": ["PASS", "FAIL", "NOT-APPLICABLE"]},
+          "evidence": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tests", "ci_required"],
+      "properties": {
+        "tests": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "ci_required": {"type": "boolean"}
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorization", "cancellation", "hard_limits", "secrets"],
+      "properties": {
+        "authorization": {"enum": ["PASS", "FAIL", "NOT-APPLICABLE"]},
+        "cancellation": {"enum": ["PASS", "FAIL", "NOT-APPLICABLE"]},
+        "hard_limits": {"enum": ["PASS", "FAIL", "NOT-APPLICABLE"]},
+        "secrets": {"enum": ["PASS", "FAIL", "NOT-APPLICABLE"]}
+      }
+    },
+    "handoff": {"type": "string", "minLength": 1}
+  }
+}
