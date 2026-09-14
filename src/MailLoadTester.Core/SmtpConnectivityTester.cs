@@ -29,7 +29,9 @@ public static class SmtpConnectivityTester
             var list = ProxyClientFactory.ParseList(o.ProxyList);
             if (list.Count > 0)
             {
-                client.ProxyClient = ProxyClientFactory.Create(list[0]);
+                var proxyClient = ProxyClientFactory.Create(list[0]);
+                if (proxyClient != null)
+                    client.ProxyClient = proxyClient;
                 proxyLabel = list[0].DisplayKey + (list.Count > 1 ? $" (+{list.Count - 1} v seznamu, testuje se první)" : "");
             }
         }
@@ -39,7 +41,9 @@ public static class SmtpConnectivityTester
                 ProxyType.Socks5, o.ProxyHost, o.ProxyPort,
                 string.IsNullOrEmpty(o.ProxyUsername) ? null : o.ProxyUsername,
                 string.IsNullOrEmpty(o.ProxyPassword) ? null : o.ProxyPassword);
-            client.ProxyClient = ProxyClientFactory.Create(ep);
+            var proxyClient = ProxyClientFactory.Create(ep);
+            if (proxyClient != null)
+                client.ProxyClient = proxyClient;
             proxyLabel = ep.DisplayKey;
         }
 
