@@ -17,7 +17,7 @@ public sealed class DockerMiniSweAgentSandboxTests
     }
 
     [Fact]
-    public void RejectsCredentialLikeEnvironmentKeys()
+    public async Task RejectsCredentialLikeEnvironmentKeys()
     {
         var sandbox = new DockerMiniSweAgentSandbox(
             "example/image",
@@ -37,7 +37,7 @@ public sealed class DockerMiniSweAgentSandboxTests
             new Dictionary<string, string>(),
             AiAgentNetworkPolicy.Denied);
 
-        Assert.ThrowsAsync<ArgumentException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             sandbox.RunAsync(specification, CancellationToken.None));
     }
 
