@@ -70,10 +70,10 @@ jobs:
             fi
           done
 
-          grep -q -- '--unauthorized' docs/AI-GUIDE.md
-          grep -q 'source code and tests' README.md
-          grep -q 'Source code and tests on \`main\` are authoritative' README.md
-          grep -q 'Current \`main\` source and tests beat documentation' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq -- '--unauthorized' docs/AI-GUIDE.md
+          grep -Fq 'source code and tests' README.md
+          grep -Fq 'Source code and tests on `main` are authoritative' README.md
+          grep -Fq 'Current `main` source and tests beat documentation' docs/AI_AGENT_EXTENSIONS.md
           echo "Agent contract is present and source-of-truth rules are intact."
 
   specialist-handoffs:
@@ -145,12 +145,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'ORCHESTRATOR' AI_AGENT_REGISTRY.md
-          grep -q 'SECURITY_AGENT' AI_AGENT_REGISTRY.md
-          grep -q 'EVIDENCE_AGENT' AI_AGENT_REGISTRY.md
-          grep -q 'TEST_AGENT' AI_AGENT_REGISTRY.md
-          grep -q 'INTEGRATION_AGENT' docs/AI_AGENT_EXTENSIONS.md
-          grep -q 'RELEASE_AGENT' docs/AI_AGENT_EXTENSIONS.md
-          grep -q 'NETWORK_STRESS_AGENT' docs/AI_AGENT_EXTENSIONS.md
-          grep -q 'CI + CodeQL' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'ORCHESTRATOR' AI_AGENT_REGISTRY.md
+          grep -Fq 'SECURITY_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'EVIDENCE_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'TEST_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'INTEGRATION_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'RELEASE_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'NETWORK_STRESS_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'CI + CodeQL' docs/AI_AGENT_EXTENSIONS.md
           echo "ORCHESTRATOR collaboration contract validated."
