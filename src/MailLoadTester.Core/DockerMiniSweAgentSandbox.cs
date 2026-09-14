@@ -88,6 +88,7 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
             "--memory", $"{_memoryBytes}b",
             "--cpus", _cpuLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+            "--tmpfs", "/root/.config:rw,noexec,nosuid,size=16m",
             "--mount", $"type=bind,src={workspace},dst=/workspace",
             "--workdir", "/workspace"
         };
