@@ -54,14 +54,22 @@ See `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` for the authorita
 | FEAT-022 timing breakdown | HAVE | phase timing fields on result/report |
 | DNS/MX/SPF/DMARC diagnostics | HAVE | read-only diagnostics layer where implemented |
 | SMTP/TLS diagnostics | HAVE | `TransportDiagnostics` |
-| provider/transport registry | PARTIAL / POST-BASELINE | evaluate external candidates against existing abstractions before extending |
-| endpoint canonicalization/deduplication | POST-BASELINE | only add if source-level gap is proven |
+| provider/transport registry | HAVE / POST-BASELINE REFINED | `SmtpAccountRegistry` + `TransportHealthRegistry`; endpoint identity is now canonicalized before health selection |
+| endpoint canonicalization/deduplication | HAVE | SMTP health keys canonicalize host/port/security; `TargetSet` canonicalizes domains before deduplication |
 | replayable run artifacts | POST-BASELINE | extend only with concrete product requirement |
 | failure injection | POST-BASELINE | controlled test scenarios |
 | GUI summary binding | POST-BASELINE | use `RunObservability.FromReport` |
 | live NET-AUDIT-001 | POST-BASELINE | test endpoints and fixtures selected by the operator |
 
-## 3. External audit
+## 3. Agent verification
+
+Agent role definitions alone do not prove that an agent performed its task. The swarm now has a machine-readable result contract in `docs/AI-SWARM-RESULT-SCHEMA.json` and a deterministic verifier in `scripts/verify-agent-results.sh`.
+
+A `READY` result requires findings/evidence, acceptance criteria with a passing item, verification tests and passing security constraints. `BLOCKED` and `NEEDS-EVIDENCE` remain valid states and cannot be silently upgraded to `READY`.
+
+The current GitHub Actions workflow tests the verifier with both positive and negative fixtures. It does **not** claim to run an LLM. Real result verification becomes authoritative only when a future execution backend publishes actual agent results into the verifier pipeline.
+
+## 4. External audit
 
 The retained external repositories are handled independently from TRACK A. Their useful mechanisms are recorded in `docs/external-repos/*.md` and summarized in `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`.
 
@@ -80,7 +88,7 @@ source audit
 
 README-only claims are not implementation evidence. Unknowns remain explicitly unknown.
 
-## 4. Testing scope and execution governance
+## 5. Testing scope and execution governance
 
 Load2 may evolve as a general security/load-testing framework. The gap matrix therefore evaluates capabilities by technical mechanism and test objective rather than imposing a blanket restriction based on the category or label of an external project.
 
@@ -90,7 +98,7 @@ Authorization is an execution concern and must not be confused with whether a me
 
 Do not weaken core engineering invariants merely to reproduce an external implementation. Preserve deterministic behavior, cancellation, diagnostics, testability and evidence even when evaluating aggressive or failure-oriented test mechanisms.
 
-## 5. Rules for future work
+## 6. Rules for future work
 
 - Do not reopen A1–A8 as unfinished without concrete regression evidence.
 - Do not add a second pacing/limiting stack when the existing `SmartPaceController` covers the contract.
