@@ -8,7 +8,7 @@ public sealed class MiniSweAgentRuntimeTests
     public async Task PassesImmutableTaskAndNormalizedWorkspaceToSandbox()
     {
         var sandbox = new RecordingSandbox();
-        var runtime = new MiniSweAgentRuntime(sandbox);
+        var runtime = new MiniSweAgentRuntime(sandbox, "/workspace/agent.yaml", "deterministic/test");
         var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "load2-agent-test-" + Guid.NewGuid())).FullName;
         try
         {
@@ -26,6 +26,8 @@ public sealed class MiniSweAgentRuntimeTests
             Assert.Equal(AiAgentNetworkPolicy.Denied, sandbox.LastSpecification.NetworkPolicy);
             Assert.Empty(sandbox.LastSpecification.Environment);
             Assert.Equal(task.TimeBudget, sandbox.LastSpecification.TimeBudget);
+            Assert.Equal("/workspace/agent.yaml", sandbox.LastSpecification.ConfigPath);
+            Assert.Equal("deterministic/test", sandbox.LastSpecification.Model);
         }
         finally
         {
