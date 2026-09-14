@@ -78,9 +78,19 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 
 ## Current implementation status
 
-`AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `MiniSweAgentRuntime` now provides the external-runtime integration boundary and an injectable sandbox contract. A process-backed implementation exists for controlled environments, but it deliberately does not claim OS-level sandboxing or network isolation.
+`AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `GitWorkspaceIntegrityGate` verifies that an execution workspace is a real, clean Git worktree at the exact immutable SHA without mutating it. `IsolatedGitWorkspaceFactory` now creates a separate local clone from an already verified source workspace, checks out the exact SHA in detached mode, and independently re-verifies the resulting workspace.
 
-The next gate is to provide and test an approved sandbox implementation that checks out the exact SHA, restricts filesystem/network access, controls the environment and emits redacted artifacts. Until that exists, real runtime execution is not considered verified.
+The isolation implementation is deliberately local-only: it does not fetch from remotes, and it does not claim OS-level sandboxing, filesystem confinement or network isolation. Those controls remain a separate sandbox responsibility.
+
+## Phase 1 status
+
+```text
+1.1 Workspace Integrity Gate       COMPLETE
+1.2 Isolated Git Workspace         IMPLEMENTED + UNIT TESTS
+1.3 Sandbox Boundary               NEXT
+```
+
+Real runtime execution remains unverified until the sandbox boundary and independent execution evidence are implemented and pass CI.
 
 The existing deterministic task-factory workflow remains the authoritative automation path.
 
