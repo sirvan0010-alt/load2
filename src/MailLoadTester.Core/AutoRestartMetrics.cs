@@ -71,6 +71,15 @@ public static class AutoRestartMetrics
             Unknown: SaturatingAdd(aggregate.Unknown, next.Unknown));
     }
 
+    public static LatencyHistogramSnapshot? AggregateLatencyHistogram(
+        LatencyHistogramSnapshot? aggregate,
+        LatencyHistogramSnapshot? next)
+    {
+        if (next is null) return aggregate;
+        if (aggregate is null) return next;
+        return LatencyHistogram.Merge(aggregate, next);
+    }
+
     static int SaturatingAdd(int left, int right)
         => left > int.MaxValue - right ? int.MaxValue : left + right;
 
