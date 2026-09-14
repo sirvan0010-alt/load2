@@ -84,6 +84,7 @@ public interface IAiAgentAuthorizationPolicy
     ValueTask<bool> ValidateAsync(AiAgentTask task, CancellationToken cancellationToken);
 }
 
+/// <summary>Independent verifier; the agent cannot self-certify its own result.</summary>
 public interface IAiAgentResultVerifier
 {
     ValueTask<bool> VerifyAsync(
@@ -116,28 +117,21 @@ public sealed class AiAgentRunner
         ValidateTask(task);
 
         if (!await _authorizationPolicy.ValidateAsync(task, cancellationToken).ConfigureAwait(false))
-        {
             return Blocked("Authorization policy rejected the task.");
-        }
 
         using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budgetCts.CancelAfter(task.TimeBudget);
+        var deadline = DateTimeOffset.UtcNow + task.TimeBudget;
 
         AiAgentExecutionResult? last = null;
         for (var iteration = 1; iteration <= task.MaxIterations; iteration++)
         {
             budgetCts.Token.ThrowIfCancellationRequested();
 
-            var context = new AiAgentContext(
-                task,
-                budgetCts.Token,
-                DateTimeOffset.UtcNow + budgetCts.RemainingTime(),
-                iteration);
-
+            var context = new AiAgentContext(task, budgetCts.Token, deadline, iteration);
             last = await agent.ExecuteAsync(context, budgetCts.Token).ConfigureAwait(false);
 
-            // The agent is never allowed to self-certify. A separate verifier decides whether
-            // the produced result is acceptable for the current handoff.
+            // Verification is deliberately outside the agent implementation.
             if (await _resultVerifier.VerifyAsync(task, last, budgetCts.Token).ConfigureAwait(false))
                 return last;
         }
@@ -181,15 +175,4 @@ public sealed class AiAgentRunner
         HardLimitsPassed: true,
         SecretsPassed: true,
         Handoff: reason);
-}
-
-internal static class CancellationTokenSourceExtensions
-{
-    public static TimeSpan RemainingTime(this CancellationTokenSource source)
-    {
-        // CancellationTokenSource does not expose its deadline. The runner only uses this
-        // value as informational context, so a conservative zero duration is preferable to
-        // inventing an exact deadline.
-        return TimeSpan.Zero;
-    }
 }
