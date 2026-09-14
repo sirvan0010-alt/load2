@@ -6,6 +6,8 @@ namespace MailLoadTester.Core;
 /// Docker-backed execution boundary for mini-SWE-agent.
 /// The container is deliberately network-isolated and resource-bounded.
 /// Docker itself must be trusted and correctly configured by the host.
+/// The image entrypoint is authoritative; the agent executable is retained
+/// as configuration metadata but is not appended as a duplicate command.
 /// </summary>
 public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
 {
@@ -102,7 +104,8 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
         }
 
         arguments.Add(_image);
-        arguments.Add(_agentExecutable);
+        // The pinned mini-SWE-agent image already declares its executable as
+        // ENTRYPOINT. Passing _agentExecutable here would invoke it twice.
         arguments.Add("--task");
         arguments.Add(specification.TaskPrompt);
 
