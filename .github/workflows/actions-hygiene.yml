@@ -1,0 +1,41 @@
+name: Actions Hygiene
+
+on:
+  push:
+    branches: [ "main", "fix/**" ]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-hygiene:
+    name: Workflow Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Check workflow permissions and unsafe patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Checking GitHub Actions workflows..."
+          if grep -RInE 'permissions:[[:space:]]*$' .github/workflows >/dev/null; then
+            echo "Workflow permissions declarations found."
+          else
+            echo "WARNING: no explicit permissions declaration found in workflows."
+          fi
+          if grep -RInE 'pull_request_target|workflow_run' .github/workflows >/dev/null; then
+            echo "Sensitive trigger detected; review trust boundary manually."
+          fi
+          if grep -RInE 'curl[[:space:]].*\|[[:space:]]*(bash|sh)|wget[[:space:]].*\|[[:space:]]*(bash|sh)' .github/workflows >/dev/null; then
+            echo "ERROR: remote script execution pattern detected in workflow."
+            exit 1
+          fi
+          echo "Workflow hygiene checks passed."
