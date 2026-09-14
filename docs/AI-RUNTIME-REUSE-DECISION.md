@@ -4,7 +4,7 @@
 
 `load2` will **reuse an established coding-agent runtime** rather than implementing a general-purpose LLM coding runtime inside the .NET core.
 
-The first integration prototype targets **mini-SWE-agent v2**. The upstream project explicitly recommends `mini-swe-agent` as the default choice for a quick, simple local coding-agent workflow and documents local/container-oriented execution. Its current license is MIT.
+The first integration prototype targets **mini-SWE-agent v2**. The upstream project explicitly recommends `mini-SWE-agent` as a small local coding-agent workflow and documents local/container-oriented execution. Its license is MIT.
 
 The load2 repository remains responsible for the domain-specific control plane: immutable task identity, authorization, hard limits, cancellation, tool/scope policy, evidence normalization, independent verification, tests, CI/CodeQL and the final merge/release boundary.
 
@@ -55,6 +55,8 @@ external coding-agent runtime
             +--> authorization + hard limits
             +--> allow-listed tools
             +--> cancellation
+            +--> environment allow-list
+            +--> output redaction
             v
       approved sandbox
             |
@@ -78,7 +80,7 @@ The runtime must never be its own verifier. A model claim is not evidence merely
 
 ## Current implementation status
 
-`AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `GitWorkspaceIntegrityGate` verifies that an execution workspace is a real, clean Git worktree at the exact immutable SHA without mutating it. `IsolatedGitWorkspaceFactory` now creates a separate local clone from an already verified source workspace, checks out the exact SHA in detached mode, and independently re-verifies the resulting workspace.
+`AiAgentRunner` and `IAiAgentModelAdapter` remain the load2 contract boundary. `GitWorkspaceIntegrityGate` verifies that an execution workspace is a real, clean Git worktree at the exact immutable SHA without mutating it. `IsolatedGitWorkspaceFactory` creates a separate local clone from an already verified source workspace, checks out the exact SHA in detached mode, and independently re-verifies the resulting workspace.
 
 The isolation implementation is deliberately local-only: it does not fetch from remotes, and it does not claim OS-level sandboxing, filesystem confinement or network isolation. Those controls remain a separate sandbox responsibility.
 
@@ -90,15 +92,30 @@ The isolation implementation is deliberately local-only: it does not fetch from 
 1.3 Sandbox Boundary               NEXT
 ```
 
-Real runtime execution remains unverified until the sandbox boundary and independent execution evidence are implemented and pass CI.
+## Phase 2 status
 
-The existing deterministic task-factory workflow remains the authoritative automation path.
+```text
+2.1 Provider-neutral launch contract   COMPLETE
+2.2 Immutable SHA/scope propagation    COMPLETE
+2.3 Bounded time/iteration contract    COMPLETE
+2.4 Cancellation/process-tree contract COMPLETE
+2.5 Environment allow-list             COMPLETE
+2.6 Output secret redaction            COMPLETE
+2.7 Runtime boundary tests             COMPLETE
+2.8 External runtime execution         BLOCKED BY PHASE 1.3
+```
+
+Phase 2 deliberately does not claim OS-level isolation. `ProcessMiniSweAgentSandbox` clears inherited process environment and accepts only explicitly supplied variables, removes the previous implicit autonomous `--yolo` launch flag, propagates bounded cancellation, and redacts sensitive key/value lines from returned output. Its capability declaration correctly reports that it is **not** an isolated or filesystem-constrained sandbox, so `MiniSweAgentRuntime` refuses to execute through it until an approved sandbox boundary supplies those capabilities.
+
+This is intentional: the adapter contract is complete, while actual external-agent execution remains blocked until Phase 1.3 provides the required OS/container boundary.
 
 ## Safety constraints
 
 - Real-target work requires explicit authorization.
 - No hardcoded credentials or tokens.
+- The runtime process receives no inherited host environment; only explicitly supplied variables are passed.
 - Secrets remain environment/configuration based and must be redacted from evidence.
 - Cancellation and hard limits are mandatory.
+- Non-target tasks default to network access denied.
 - No automatic merge or release.
 - Network/load testing remains governed by the existing authorization and safety gates.
