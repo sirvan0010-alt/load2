@@ -1,51 +1,20 @@
-# A5 apply — Models + SmtpTestRunner (small edits)
+# A5 apply instructions — SUPERSEDED
 
-Foundation already on main:
-- `SmtpOutcome.cs` / `SmtpOutcomeClassifier` / `SmtpOutcomeCounters`
-- `RetryPolicy.IsRetryable` → classifier
-- `TransportHealthRegistry.ClassifyFailure` → classifier
-- unit tests `SmtpOutcomeClassifierTests`
+**Current status:** A5 is **FIXED / CLOSED** as part of TRACK A. Do not execute the instructions in this file against the current `main` branch.
 
-## 1) Models.cs — one property on MailTestResult
+The historical instructions are retained only as an audit trail of the earlier A5 implementation step.
 
-Find:
-```csharp
-    RetryMetricsSnapshot? RetryMetrics = null);
-```
+## Current authority
 
-Replace with:
-```csharp
-    RetryMetricsSnapshot? RetryMetrics = null,
-    /// <summary>A5: unified SMTP outcome counts for this run.</summary>
-    SmtpOutcomeCountsSnapshot? OutcomeCounts = null);
-```
+- `docs/IMPLEMENTATION-BACKLOG.md` → A5 ✅ FIXED
+- `docs/A8-BASELINE.md` → A5 ✅ FIXED
+- `docs/AI-GUIDE.md` → TRACK A CLOSED
+- GitHub Issue #4 → TRACK A CLOSED
 
-## 2) SmtpTestRunner.cs — three sites
+## Current implementation contract
 
-### A) After retryMetrics init
-```csharp
-        var outcomeCounters = new SmtpOutcomeCounters();
-```
+`SmtpOutcome.cs` / `SmtpOutcomeClassifier` / `SmtpOutcomeCounters` are already part of the current baseline. Retry decisions and endpoint-health classification use the unified outcome taxonomy, and `OutcomeCounts` is part of run observability/reporting.
 
-### B) On success (after success = true)
-```csharp
-                                outcomeCounters.Record(SmtpOutcome.Success);
-```
+Do **not** repeat the old `Models.cs` or `SmtpTestRunner.cs` edits from this document.
 
-### C) On final failure (else branch, after MarkFailed path) when lastEx != null
-Before or after MarkFailed:
-```csharp
-                            if (lastEx != null)
-                                outcomeCounters.Record(lastEx);
-                            else
-                                outcomeCounters.Record(SmtpOutcome.Unknown);
-```
-
-### D) MailTestResult construction — add:
-```csharp
-            OutcomeCounts: outcomeCounters.Snapshot(),
-```
-next to RetryMetrics.
-
-## A5 FIXED when
-CI green after these wires (classifier + RetryPolicy + health already committed).
+For a new outcome-classification change, create a separate post-baseline task only when a concrete source/test regression is demonstrated.
