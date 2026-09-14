@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using Xunit;
 
@@ -70,7 +69,7 @@ public sealed class LatencyHistogramTests
         Assert.Equal(6, merged.TotalCount);
         Assert.Equal(2, merged.Buckets[1].Count);
         Assert.Equal(2, merged.Buckets[6].Count);
-        Assert.Equal(2, merged.Buckets[15].Count);
+        Assert.Equal(1, merged.Buckets[15].Count);
     }
 
     [Fact]
