@@ -184,16 +184,14 @@ jobs:
           fi
           echo "Positive and negative agent-result verification tests passed."
 
-      - name: Require real results for implement-ready mode
+      - name: Keep implement-ready mode blocked until execution backend exists
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'implement-ready' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -d swarm-results ]]; then
-            echo "IMPLEMENT-READY requires result artifacts from a real execution backend." >&2
-            exit 1
-          fi
-          echo "Implement-ready execution requires externally produced, schema-valid agent results."
+          echo "IMPLEMENT-READY is intentionally blocked: this workflow does not run an LLM or execution backend yet." >&2
+          echo "A future backend must publish real schema-valid results before this mode can authorize implementation." >&2
+          exit 1
 
 # NOTE: this workflow is an agent coordination/task factory plus a deterministic
 # result-contract verifier, not an LLM. An actual model runner must consume the
