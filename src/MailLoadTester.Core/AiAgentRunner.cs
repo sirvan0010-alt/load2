@@ -29,7 +29,8 @@ public sealed record AiAgentTask(
     bool RealTargetRequired,
     bool Authorized,
     TimeSpan TimeBudget,
-    int MaxIterations);
+    int MaxIterations,
+    string WorkspacePath);
 
 public sealed record AiAgentFinding(
     string Claim,
@@ -83,17 +84,28 @@ public interface IAiAgentResultVerifier
         CancellationToken cancellationToken);
 }
 
+public interface IAiAgentWorkspaceIntegrityGate
+{
+    Task<WorkspaceIntegrityResult> VerifyAsync(
+        string workspacePath,
+        string expectedCommit,
+        CancellationToken cancellationToken);
+}
+
 public sealed class AiAgentRunner
 {
     private readonly IAiAgentAuthorizationPolicy _authorization;
     private readonly IAiAgentResultVerifier _verifier;
+    private readonly IAiAgentWorkspaceIntegrityGate _workspaceIntegrity;
 
     public AiAgentRunner(
         IAiAgentAuthorizationPolicy authorization,
-        IAiAgentResultVerifier verifier)
+        IAiAgentResultVerifier verifier,
+        IAiAgentWorkspaceIntegrityGate workspaceIntegrity)
     {
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
+        _workspaceIntegrity = workspaceIntegrity ?? throw new ArgumentNullException(nameof(workspaceIntegrity));
     }
 
     public async Task<AiAgentExecutionResult> RunAsync(
@@ -104,6 +116,14 @@ public sealed class AiAgentRunner
         ArgumentNullException.ThrowIfNull(agent);
         ValidateTask(task);
         cancellationToken.ThrowIfCancellationRequested();
+
+        var workspace = await _workspaceIntegrity.VerifyAsync(
+            task.WorkspacePath,
+            task.Commit,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!workspace.IsVerified)
+            return Blocked($"Workspace integrity gate rejected execution: {workspace.Reason}");
 
         if (task.RealTargetRequired && !await _authorization.AuthorizeAsync(task, cancellationToken).ConfigureAwait(false))
             return Blocked("Authorization policy rejected the task.");
@@ -143,8 +163,10 @@ public sealed class AiAgentRunner
             throw new ArgumentException("AgentRole is required.", nameof(task));
         if (!string.Equals(task.Repository, "sirvan0010-alt/load2", StringComparison.Ordinal))
             throw new ArgumentException("Task repository must be the load2 source of truth.", nameof(task));
-        if (task.Commit.Length != 40 || task.Commit.Any(c => !Uri.IsHexDigit(c)))
+        if (task.Commit.Length != 40 || !task.Commit.All(Uri.IsHexDigit))
             throw new ArgumentException("Task commit must be a 40-character SHA-1.", nameof(task));
+        if (string.IsNullOrWhiteSpace(task.WorkspacePath))
+            throw new ArgumentException("WorkspacePath is required.", nameof(task));
         if (task.MaxIterations is < 1 or > 20)
             throw new ArgumentOutOfRangeException(nameof(task), "MaxIterations must be between 1 and 20.");
         if (task.TimeBudget < TimeSpan.FromSeconds(1) || task.TimeBudget > TimeSpan.FromMinutes(30))
