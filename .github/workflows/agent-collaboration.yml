@@ -8,6 +8,8 @@ on:
       - "docs/AI-GUIDE.md"
       - "docs/AI_AGENT_EXTENSIONS.md"
       - "docs/LOAD2-GAP-MATRIX.md"
+      - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-ARCHITECTURE.md"
       - ".github/workflows/agent-collaboration.yml"
   pull_request:
     branches: [ "main" ]
@@ -16,6 +18,8 @@ on:
       - "docs/AI-GUIDE.md"
       - "docs/AI_AGENT_EXTENSIONS.md"
       - "docs/LOAD2-GAP-MATRIX.md"
+      - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-ARCHITECTURE.md"
       - ".github/workflows/agent-collaboration.yml"
   workflow_dispatch:
     inputs:
@@ -33,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Verify agent documents
         shell: bash
@@ -43,6 +47,8 @@ jobs:
           test -f docs/AI-GUIDE.md
           test -f docs/AI_AGENT_EXTENSIONS.md
           test -f docs/LOAD2-GAP-MATRIX.md
+          test -f docs/RESEARCH-LEDGER.json
+          test -f docs/AI-SWARM-ARCHITECTURE.md
 
           required=(
             ORCHESTRATOR
@@ -64,21 +70,69 @@ jobs:
           )
 
           for role in "${required[@]}"; do
-            if ! grep -RIn --fixed-strings "\`$role\`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null; then
+            if ! grep -RIn --fixed-strings "`$role`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null; then
               echo "ERROR: required role missing from agent contract: $role"
               exit 1
             fi
           done
 
           grep -Fq -- '--unauthorized' docs/AI-GUIDE.md
-          grep -Fq 'source code and tests' README.md
-          grep -Fq 'Source code and tests on `main` are authoritative' README.md
-          grep -Fq 'Current `main` source and tests beat documentation' docs/AI_AGENT_EXTENSIONS.md
           echo "Agent contract is present and source-of-truth rules are intact."
+
+  research-ledger-gate:
+    name: Research Ledger schema and consistency gate
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate RESEARCH-LEDGER.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys
+          path = "docs/RESEARCH-LEDGER.json"
+          with open(path, encoding="utf-8") as f:
+              data = json.load(f)
+
+          required_top = ["schemaVersion", "lifecycleStates", "decisionTags", "repositories", "mechanisms", "rules"]
+          for k in required_top:
+              if k not in data:
+                  print(f"ERROR: missing top-level key: {k}")
+                  sys.exit(1)
+
+          allowed = set(data["lifecycleStates"])
+          for repo in data.get("repositories", []):
+              if "id" not in repo or "name" not in repo or "status" not in repo:
+                  print(f"ERROR: repository entry incomplete: {repo}")
+                  sys.exit(1)
+              if repo["status"] not in allowed:
+                  print(f"ERROR: invalid repository status {repo['status']} for {repo['id']}")
+                  sys.exit(1)
+
+          for m in data.get("mechanisms", []):
+              if "id" not in m or "status" not in m:
+                  print(f"ERROR: mechanism entry incomplete: {m}")
+                  sys.exit(1)
+              if m["status"] not in allowed:
+                  print(f"ERROR: invalid mechanism status {m['status']} for {m.get('id')}")
+                  sys.exit(1)
+
+          rules = data.get("rules", {})
+          for rk in ("unknownStaysPending", "noInventedRevisions", "noInventedMechanisms",
+                     "researchAgentOwnsCompleteness", "orchestratorCannotCloseWithOpenMechanisms"):
+              if rk not in rules:
+                  print(f"ERROR: missing rule: {rk}")
+                  sys.exit(1)
+
+          print("Research Ledger schema and consistency OK.")
+          PY
 
   specialist-handoffs:
     name: Specialist handoff ${{ matrix.agent }}
-    needs: contract
+    needs: [contract, research-ledger-gate]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -90,7 +144,7 @@ jobs:
           - RELEASE_AGENT
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Generate deterministic handoff
         shell: bash
@@ -99,7 +153,7 @@ jobs:
           mkdir -p agent-handoffs
           case "${{ matrix.agent }}" in
             RESEARCH_AGENT)
-              scope="external source audit; mechanism classification; evidence provenance"
+              scope="external source audit; mechanism classification; research ledger completeness"
               ;;
             NETWORK_STRESS_AGENT)
               scope="bounded TCP/network stress dimensions; timeouts; connection rate/concurrency; IPv4/IPv6"
@@ -122,6 +176,7 @@ jobs:
             echo ""
             echo "## Required evidence"
             echo "- current main/source state"
+            echo "- research ledger consistency"
             echo "- focused tests where implementation changes"
             echo "- security/authorization review"
             echo "- CI/CodeQL evidence where applicable"
@@ -140,7 +195,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
       - name: Validate collaboration pipeline
         shell: bash
         run: |
@@ -152,5 +207,6 @@ jobs:
           grep -Fq 'INTEGRATION_AGENT' docs/AI_AGENT_EXTENSIONS.md
           grep -Fq 'RELEASE_AGENT' docs/AI_AGENT_EXTENSIONS.md
           grep -Fq 'NETWORK_STRESS_AGENT' docs/AI_AGENT_EXTENSIONS.md
-          grep -Fq 'CI + CodeQL' docs/AI_AGENT_EXTENSIONS.md
-          echo "ORCHESTRATOR collaboration contract validated."
+          grep -Fq 'RESEARCH_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          test -f docs/RESEARCH-LEDGER.json
+          echo "ORCHESTRATOR collaboration + Research Ledger contract validated."

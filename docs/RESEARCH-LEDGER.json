@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-14T20:30:00Z",
+  "description": "Machine-readable research ledger for external repositories and extractable mechanisms. Unknown facts remain PENDING. No invented revisions or mechanisms.",
+  "lifecycleStates": [
+    "PENDING",
+    "AUDITED",
+    "MAPPED",
+    "DECISION",
+    "IMPLEMENTED",
+    "TESTED",
+    "VERIFIED",
+    "CLOSED",
+    "REJECTED",
+    "BLOCKED"
+  ],
+  "decisionTags": [
+    "ADOPT",
+    "ADAPT",
+    "HARDEN",
+    "EXTRACT",
+    "SIMULATE",
+    "REFERENCE",
+    "REJECT"
+  ],
+  "repositories": [
+    {
+      "id": "REP-001",
+      "name": "slowhttptest",
+      "status": "PENDING",
+      "sourceUrl": null,
+      "revision": null,
+      "notes": "Queued for mechanism extraction. No claims until source audit exists.",
+      "mechanisms": []
+    },
+    {
+      "id": "REP-002",
+      "name": "GoldenEye",
+      "status": "PENDING",
+      "sourceUrl": null,
+      "revision": null,
+      "notes": "Queued for mechanism extraction. No claims until source audit exists.",
+      "mechanisms": []
+    }
+  ],
+  "mechanisms": [],
+  "rules": {
+    "unknownStaysPending": true,
+    "noInventedRevisions": true,
+    "noInventedMechanisms": true,
+    "researchAgentOwnsCompleteness": true,
+    "orchestratorCannotCloseWithOpenMechanisms": true,
+    "decisionRequiredBeforeImplementation": true,
+    "rejectedMeansOutOfScopeNotUnreviewed": true
+  }
+}
