@@ -3,8 +3,7 @@ using System.Collections.ObjectModel;
 namespace MailLoadTester.Core;
 
 /// <summary>
-/// Evidence levels inspired by the repository's hardware/diagnostic evidence ladder.
-/// Higher levels must never be inferred from lower levels.
+/// Evidence ladder for agent claims. A higher state must never be inferred from a lower one.
 /// </summary>
 public enum AgentEvidenceLevel
 {
@@ -59,7 +58,7 @@ public sealed record AiAgentContext(
     DateTimeOffset Deadline,
     int Iteration);
 
-/// <summary>Model/backend boundary. No provider is coupled to the core runner.</summary>
+/// <summary>Provider/model boundary. No AI vendor is coupled to the core runner.</summary>
 public interface IAiAgent
 {
     Task<AiAgentExecutionResult> ExecuteAsync(
@@ -113,7 +112,6 @@ public sealed class AiAgentRunner
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(agent);
-
         ValidateTask(task);
 
         if (!await _authorizationPolicy.ValidateAsync(task, cancellationToken).ConfigureAwait(false))
@@ -141,7 +139,7 @@ public sealed class AiAgentRunner
             : last with
             {
                 Status = AgentRunStatus.NeedsEvidence,
-                Handoff = "External verification did not accept the result within the configured iteration budget."
+                Handoff = "Independent verification did not accept the result within the configured iteration budget."
             };
     }
 
