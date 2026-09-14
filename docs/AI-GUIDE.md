@@ -75,18 +75,52 @@ The distinction is important: **DDoS is a distribution/attack model, not a synon
 
 ## 6. Current backlog
 
-The current execution order is maintained in the MASTER CARD (#4) and the implementation backlog. At the verified state recorded in the card:
+The following status is synchronized with the current `main` state and the verified work performed so far. Where a feature has partial implementation but does not yet satisfy the full Definition of Done, it is explicitly marked **IN PROGRESS** rather than FIXED.
 
 ```text
-A1 throttling                       ✅ FIXED — commit 175b379; CI #208 + CodeQL SUCCESS
-A2 multi-account regression tests   ← NEXT
-A3 bounded scenario queue
-A4 retry / requeue (same queue + SmartPace)
-A5 unified response classification
-A6 global concurrency audit only if overshoot is proven
+A1 destination-provider throttling                 ✅ VERIFIED / FIXED
+A2 multi-account throttling regression + metrics   ✅ VERIFIED / FIXED
+A3 bounded scenario queue + queue metrics          ✅ IMPLEMENTED / VERIFIED
+A4 retry / requeue + hard limits + retry metrics   🔄 IN PROGRESS
+A5 unified SMTP response classification             ⏳ NOT COMPLETE
+A6 global concurrency audit                         ⏳ CONDITIONAL
+A7 final observability / report / GUI reconciliation ⏳ NOT COMPLETE
+A8 final verification / documentation / baseline    ⏳ NOT COMPLETE
 ```
 
-Do not skip an earlier item merely because a later feature is interesting. EXT-AUDIT remains a parallel track and must not be mixed into unrelated engine changes.
+### Current A4 note
+
+Retry-related implementation and tests are already present on `main`, including retry-path coverage, cancellation/retry handling, retry pacing stress coverage, and retry metrics/budget work. The retry histogram is also being implemented/validated separately on `main` and must not be duplicated. A4 remains **IN PROGRESS** until the complete A4 contract is verified and CI is green for the final state.
+
+Relevant recent commits include:
+
+- `71b41f5` — retry metrics and budget calculation
+- `78bf3a2` — cancellation and retry pacing stress coverage
+- `30d6dbc` — cancellation during retry / AutoRestart guard
+- `764d3d9` — cancelled outcome propagation during worker abort
+- `09f31cf` — transient retry through the send path
+- `5e0689f` — latency histogram aggregation across AutoRestart
+- `f2108f8` — latency histogram merge-test correction
+
+Do not treat individual retry or histogram commits as proof that all of A4 is complete. Verify the source, tests and CI together.
+
+### Next execution order
+
+```text
+A4 complete verification / remaining retry-requeue gaps
+    ↓
+A5 unified SMTP response classification
+    ↓
+A6 concurrency audit only if a real overshoot is proven
+    ↓
+A7 report / GUI / dashboard reconciliation
+    ↓
+A8 final verification + documentation + baseline
+```
+
+Do not start a second limiter, second queue, AIMD/adaptive-rate system, reputation runtime service, per-IP/subnet quota or other parallel pacing stack unless source-level evidence proves an actual gap requiring it.
+
+EXT-AUDIT remains a parallel track and must not be mixed into unrelated engine changes.
 
 ## 7. Definition of Done
 
@@ -95,6 +129,8 @@ Do not skip an earlier item merely because a later feature is interesting. EXT-A
 - Green CI (and CodeQL when it runs)
 - Doc status matches **source**, not chat memory
 - MASTER CARD reflects the verified plan/status
+- No secrets introduced into source or reports
+- Existing authorization, DryRun/TestMode, `--unauthorized`, cancellation, hard limits and pacing remain intact
 
 ## 8. Detail index (optional reading)
 
