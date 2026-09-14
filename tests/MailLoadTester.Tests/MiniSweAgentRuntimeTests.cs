@@ -12,13 +12,19 @@ public sealed class MiniSweAgentRuntimeTests
         var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "load2-agent-test-" + Guid.NewGuid())).FullName;
         try
         {
-            var task = CreateTask();
+            var task = CreateTask(workspace);
             await runtime.RunAsync(task, workspace);
 
             Assert.NotNull(sandbox.LastSpecification);
             Assert.Equal(Path.GetFullPath(workspace), sandbox.LastSpecification!.WorkspacePath);
+            Assert.Equal(task.Repository, sandbox.LastSpecification.Repository);
+            Assert.Equal(task.Commit, sandbox.LastSpecification.ImmutableCommit);
+            Assert.Equal(task.AllowedScopes, sandbox.LastSpecification.AllowedScopes);
+            Assert.Equal(task.MaxIterations, sandbox.LastSpecification.MaxIterations);
             Assert.Contains(task.Commit, sandbox.LastSpecification.TaskPrompt, StringComparison.Ordinal);
             Assert.Contains("Do not access real targets", sandbox.LastSpecification.TaskPrompt, StringComparison.Ordinal);
+            Assert.Equal(AiAgentNetworkPolicy.Denied, sandbox.LastSpecification.NetworkPolicy);
+            Assert.Empty(sandbox.LastSpecification.Environment);
             Assert.Equal(task.TimeBudget, sandbox.LastSpecification.TimeBudget);
         }
         finally
@@ -32,12 +38,30 @@ public sealed class MiniSweAgentRuntimeTests
     {
         var sandbox = new RecordingSandbox();
         var runtime = new MiniSweAgentRuntime(sandbox);
-        var task = CreateTask();
+        var task = CreateTask(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
 
         await Assert.ThrowsAsync<DirectoryNotFoundException>(() =>
-            runtime.RunAsync(task, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))));
+            runtime.RunAsync(task, task.WorkspacePath));
 
         Assert.Null(sandbox.LastSpecification);
+    }
+
+    [Fact]
+    public async Task RejectsExecutionBoundaryWithoutIsolation()
+    {
+        var sandbox = new UnconfinedSandbox();
+        var runtime = new MiniSweAgentRuntime(sandbox);
+        var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "load2-agent-test-" + Guid.NewGuid())).FullName;
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                runtime.RunAsync(CreateTask(workspace), workspace));
+            Assert.Null(sandbox.LastSpecification);
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
     }
 
     [Fact]
@@ -52,8 +76,8 @@ public sealed class MiniSweAgentRuntimeTests
             cts.Cancel();
 
             await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                runtime.RunAsync(CreateTask(), workspace, cts.Token));
-            Assert.True(sandbox.Called);
+                runtime.RunAsync(CreateTask(workspace), workspace, cts.Token));
+            Assert.False(sandbox.Called);
         }
         finally
         {
@@ -61,7 +85,27 @@ public sealed class MiniSweAgentRuntimeTests
         }
     }
 
-    private static AiAgentTask CreateTask() => new(
+    [Fact]
+    public async Task RedactsSensitiveKeyValueLinesFromRuntimeOutput()
+    {
+        var sandbox = new OutputSandbox();
+        var runtime = new MiniSweAgentRuntime(sandbox);
+        var workspace = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "load2-agent-test-" + Guid.NewGuid())).FullName;
+        try
+        {
+            var result = await runtime.RunAsync(CreateTask(workspace), workspace);
+
+            Assert.Contains("PASSWORD=[REDACTED]", result.StandardOutput, StringComparison.Ordinal);
+            Assert.DoesNotContain("super-secret", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("normal=value", result.StandardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+
+    private static AiAgentTask CreateTask(string workspacePath) => new(
         "TEST-RUNTIME-001",
         "IMPLEMENTATION_AGENT",
         "sirvan0010-alt/load2",
@@ -71,11 +115,20 @@ public sealed class MiniSweAgentRuntimeTests
         RealTargetRequired: false,
         Authorized: false,
         TimeSpan.FromSeconds(30),
-        MaxIterations: 2);
+        MaxIterations: 2,
+        workspacePath);
+
+    private static readonly AiAgentRuntimeCapabilities SafeCapabilities = new(
+        IsolatedWorkspace: true,
+        FilesystemConstrained: true,
+        NetworkPolicy: AiAgentNetworkPolicy.Denied,
+        EnvironmentAllowListed: true,
+        ProcessTreeCancellation: true);
 
     private sealed class RecordingSandbox : IMiniSweAgentSandbox
     {
         public MiniSweAgentLaunchSpec? LastSpecification { get; private set; }
+        public AiAgentRuntimeCapabilities Capabilities => SafeCapabilities;
 
         public Task<MiniSweAgentRunResult> RunAsync(
             MiniSweAgentLaunchSpec specification,
@@ -86,9 +139,25 @@ public sealed class MiniSweAgentRuntimeTests
         }
     }
 
+    private sealed class UnconfinedSandbox : IMiniSweAgentSandbox
+    {
+        public AiAgentRuntimeCapabilities Capabilities => new(
+            IsolatedWorkspace: false,
+            FilesystemConstrained: false,
+            NetworkPolicy: AiAgentNetworkPolicy.Denied,
+            EnvironmentAllowListed: true,
+            ProcessTreeCancellation: true);
+
+        public Task<MiniSweAgentRunResult> RunAsync(
+            MiniSweAgentLaunchSpec specification,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Should not execute.");
+    }
+
     private sealed class CancellingSandbox : IMiniSweAgentSandbox
     {
         public bool Called { get; private set; }
+        public AiAgentRuntimeCapabilities Capabilities => SafeCapabilities;
 
         public Task<MiniSweAgentRunResult> RunAsync(
             MiniSweAgentLaunchSpec specification,
@@ -98,5 +167,19 @@ public sealed class MiniSweAgentRuntimeTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(new MiniSweAgentRunResult(0, string.Empty, string.Empty, TimeSpan.Zero));
         }
+    }
+
+    private sealed class OutputSandbox : IMiniSweAgentSandbox
+    {
+        public AiAgentRuntimeCapabilities Capabilities => SafeCapabilities;
+
+        public Task<MiniSweAgentRunResult> RunAsync(
+            MiniSweAgentLaunchSpec specification,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new MiniSweAgentRunResult(
+                0,
+                "PASSWORD=super-secret\nnormal=value",
+                "TOKEN=another-secret",
+                TimeSpan.FromMilliseconds(1)));
     }
 }
