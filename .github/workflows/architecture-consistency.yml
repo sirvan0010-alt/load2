@@ -1,0 +1,32 @@
+name: Architecture Consistency
+
+on:
+  push:
+    branches: [ "main", "fix/**" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture:
+    name: Repository Architecture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Verify project boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/MailLoadTester.Core/MailLoadTester.Core.csproj
+          test -f tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          test -d src/MailLoadTester.Gui
+          test -d tests/MailLoadTester.Tests
+          if find . -type f \( -name '*.dll' -o -name '*.pdb' -o -name '*.nupkg' \) -not -path './.git/*' | grep -q .; then
+            echo 'ERROR: compiled artifacts are committed or present in the repository tree.'
+            exit 1
+          fi
+          echo 'Repository boundaries are structurally valid.'
