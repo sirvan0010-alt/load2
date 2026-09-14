@@ -5,13 +5,15 @@
 
 ## 1. Interpretation
 
-External repositories are studied **mechanism-by-mechanism**, including repositories whose primary purpose is spam, bombing, flooding, scanning or DoS/DDoS. The repository label does not determine the decision.
+External repositories are studied **mechanism-by-mechanism**, including repositories whose primary purpose is spam, bombing, flooding, scanning or DoS/DDoS. The repository label does not determine the engineering decision.
 
-Reusable mechanisms can be `ADOPT`, `ADAPT`, `HARDEN`, `EXTRACT`, `SIMULATE` or `REFERENCE` when they improve an authorized load2 test. Abuse-specific paths remain separate from the engineering mechanism.
+Reusable mechanisms can be `ADOPT`, `ADAPT`, `HARDEN`, `EXTRACT`, `SIMULATE` or `REFERENCE` when they improve a load2 capability. A mechanism's eventual execution context, authorization model, scope, limits and verification requirements are evaluated separately from the mechanism itself.
+
+The Research Ledger is the machine-readable state for this research. Unknown facts remain `PENDING`; no source revision or mechanism may be invented.
 
 ## 2. Audited repository set
 
-All 15 repositories in the current EXT-AUDIT-001 list have been source-audited at the level recorded in their individual audit documents. No repository is treated as authoritative for load2 implementation.
+All 15 repositories in the current EXT-AUDIT-001 list have repository-level source audit records in this documentation set. The ledger additionally tracks the two network research repositories explicitly queued for the current collaboration work: slowhttptest and GoldenEye.
 
 | Repository | Main transferable mechanism(s) | Decision |
 |---|---|---|
@@ -22,7 +24,7 @@ All 15 repositories in the current EXT-AUDIT-001 list have been source-audited a
 | `devops-kung-fu/bomber` | provider/enrichment/result pipeline, structured reporting | ADOPT architecture |
 | `ncorbuk/Python---Email-Bomber` | basic SMTP lifecycle/configuration comparison | REFERENCE |
 | `hackerxphantom/X_BOMB` | provider abstraction, bounded orchestration concepts | ADAPT where source evidence supports |
-| `anubhavanonymous/XLR8_BOMBER` | capability detection and service-health concepts | ADOPT architecture; unsafe paths excluded |
+| `anubhavanonymous/XLR8_BOMBER` | capability detection and service-health concepts | ADOPT architecture where evidence supports |
 | `juzeon/fast-mail-bomber` | provider/node inventory, deduplication, dead-provider tracking | ADOPT / ADAPT controlled |
 | `mohinparamasivam/Email-Bomber` | SMTP lifecycle and failure handling comparison | REFERENCE / compare |
 | `OpticHalberdier/sms-bomber-tool` | claimed queue/provider/retry architecture | REFERENCE until source proves claims |
@@ -31,7 +33,7 @@ All 15 repositories in the current EXT-AUDIT-001 list have been source-audited a
 | `Trehwmm/Email-Bomber-SMTP` | SMTP/TLS/session lifecycle comparison | REFERENCE / SECURITY-CRITICAL source audit |
 | `noluckkid/wade-miller-bombers` | comparative orchestration review | REFERENCE |
 
-The exact source evidence and decision rationale are maintained in `docs/external-repos/*.md`.
+The exact source evidence and decision rationale are maintained in `docs/external-repos/*.md` and are progressively normalized into `docs/RESEARCH-LEDGER.json`.
 
 ## 3. Mechanisms already represented in load2
 
@@ -51,19 +53,19 @@ The external research has already informed or corresponds to capabilities now pr
 - DNS/MX/SPF/DMARC and SMTP/TLS diagnostics;
 - FEAT-022 phase timing.
 
-These are **not** new backlog gaps merely because an external repository also contains them.
+These are **not** new backlog gaps merely because an external repository also contains them. Any claimed gap requires current-source evidence.
 
 ## 4. Post-baseline transfer candidates
 
-Only concrete gaps should become new implementation work. Current candidates are:
+Only concrete source-backed gaps should become new implementation work. Current candidates are:
 
-1. provider/transport abstraction refinements where the existing types genuinely benefit;
+1. provider/transport abstraction refinements where existing types genuinely benefit;
 2. endpoint canonicalization/deduplication if a real source-level gap is demonstrated;
 3. controlled failure-injection scenarios;
 4. replayable/redacted run artifacts if required by the product;
 5. GUI summary projection using `RunObservability.FromReport`;
 6. authorized `NET-AUDIT-001` fixtures;
-7. further external ADOPT/ADAPT work supported by source evidence.
+7. further external ADOPT/ADAPT work supported by pinned source evidence.
 
 No candidate should bypass the existing execution pipeline.
 
@@ -93,11 +95,19 @@ DeliveryLedger / RetryMetrics / RunReport
 RunObservability
 ```
 
-## 6. Non-transfer boundary
+## 6. Capability transfer boundary
 
-Do not import mechanisms whose primary purpose is credential/token theft, CAPTCHA/OTP bypass, stealth/evasion for abuse, arbitrary public-target discovery for flooding, provider-abuse bypass, reflection/amplification or unrestricted destructive DoS/DDoS.
+There is no blanket repository-name-based prohibition on researching or extracting a mechanism. Instead, the implementation decision must record the mechanism, source evidence, target context, authorization requirements, resource bounds, cancellation model, observability and verification plan.
 
-This boundary does **not** prohibit controlled stress/load mechanisms. A high-concurrency or distributed test can be legitimate when its target, scope, limits, cancellation and observability are explicit and authorized.
+High-risk capabilities require explicit authorization and technical governance before execution. This is a **governance and execution boundary**, not a claim that the capability can never exist in load2.
+
+A mechanism may therefore be:
+
+- `REFERENCE` when useful for comparison only;
+- `EXTRACT` when isolated as reusable engineering knowledge;
+- `SIMULATE` when a controlled test model is appropriate;
+- `ADOPT` / `ADAPT` when the mechanism fits the load2 architecture and gates;
+- `REJECT` when it does not fit the documented product scope or cannot meet the required evidence/governance contract.
 
 ## 7. Audit rule for future repositories
 
