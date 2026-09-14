@@ -69,7 +69,9 @@ public sealed class MiniSweAgentDockerIntegrationTests
 
             var result = await runtime.RunAsync(task, workspace);
 
-            Assert.Equal(0, result.ExitCode);
+            Assert.True(
+                result.ExitCode == 0,
+                $"mini-SWE-agent Docker execution failed with exit code {result.ExitCode}. stderr: {result.StandardError}");
             Assert.Contains("COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT", result.StandardOutput, StringComparison.Ordinal);
         }
         finally
