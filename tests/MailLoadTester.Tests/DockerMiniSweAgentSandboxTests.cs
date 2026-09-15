@@ -17,7 +17,7 @@ public sealed class DockerMiniSweAgentSandboxTests
     }
 
     [Fact]
-    public void BuildDockerArguments_ForcesNonInteractiveMiniSweAgentContract()
+    public void BuildDockerArguments_UsesNonInteractiveEntrypointContract()
     {
         var sandbox = new DockerMiniSweAgentSandbox("example/image");
         var workspace = Directory.CreateDirectory(
@@ -39,24 +39,20 @@ public sealed class DockerMiniSweAgentSandboxTests
 
             var args = sandbox.BuildDockerArguments(specification, workspace);
 
-            // Root cause fix: skip configure_if_first_time() / prompt_toolkit setup.
             Assert.Contains("MSWEA_CONFIGURED=true", args);
-            var envIdx = args.IndexOf("MSWEA_CONFIGURED=true");
-            Assert.True(envIdx > 0);
-            Assert.Equal("--env", args[envIdx - 1]);
+            Assert.Contains("MSWEA_SILENT_STARTUP=1", args);
+            Assert.Contains("MSWEA_GLOBAL_CONFIG_DIR=/tmp/mini-swe-agent-config", args);
 
-            // DefaultAgent path — not InteractiveAgent confirm/yolo.
-            Assert.Contains("--agent-class", args);
-            Assert.Equal("default", args[args.IndexOf("--agent-class") + 1]);
-
-            // Task must be explicit so CLI never opens multiline prompt.
             Assert.Contains("--task", args);
             Assert.Equal("deterministic smoke task", args[args.IndexOf("--task") + 1]);
+            Assert.Contains("--config", args);
+            Assert.Contains("--model", args);
 
-            // Must not depend on interactive yolo/confirm flags for non-TTY.
+            // Must not invoke the interactive mini CLI control path.
             Assert.DoesNotContain("-y", args);
             Assert.DoesNotContain("--yolo", args);
             Assert.DoesNotContain("--exit-immediately", args);
+            Assert.DoesNotContain("--agent-class", args);
         }
         finally
         {

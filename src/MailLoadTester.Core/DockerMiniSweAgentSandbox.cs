@@ -6,15 +6,11 @@ namespace MailLoadTester.Core;
 /// Docker-backed execution boundary for mini-SWE-agent.
 /// The container is deliberately network-isolated and resource-bounded.
 /// Docker itself must be trusted and correctly configured by the host.
-/// The image entrypoint is authoritative; the agent executable is retained
-/// as configuration metadata but is not appended as a duplicate command.
 ///
-/// Non-interactive contract (mini-SWE-agent CLI):
-/// <list type="bullet">
-/// <item><description><c>MSWEA_CONFIGURED=true</c> skips first-time <c>configure_if_first_time()</c> / prompt_toolkit setup (root cause of "Input is not a terminal").</description></item>
-/// <item><description><c>--agent-class default</c> selects <c>DefaultAgent</c> instead of InteractiveAgent (confirm/yolo prompts).</description></item>
-/// <item><description><c>--task</c> is always supplied so the CLI never calls interactive multiline task prompt.</description></item>
-/// </list>
+/// The pinned image entrypoint is load2's non-interactive Python runner
+/// (<c>load2-mini-swe-noninteractive</c>), not the stock <c>mini-swe-agent</c> CLI.
+/// The stock CLI imports prompt_toolkit and can abort with
+/// "Input is not a terminal (fd=0)" even when yolo/exit-immediately flags are set.
 /// </summary>
 public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
 {
@@ -127,8 +123,8 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
     }
 
     /// <summary>
-    /// Builds docker run + mini-SWE-agent CLI arguments. Exposed for unit tests
-    /// so the non-interactive contract can be asserted without Docker.
+    /// Builds docker run + non-interactive entrypoint arguments.
+    /// Exposed for unit tests so the non-interactive contract can be asserted without Docker.
     /// </summary>
     internal List<string> BuildDockerArguments(MiniSweAgentLaunchSpec specification, string workspace)
     {
@@ -143,30 +139,37 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
             "--memory", $"{_memoryBytes}b",
             "--cpus", _cpuLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
-            "--tmpfs", "/root/.config:rw,noexec,nosuid,size=16m",
+            // Writable config home for mini-SWE-agent global .env (still non-interactive).
+            "--tmpfs", "/tmp/mini-swe-agent-config:rw,noexec,nosuid,size=16m",
             "--mount", $"type=bind,src={workspace},dst=/workspace",
             "--workdir", "/workspace"
         };
 
-        // Primary non-TTY fix: skip mini-SWE-agent first-time interactive setup.
+        // Defense in depth — entrypoint also forces these before importing minisweagent.
         arguments.Add("--env");
         arguments.Add("MSWEA_CONFIGURED=true");
+        arguments.Add("--env");
+        arguments.Add("MSWEA_SILENT_STARTUP=1");
+        arguments.Add("--env");
+        arguments.Add("MSWEA_GLOBAL_CONFIG_DIR=/tmp/mini-swe-agent-config");
 
         foreach (var pair in _environment)
         {
             if (IsHostCredentialKey(pair.Key))
                 throw new ArgumentException($"Credential-like environment key is not permitted: {pair.Key}", nameof(specification));
-            if (string.Equals(pair.Key, "MSWEA_CONFIGURED", StringComparison.Ordinal))
-                continue; // already forced true above
+            if (string.Equals(pair.Key, "MSWEA_CONFIGURED", StringComparison.Ordinal) ||
+                string.Equals(pair.Key, "MSWEA_SILENT_STARTUP", StringComparison.Ordinal) ||
+                string.Equals(pair.Key, "MSWEA_GLOBAL_CONFIG_DIR", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             arguments.Add("--env");
             arguments.Add($"{pair.Key}={pair.Value}");
         }
 
         arguments.Add(_image);
-        // Image ENTRYPOINT is mini-swe-agent. Do not prepend the executable again.
-        // Use DefaultAgent — not InteractiveAgent — so no prompt_toolkit TTY path.
-        arguments.Add("--agent-class");
-        arguments.Add("default");
+        // Image ENTRYPOINT is the non-interactive runner. Pass only its CLI.
         arguments.Add("--task");
         arguments.Add(specification.TaskPrompt);
 
