@@ -44,30 +44,35 @@ Implemented in `src/MailLoadTester.Core/ProviderSimulator.cs`.
 
 Delivered deterministic local provider simulation, seeded reproducibility, provider/workflow identity, accepted/throttled/temporary/permanent outcomes, latency/authentication-result patterns, cancellation, bounded event count, B3 composition, duplicate-provider protection and focused tests. The implementation performs no network I/O and introduces no second queue/pacing/retry stack.
 
-CI evidence: the latest verified B4 branch run was green across CI, Agent Runtime Integration, Architecture Consistency, Agent Collaboration Contract, Actions Hygiene, Dependency Review, CodeQL and the AI Agent Swarm task factory.
+CI evidence: the verified B4 branch run was green across the required repository checks.
 
 ### B5 Behavioral Analyzer — IMPLEMENTED, CI PENDING
 
 Implemented in `src/MailLoadTester.Core/BehavioralAnalyzer.cs` with focused tests in `tests/MailLoadTester.Tests/BehavioralAnalyzerTests.cs`.
 
+Delivered normalized deterministic events, burst/velocity analysis, provider and sender-domain diversity, recipient concentration, bounded anomaly scoring, findings, B4 event mapping, cancellation and validation. No network I/O and no modification of delivery execution.
+
+The first CI attempt exposed a test-only constructor mismatch against the canonical B4 event contract. It has been corrected; fresh CI is running on the corrected head. B5 is not marked COMPLETE until that CI gate passes.
+
+### B6 Mailbox / Deliverability Lab — IMPLEMENTED, CI PENDING
+
+Implemented as a controlled in-memory lab in `src/MailLoadTester.Core/MailboxDeliverabilityLab.cs` with focused tests in `tests/MailLoadTester.Tests/MailboxDeliverabilityLabTests.cs`.
+
 Delivered:
 
-- normalized `BehavioralMailEvent` contract;
-- deterministic event ordering and analysis;
-- event velocity and peak burst calculation;
-- provider and sender-domain diversity;
-- recipient concentration;
-- bounded transparent anomaly score;
-- explicit findings for burst/concentration/low diversity;
-- direct mapping from B4 `SimulatedMailEvent`;
-- cancellation and input validation;
-- no network I/O and no modification of delivery execution.
+- explicit mailbox/quota contract;
+- message-count and byte-count quota enforcement;
+- accepted/rejected/quota-exceeded dispositions;
+- provider-outcome-aware delivery behavior;
+- mailbox snapshots and pressure indicators;
+- deterministic mailbox reads;
+- bounded recovery/removal operation;
+- thread-safe mailbox state;
+- `CancellationToken` support;
+- no SMTP/IMAP sockets, credentials or external traffic;
+- explicit boundary for a future external MTA adapter outside the core transport engine.
 
-Acceptance gate remaining: fresh CI verification on the latest B5 commit. Only after that gate may B5 be marked COMPLETE.
-
-### B6 Mailbox / Deliverability Lab — POST-BASELINE
-
-Use a controlled SMTP/IMAP environment for delivery, mailbox quota, recovery and authentication testing. Keep the MTA/test environment outside the core transport layer.
+This closes the core B6 lab boundary without introducing a second SMTP queue, pacing system, retry policy or network transport. CI verification remains the final acceptance gate.
 
 ### B7 Authentication / Transport Evidence — POST-BASELINE
 
