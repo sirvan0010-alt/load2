@@ -19,13 +19,13 @@ The existing SMTP engine remains the foundation. New capabilities must reuse its
 
 ### P1 — controlled security scenarios
 
-1. **B1 Documentation reset and canonical map — COMPLETE.** Competing active plans were consolidated into the canonical documentation set; historical audit material remains evidence/history.
-2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.** The retained repository set has source-backed transfer decisions. Future repositories enter a new audit item rather than reopening B2.
-3. **B3 Scenario Engine — COMPLETE.** Typed scenario definitions and a single execution adapter now route supported scenarios through the existing SMTP runner without a second queue, pacing, concurrency or retry stack.
-4. **B4 Provider Simulator.** Model multiple mail providers and message workflows locally/inside an authorized lab.
-5. **B5 Behavioral Analysis.** Measure burst velocity, sender/domain diversity, recipient concentration, provider diversity, authentication distribution and mailbox pressure.
-6. **B6 Mailbox/Deliverability Lab.** Integrate a controlled SMTP/IMAP test environment when useful.
-7. **B7 Authentication and transport evidence.** Expand SPF/DKIM/DMARC, TLS and related diagnostics from read-only checks into evidence-rich test results.
+1. **B1 Documentation reset and canonical map — COMPLETE.**
+2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.**
+3. **B3 Scenario Engine — COMPLETE.** Typed scenario definitions and a single execution adapter route supported scenarios through the existing SMTP runner.
+4. **B4 Provider Simulator — COMPLETE, CI VERIFIED.** Deterministic local provider/workflow simulation with controlled outcomes and B3 composition.
+5. **B5 Behavioral Analysis — IMPLEMENTED, CI PENDING.** Deterministic burst, velocity, diversity, concentration and anomaly analysis over normalized mail events.
+6. **B6 Mailbox/Deliverability Lab — IMPLEMENTED, CI PENDING.** Controlled in-memory mailbox lab with quotas, delivery dispositions, pressure observation and recovery. A real SMTP/IMAP MTA remains an external lab adapter, not a second core transport stack.
+7. **B7 Authentication and transport evidence.** Expand SPF/DKIM/DMARC, TLS and related diagnostics into evidence-rich test results.
 8. **B8 Replayable runs.** Persist redacted scenario, configuration, event and result artifacts for deterministic reproduction.
 9. **B9 Security gates.** Enforce SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI.
 
@@ -47,11 +47,11 @@ The corresponding security-testing objectives remain supported through controlle
 
 ## Single-machine decision
 
-`rojberr/mailcannon` is retained as a **reference only**. Its distributed Docker/Swarm/Kubernetes scaling model is not a P1 dependency for a one-PC load2 deployment. Only an isolated mechanism with a demonstrated benefit may be adapted later.
+`rojberr/mailcannon` is retained as a **reference only**. Its distributed Docker/Swarm/Kubernetes scaling model is not a P1 dependency for a one-PC load2 deployment.
 
 ## Scenario families
 
-Direct SMTP scenarios now supported by B3:
+Direct SMTP scenarios supported by B3:
 
 - `NormalDelivery`
 - `BurstDelivery`
@@ -60,16 +60,15 @@ Direct SMTP scenarios now supported by B3:
 - `ProviderDistribution`
 - `Deliverability`
 
-Typed but intentionally simulation-only until later lab work:
+Provider/lab simulation scenarios:
 
 - `FailureInjection`
 - `MailboxQuota`
 - `SubscriptionBombSimulation`
 - `DoubleOptInSimulation`
 - `AntiAbuseControlSimulation`
-- `DistributedLab`
 
-The simulation-only boundary prevents a future scenario from silently turning into real SMTP traffic before its provider/mailbox controls exist.
+The simulation-only boundary prevents a future scenario from silently turning into unrestricted real traffic.
 
 ## Architecture rule
 
@@ -90,7 +89,9 @@ existing SEND + outcome classification
     ↓
 DeliveryLedger / RetryMetrics / RunReport
     ↓
-RunObservability + security analysis
+RunObservability + BehavioralAnalysis
+    ↓
+controlled MailboxDeliverabilityLab
 ```
 
 No parallel queue, pacing stack or retry pipeline is permitted.
@@ -102,9 +103,8 @@ A feature is not complete until source, focused tests, security review, CI evide
 ## Next execution order
 
 ```text
-B4 Provider Simulator integration
-→ B5 Behavioral Analyzer
-→ B6 Mailbox/Deliverability Lab
+B5 CI verification
+→ B6 CI verification
 → B7 authentication/transport evidence
 → B8 replayable artifacts
 → B9 execution gates
