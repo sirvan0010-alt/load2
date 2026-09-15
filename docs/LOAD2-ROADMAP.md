@@ -10,17 +10,17 @@ The existing SMTP engine remains the foundation. New capabilities must reuse its
 
 ## Priority model
 
-### P0 — protect and finish the baseline
+### P0 — protect the baseline
 
 1. Keep TRACK A A1–A8 closed and regression-tested.
-2. Finish the current agent-runtime CI defect before declaring the runtime phase verified.
+2. Keep the verified agent-runtime Docker boundary and its CI evidence under regression protection.
 3. Keep `--unauthorized`, DryRun/TestMode, hard limits, cancellation and secret redaction mandatory.
-4. Keep documentation synchronized with source, tests and CI evidence.
+4. Keep canonical documentation synchronized with source, tests and CI evidence.
 
 ### P1 — controlled security scenarios
 
-1. **B1 Documentation reset and canonical map.**
-2. **B2 External repository mechanism audit.** Record exact source revision where available and classify mechanisms as HAVE/GAP/ADOPT/ADAPT/SIMULATE/REFERENCE/REJECT.
+1. **B1 Documentation reset and canonical map — COMPLETE.** Competing active plans were consolidated into the canonical documentation set; historical audit material remains evidence/history.
+2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.** The retained repository set and the explicitly queued slowhttptest/GoldenEye research have source-backed transfer decisions. Future repositories enter a new audit item rather than reopening B2.
 3. **B3 Scenario Engine.** Introduce a typed scenario model without creating a second queue, pacing or concurrency system.
 4. **B4 Provider Simulator.** Model multiple mail providers and message workflows locally/inside an authorized lab.
 5. **B5 Behavioral Analysis.** Measure burst velocity, sender/domain diversity, recipient concentration, provider diversity, authentication distribution and mailbox pressure.
@@ -92,3 +92,17 @@ No parallel queue, pacing stack or retry pipeline is permitted.
 ## Definition of done for each B item
 
 A feature is not complete until source, focused tests, security review, CI evidence and documentation are synchronized. A README claim or design sketch alone never changes the capability status.
+
+## Next execution order
+
+```text
+B3 Scenario Engine
+→ B4 Provider Simulator integration
+→ B5 Behavioral Analyzer
+→ B6 Mailbox/Deliverability Lab
+→ B7 authentication/transport evidence
+→ B8 replayable artifacts
+→ B9 execution gates
+```
+
+B3/B4 foundations may exist before their integration is marked complete; status follows source + tests + CI, not document presence.
