@@ -50,15 +50,27 @@ public sealed class ScenarioQueueMetrics
         DecrementDepth();
     }
 
-    public ScenarioQueueMetricsSnapshot Snapshot() => new(
-        QueueDepth,
-        PeakQueueDepth,
-        Enqueued,
-        Dequeued,
-        Completed,
-        FullWaits,
-        Cancelled,
-        Drained);
+    public ScenarioQueueMetricsSnapshot Snapshot()
+    {
+        // The channel producer records Enqueued immediately after publishing an item.
+        // A consumer can therefore observe/dequeue that item first and transiently make
+        // the event-ordering depth counter lag by one. At a completed snapshot the
+        // authoritative queue depth is the count identity: enqueued - dequeued - drained.
+        var enqueued = Enqueued;
+        var dequeued = Dequeued;
+        var drained = Drained;
+        var consistentDepth = Math.Max(0, enqueued - dequeued - drained);
+
+        return new ScenarioQueueMetricsSnapshot(
+            consistentDepth,
+            PeakQueueDepth,
+            enqueued,
+            dequeued,
+            Completed,
+            FullWaits,
+            Cancelled,
+            drained);
+    }
 
     void DecrementDepth()
     {
