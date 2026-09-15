@@ -23,9 +23,9 @@ The existing SMTP engine remains the foundation. New capabilities must reuse its
 2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.**
 3. **B3 Scenario Engine — COMPLETE.** Typed scenario definitions and a single execution adapter route supported scenarios through the existing SMTP runner.
 4. **B4 Provider Simulator — COMPLETE, CI VERIFIED.** Deterministic local provider/workflow simulation with controlled outcomes and B3 composition.
-5. **B5 Behavioral Analysis — IMPLEMENTED, CI PENDING.** Deterministic burst, velocity, diversity, concentration and anomaly analysis over normalized mail events.
-6. **B6 Mailbox/Deliverability Lab — IMPLEMENTED, CI PENDING.** Controlled in-memory mailbox lab with quotas, delivery dispositions, pressure observation and recovery. A real SMTP/IMAP MTA remains an external lab adapter, not a second core transport stack.
-7. **B7 Authentication and transport evidence.** Expand SPF/DKIM/DMARC, TLS and related diagnostics into evidence-rich test results.
+5. **B5 Behavioral Analysis — COMPLETE, CI VERIFIED.** Deterministic burst, velocity, diversity, concentration and anomaly analysis over normalized mail events.
+6. **B6 Mailbox/Deliverability Lab — COMPLETE, CI VERIFIED.** Controlled in-memory mailbox lab with quotas, delivery dispositions, pressure observation and recovery. A real SMTP/IMAP MTA remains an external lab adapter, not a second core transport stack.
+7. **B7 Authentication and transport evidence — COMPLETE, CI VERIFIED.** Existing transport diagnostics are projected into structured SMTP/TLS/MX/SPF/DMARC evidence with an explicit DKIM selector boundary.
 8. **B8 Replayable runs.** Persist redacted scenario, configuration, event and result artifacts for deterministic reproduction.
 9. **B9 Security gates.** Enforce SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI.
 
@@ -92,6 +92,8 @@ DeliveryLedger / RetryMetrics / RunReport
 RunObservability + BehavioralAnalysis
     ↓
 controlled MailboxDeliverabilityLab
+    ↓
+AuthenticationTransportEvidence
 ```
 
 No parallel queue, pacing stack or retry pipeline is permitted.
@@ -103,11 +105,8 @@ A feature is not complete until source, focused tests, security review, CI evide
 ## Next execution order
 
 ```text
-B5 CI verification
-→ B6 CI verification
-→ B7 authentication/transport evidence
-→ B8 replayable artifacts
-→ B9 execution gates
+B8 replayable artifacts
+→ B9 execution/security gates
 ```
 
 B4+ status follows source + tests + CI, not document presence.
