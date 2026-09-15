@@ -27,8 +27,8 @@ The existing bounded `Channel<T>`, workers/`MaxConcurrency`, `SmartPaceControlle
 | B5 behavioral analyzer | COMPLETE — CI VERIFIED | maintain regression coverage |
 | B6 mailbox/deliverability lab | COMPLETE — CI VERIFIED | maintain lab/security boundary |
 | B7 richer auth/transport evidence | COMPLETE — CI VERIFIED | maintain evidence projection |
-| B8 replayable redacted artifacts | POST-BASELINE | deterministic artifact contract |
-| B9 security execution gates | POST-BASELINE | preflight/evidence enforcement |
+| B8 replayable redacted artifacts | IMPLEMENTED — CI PENDING | deterministic artifact contract |
+| B9 security execution gates | IMPLEMENTED — CI PENDING | full CI verification |
 
 ## B3–B7 delivered behavior
 
@@ -42,6 +42,14 @@ The existing bounded `Channel<T>`, workers/`MaxConcurrency`, `SmartPaceControlle
 
 **B7:** `AuthenticationTransportEvidence` projects existing `TransportDiagnosticReport` data into machine-readable evidence with explicit statuses for SMTP, TLS, MX, SPF and DMARC, authentication mechanisms, preserved diagnostic steps and an explicit DKIM-not-evaluated state when no selector is supplied. No second diagnostics engine or credential-bearing result model was introduced.
 
+## B8 — replayable artifacts
+
+`ReplayableRunArtifactBuilder` provides a versioned scenario/configuration/event/result artifact, deterministic SHA-256 fingerprinting, recursive secret-key redaction, deterministic JSON and cancellation-aware atomic persistence. It is data-only and does not execute replay or create network traffic.
+
+## B9 — security execution gate
+
+`SecurityExecutionGate` is the pre-execution admission boundary for typed scenarios. It enforces explicit scope, authorization, hard limits and cancellation checks before `ScenarioEngine` delegates to the existing SMTP runner. Runtime pacing, bounded concurrency, secret redaction and evidence remain enforced by their existing authoritative components rather than being duplicated in B9.
+
 ## Security boundary
 
 The framework supports controlled/authorized security testing, not a public abuse launcher. No arbitrary third-party registrations, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target DoS/DDoS. Defensive objectives use controlled simulators, owned applications, synthetic recipients/providers and bounded lab workers.
@@ -49,11 +57,12 @@ The framework supports controlled/authorized security testing, not a public abus
 ## Architecture constraint
 
 ```text
-ScenarioDefinition → ScenarioEngine → existing bounded Channel
+ScenarioDefinition → SecurityExecutionGate → ScenarioEngine → existing bounded Channel
 → existing workers/MaxConcurrency → existing pacing + provider/recipient gates
 → existing SMTP pools → existing SEND/outcome classification
 → DeliveryLedger/RetryMetrics/RunReport → RunObservability + BehavioralAnalysis
 → controlled MailboxDeliverabilityLab → AuthenticationTransportEvidence
+→ ReplayableRunArtifactBuilder
 ```
 
 B4–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
