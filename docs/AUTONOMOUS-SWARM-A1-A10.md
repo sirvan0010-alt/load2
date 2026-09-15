@@ -1,60 +1,72 @@
 # Autonomous AI Coding Swarm — A1 to A10
 
-Status: implementation baseline on a feature branch; `main` remains the source of truth until reviewed and merged.
+Status: implementation continues on a feature branch; `main` remains the source of truth until reviewed and merged.
 
-## A1 — Execution backend contract
+## A1 — Execution backend contract — IMPLEMENTED
 
 Implemented `IAgentExecutionBackend`, `AgentExecutionRequest`, `AgentExecutionResult` and bounded `AgentExecutionPolicy`.
 
-## A2 — Provider-neutral routing
+## A2 — Provider-neutral routing — IMPLEMENTED
 
-The swarm depends on `IAgentExecutionBackend`, not on SWE-agent or OpenHands directly. Existing `MiniSweAgentRuntime` remains compatible and can be adapted behind this contract.
+The swarm depends on `IAgentExecutionBackend`, not on SWE-agent or OpenHands directly. Existing SWE-agent foundation remains compatible behind this contract.
 
-## A3 — OpenHands backend
+## A3 — OpenHands backend — IMPLEMENTED BASELINE
 
-Implemented `OpenHandsAgentExecutionBackend` against the OpenHands Agent Server REST contract. The server URL, session key and model are supplied externally; no credentials are hardcoded.
+`OpenHandsAgentExecutionBackend` targets the native OpenHands Agent Server REST contract. Server URL, session key and model are supplied externally; no credentials are hardcoded.
 
-## A4 — Isolated workspace boundary
+The adapter currently creates, polls and cleans up conversations. Structured event extraction is still an A5 prerequisite and is therefore intentionally enforced by the A10 gate.
 
-Execution requests carry an explicit workspace and immutable commit. The existing sandbox capability checks remain mandatory. Production execution must use an isolated container/VM boundary; a plain host process is not considered a sandbox.
+## A4 — Isolated workspace boundary — FOUNDATION PRESENT
 
-## A5 — Structured execution evidence
+Execution requests carry an explicit workspace and immutable commit. The production invariant remains strict: a plain host process is not a sandbox. Real execution must be bound to the repository's existing isolated workspace/container capability before A10 can pass.
 
-`AgentExecutionResult` carries status, task identity, commit, changed files, commands, evidence, diagnostics, test/security state, iteration count and duration. Subsequent adapters must populate these fields from observed execution data rather than inference.
+## A5 — Structured execution evidence — BLOCKING PREREQUISITE
 
-## A6 — Bounded repair loop
+`AgentExecutionResult` already carries status, task identity, commit, changed files, commands, evidence, diagnostics, test/security state, iteration count and duration.
 
-The orchestrator must retry only within `MaxIterations` and `TimeBudget`. A failed run returns structured state; it does not create an unbounded loop.
+However, the OpenHands adapter must populate these fields from observed Agent Server events rather than inference. The A10 gate explicitly checks for `/events/search` integration before full autonomy can be declared.
 
-## A7 — Multi-agent orchestration
+## A6 — Bounded repair loop — IMPLEMENTED
 
-The existing role registry and task factory remain authoritative. The execution backend is a pluggable worker layer for IMPLEMENTATION, REFACTOR, TEST and other specialist tasks.
+`AutonomousAgentLoop` now enforces a single total `TimeBudget` and `MaxIterations` across retries. Failed attempts produce bounded repair feedback for the next attempt. `Blocked`, `Cancelled` and `TimedOut` states stop immediately. There is no unbounded retry path.
 
-## A8 — GitHub autonomous branch/PR flow
+## A7 — Multi-agent orchestration — IMPLEMENTED FOUNDATION
 
-The target flow is: issue/ledger item → isolated workspace → agent execution → commit → CI → evidence/security/review gates → PR. Merge remains a protected human/release boundary.
+`AutonomousAgentOrchestrator` dispatches specialist tasks through the same bounded execution loop and stops at the first failed/blocked handoff. It does not introduce a second queue, pacing, retry or SMTP execution subsystem.
 
-## A9 — Scheduled maintenance
+The existing role registry/task factory remains authoritative for role definitions.
 
-Only after A1-A8 are green: scheduled, budgeted maintenance tasks may be dispatched for dependency audits, test repair, documentation drift and other explicitly allow-listed work.
+## A8 — GitHub autonomous branch/PR flow — IMPLEMENTED FOUNDATION
 
-## A10 — Full autonomy gate
+`.github/workflows/autonomous-pr-gate.yml` verifies an agent result, runs repository tests, and creates a pull request from an agent branch into `main`. The workflow has no merge step; protected-branch merge remains outside the autonomous path.
 
-Full autonomy is declared only when the following are all verified by CI/integration evidence:
+## A9 — Scheduled maintenance — IMPLEMENTED FAIL-CLOSED DISPATCHER
+
+`.github/workflows/autonomous-maintenance.yml` is scheduled weekly and manually runnable, but it is disabled unless repository variable `AUTONOMOUS_MAINTENANCE_ENABLED` is explicitly set to `true`. The dispatcher creates only an allow-listed maintenance task; it does not bypass the execution/evidence/security gates.
+
+## A10 — Full autonomy gate — IMPLEMENTED, CURRENTLY BLOCKED
+
+`scripts/verify-autonomous-swarm-gate.sh` and `.github/workflows/autonomous-gate.yml` enforce the final prerequisites.
+
+Current blocking condition:
+
+- A5 structured OpenHands event evidence is not yet wired into `OpenHandsAgentExecutionBackend`.
+
+Therefore the project must still be described as an **autonomous-swarm foundation**, not a fully autonomous coding swarm.
+
+A10 will pass only after all of the following are verified by CI/integration evidence:
 
 - real model-backed execution;
 - isolated workspace/container;
 - deterministic task contract;
 - bounded runtime and iterations;
-- structured evidence;
-- repair loop;
+- structured evidence from observed execution events;
+- bounded repair loop;
 - security and scope gates;
 - tests and CodeQL;
 - branch/PR creation;
 - deterministic audit trail;
 - no automatic protected-branch merge.
-
-Until every item is verified, the system must describe itself as an autonomous-swarm foundation, not a fully autonomous coding swarm.
 
 ## Runtime architecture
 
@@ -66,7 +78,7 @@ ORCHESTRATOR
 AiAgentTask / AgentExecutionRequest
       ↓
 IAgentExecutionBackend
-      ├── MiniSweAgentRuntime (existing adapter)
+      ├── existing SWE-agent-compatible adapter
       └── OpenHandsAgentExecutionBackend
                 ↓
          OpenHands Agent Server
@@ -77,7 +89,9 @@ IAgentExecutionBackend
                 ↓
       evidence / security / CI
                 ↓
-          repair or PR
+          bounded repair
+                ↓
+        branch / protected PR
 ```
 
 ## Security invariants
