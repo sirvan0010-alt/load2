@@ -31,6 +31,7 @@ public sealed class MiniSweAgentDockerIntegrationTests
               step_limit: 2
               cost_limit: 1
               mode: yolo
+              confirm_exit: false
             environment:
               environment_class: local
               cwd: /workspace
