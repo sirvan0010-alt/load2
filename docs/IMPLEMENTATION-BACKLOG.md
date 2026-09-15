@@ -38,43 +38,32 @@ Delivered:
 - existing cancellation and result/report pipeline remain authoritative;
 - focused scenario adapter tests.
 
-The adapter intentionally does not reinterpret scenario metadata into a second options engine. Existing load2 execution controls remain the single source of execution behavior.
-
-### B4 Provider Simulator — IMPLEMENTED, CI PENDING
+### B4 Provider Simulator — COMPLETE, CI VERIFIED
 
 Implemented in `src/MailLoadTester.Core/ProviderSimulator.cs`.
 
+Delivered deterministic local provider simulation, seeded reproducibility, provider/workflow identity, accepted/throttled/temporary/permanent outcomes, latency/authentication-result patterns, cancellation, bounded event count, B3 composition, duplicate-provider protection and focused tests. The implementation performs no network I/O and introduces no second queue/pacing/retry stack.
+
+CI evidence: the latest verified B4 branch run was green across CI, Agent Runtime Integration, Architecture Consistency, Agent Collaboration Contract, Actions Hygiene, Dependency Review, CodeQL and the AI Agent Swarm task factory.
+
+### B5 Behavioral Analyzer — IMPLEMENTED, CI PENDING
+
+Implemented in `src/MailLoadTester.Core/BehavioralAnalyzer.cs` with focused tests in `tests/MailLoadTester.Tests/BehavioralAnalyzerTests.cs`.
+
 Delivered:
 
-- deterministic local provider simulation with a supplied seed;
-- provider identity and workflow/message type;
-- accepted/throttled/temporary/permanent outcomes;
-- latency and authentication-result patterns;
-- `CancellationToken` support;
-- bounded event count (1..10000);
-- `ProviderScenarioSimulator` composition with the B3 `LoadScenarioDefinition`;
-- deterministic multi-provider distribution for controlled scenarios;
-- duplicate provider-id protection;
-- no network access and no external-provider credentials;
-- focused deterministic, cancellation, outcome and B3-composition tests.
+- normalized `BehavioralMailEvent` contract;
+- deterministic event ordering and analysis;
+- event velocity and peak burst calculation;
+- provider and sender-domain diversity;
+- recipient concentration;
+- bounded transparent anomaly score;
+- explicit findings for burst/concentration/low diversity;
+- direct mapping from B4 `SimulatedMailEvent`;
+- cancellation and input validation;
+- no network I/O and no modification of delivery execution.
 
-Security boundary: simulation is local/controlled. It does not automate third-party registrations, bypass CAPTCHA/OTP, evade provider limits or create unrestricted public traffic.
-
-Acceptance after CI verification:
-
-- deterministic seed;
-- provider identity/workflow model;
-- throttling/transient/permanent failure/latency/authentication-result events;
-- no arbitrary external-provider calls;
-- composition with B3;
-- focused tests;
-- CI green.
-
-### B5 Behavioral Analyzer — POST-BASELINE
-
-Normalize transport/provider/mailbox events and calculate evidence for velocity, burst duration, sender/domain diversity, recipient concentration, provider diversity, authentication results, throttling/rejection and mailbox pressure.
-
-Output: `Normal | Elevated | Suspicious | HighRisk`.
+Acceptance gate remaining: fresh CI verification on the latest B5 commit. Only after that gate may B5 be marked COMPLETE.
 
 ### B6 Mailbox / Deliverability Lab — POST-BASELINE
 
@@ -90,20 +79,7 @@ Persist redacted scenario/configuration/event/result artifacts sufficient for de
 
 ### B9 Security Execution Gates — POST-BASELINE
 
-Enforce:
-
-```text
-SCOPE
-→ AUTHORIZATION
-→ HARD LIMIT
-→ CANCELLATION
-→ PACING
-→ CONCURRENCY
-→ SECRETS
-→ EVIDENCE
-→ TEST
-→ CI
-```
+Enforce SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI.
 
 ## P2 — advanced authorized lab automation
 
@@ -119,8 +95,6 @@ SCOPE
 
 Do not implement arbitrary third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnet operation, provider-limit evasion, credential/token theft, reflection/amplification or unrestricted public-target flooding/destructive DoS/DDoS.
 
-Use controlled simulations, owned applications, synthetic providers/recipients and bounded lab workers for defensive testing.
-
 ## Definition of done
 
-An item becomes `COMPLETE` only when source implementation, focused tests, security review, CI evidence and canonical documentation are synchronized. Historical notes and external README claims cannot close an item.
+An item becomes `COMPLETE` only when source implementation, focused tests, security review, CI evidence and canonical documentation are synchronized.
