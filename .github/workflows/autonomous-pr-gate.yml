@@ -1,0 +1,77 @@
+name: Autonomous Swarm — Branch/PR Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      head_branch:
+        description: "Agent-created branch containing the verified implementation"
+        required: true
+        type: string
+      title:
+        description: "Pull request title"
+        required: true
+        default: "Autonomous swarm implementation"
+        type: string
+      result_path:
+        description: "Repository-relative path to the schema-valid agent result"
+        required: true
+        default: "swarm-results/agent-result.json"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout agent branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_branch }}
+          fetch-depth: 0
+
+      - name: Reject protected branch target
+        shell: bash
+        env:
+          HEAD_BRANCH: ${{ inputs.head_branch }}
+        run: |
+          set -euo pipefail
+          test "$HEAD_BRANCH" != "main"
+          test "$HEAD_BRANCH" != "master"
+
+      - name: Verify agent result contract
+        shell: bash
+        env:
+          RESULT_PATH: ${{ inputs.result_path }}
+        run: |
+          set -euo pipefail
+          test -f "$RESULT_PATH"
+          bash scripts/verify-agent-results.sh "$(dirname "$RESULT_PATH")"
+
+      - name: Run repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test --configuration Release --no-restore
+
+      - name: Create pull request, never merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ inputs.head_branch }}
+          PR_TITLE: ${{ inputs.title }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh pr view "$HEAD_BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A pull request already exists for $HEAD_BRANCH."
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$HEAD_BRANCH" \
+            --title "$PR_TITLE" \
+            --body "Autonomous swarm result passed the execution-result contract and repository tests. Merge remains a protected human/release boundary."
