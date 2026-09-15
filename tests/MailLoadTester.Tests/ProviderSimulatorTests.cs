@@ -56,4 +56,54 @@ public sealed class ProviderSimulatorTests
 
         Assert.All(events, e => Assert.Equal(SimulatedMailOutcome.Throttled, e.Outcome));
     }
+
+    [Fact]
+    public void ProviderScenarioSimulator_ComposesWithB3ScenarioDefinition()
+    {
+        var simulator = new ProviderScenarioSimulator(new IMailProviderSimulator[]
+        {
+            new DeterministicMailProviderSimulator("provider-a", throttleRate: 0),
+            new DeterministicMailProviderSimulator("provider-b", throttleRate: 1)
+        });
+        var scenario = new LoadScenarioDefinition(
+            LoadScenarioKind.ProviderDistribution,
+            "provider-distribution",
+            10,
+            2,
+            0,
+            Seed: 100);
+
+        var events = simulator.Simulate(
+            scenario,
+            "recipient@example.test",
+            "sender.example.test",
+            "confirmation",
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(10, events.Count);
+        Assert.Contains(events, e => e.ProviderId == "provider-a");
+        Assert.Contains(events, e => e.ProviderId == "provider-b");
+    }
+
+    [Fact]
+    public void ProviderScenarioSimulator_RejectsNonProviderScenario()
+    {
+        var simulator = new ProviderScenarioSimulator(new[]
+        {
+            new DeterministicMailProviderSimulator("provider-a")
+        });
+        var scenario = new LoadScenarioDefinition(
+            LoadScenarioKind.NormalDelivery,
+            "normal",
+            10,
+            1,
+            0);
+
+        Assert.Throws<ArgumentException>(() => simulator.Simulate(
+            scenario,
+            "recipient@example.test",
+            "sender.example.test",
+            "delivery",
+            DateTimeOffset.UnixEpoch));
+    }
 }
