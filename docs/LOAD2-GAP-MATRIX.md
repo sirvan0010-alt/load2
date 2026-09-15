@@ -1,12 +1,12 @@
 # load2 — Current Capability and Gap Matrix
 
 **Authority:** `sirvan0010-alt/load2` / `main`  
-**Baseline:** TRACK A A1–A8 ALL COMPLETE.  
+**Baseline:** TRACK A A1–A8 COMPLETE and protected.  
 **Current evolution:** TRACK B post-baseline.
 
 ## 0. Status rules
 
-`HAVE` means demonstrated in current source/tests. `FOUNDATION` means the contract exists but full engine integration is not complete. `POST-BASELINE` means planned work.
+`HAVE` means demonstrated in current source/tests. `FOUNDATION` means the contract exists but full engine integration is not complete. `POST-BASELINE` means planned work. `COMPLETE` requires source/tests/CI/documentation evidence.
 
 External mechanisms use:
 
@@ -27,6 +27,7 @@ README claims are never implementation evidence.
 | A7 RunObservability / RunReport | FIXED |
 | A8 final baseline/documentation | COMPLETE |
 | FEAT-022 timing | IMPLEMENTED |
+| Phase 1.3 agent-runtime Docker boundary | VERIFIED by green CI |
 
 ## 2. Existing engine capability
 
@@ -52,24 +53,26 @@ README claims are never implementation evidence.
 | DNS/MX/SPF/DMARC diagnostics | HAVE | current diagnostics layer |
 | endpoint canonicalization/deduplication | HAVE | canonical health keys + target dedup |
 | plugin payload architecture | HAVE | `IMailPayloadPlugin` pipeline |
+| deterministic provider simulator | FOUNDATION | B4 contract/implementation foundation; integration pending |
+| typed scenario definitions | FOUNDATION | B3 model foundation; runner integration pending |
 
-## 3. TRACK B — current state
+## 3. TRACK B status
 
-| Item | Status | Next step |
+| Item | Status | Next gate |
 |---|---|---|
-| B1 canonical documentation reset | FOUNDATION | keep canonical docs synchronized; migrate active docs |
-| B2 external mechanism audit | IN PROGRESS | pin/source-audit retained candidates |
-| B3 typed scenario model | FOUNDATION | integrate definitions with existing runner |
-| B4 deterministic provider simulator | FOUNDATION | compose simulators with B3 and event evidence |
-| B5 behavioral analyzer | POST-BASELINE | normalize simulator/transport/mailbox events |
-| B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP environment |
-| B7 richer auth/transport evidence | POST-BASELINE | extend evidence without duplicate diagnostics |
-| B8 replayable redacted artifacts | POST-BASELINE | deterministic scenario replay |
-| B9 security execution gates | POST-BASELINE | enforce preflight/evidence gate chain |
+| B1 canonical documentation reset | COMPLETE | maintain synchronization |
+| B2 external mechanism audit | COMPLETE — EXT-AUDIT-001 | audit future repositories as separate items |
+| B3 typed scenario engine | IN PROGRESS | integrate definitions with existing execution pipeline |
+| B4 provider simulator | IN PROGRESS | integrate with B3 and event evidence |
+| B5 behavioral analyzer | POST-BASELINE | normalized mail events + deterministic analysis |
+| B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP lab boundary |
+| B7 richer auth/transport evidence | POST-BASELINE | evidence model over existing diagnostics |
+| B8 replayable redacted artifacts | POST-BASELINE | deterministic artifact contract |
+| B9 security execution gates | POST-BASELINE | preflight/evidence enforcement |
 
 ## 4. Security-pattern capability map
 
-| Objective | load2 direction | Priority |
+| Objective | Current direction | Priority |
 |---|---|---|
 | subscription-bombing testing | controlled provider/mailbox simulation | P2 |
 | Double-Opt-In testing | owned application workflow simulation | P2 |
@@ -83,17 +86,23 @@ README claims are never implementation evidence.
 | smoke-screen detection | correlate burst/diversity/auth/mailbox signals | P2 |
 | mailbox saturation | controlled quota/load/recovery scenario | P1 |
 
+A future `YES` means a controlled/authorized testing capability, not unrestricted third-party abuse automation.
+
 ## 5. External repository decisions
 
-### `rojberr/mailcannon`
+The EXT-AUDIT-001 retained set is complete and normalized in `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`. Key decisions:
 
-**Decision: REFERENCE.** Its distributed Docker/Swarm/Kubernetes scaling model is not a current dependency for a one-PC load2 deployment. load2 already has bounded local execution. Revisit only if a concrete single-host/reproducibility benefit is demonstrated.
+- `rojberr/mailcannon`: REFERENCE only for one-PC load2; no dependency planned.
+- `slowhttptest`: HARDEN/ADOPT principles for rate-vs-concurrency, timeout/probe separation and observability; no HTTP reactor port.
+- `GoldenEye`: HARDEN/ADAPT session reuse, worker lifecycle and TLS-policy concepts; no attack orchestration port.
+- `StruisICT/smtp-test-tool`: REFERENCE/ADOPT diagnostic concepts without a second diagnostics engine.
+- `Olib-AI/mailcue`: REFERENCE/SIMULATE/LAB candidate for B6.
+- `stalwartlabs/mail-auth`: REFERENCE for mail-auth protocol knowledge.
+- `charlesgreen/email`: REFERENCE/ADOPT authentication-evidence analysis concepts.
+- `usnistgov/dmarc-tester`: REFERENCE/TEST-FIXTURE source for controlled auth validation.
+- Mailpit/MailHog: REFERENCE/LAB for local mail capture.
 
-### Mail-security lab references
-
-Controlled mail-server/testing projects are environment references for B6/B7. They remain outside the core SMTP transport layer.
-
-## 6. Architecture constraints for B3/B4/B5
+## 6. Architecture constraints
 
 ```text
 ScenarioDefinition
@@ -113,19 +122,18 @@ DeliveryLedger / RetryMetrics / RunReport
 RunObservability + BehavioralAnalysis
 ```
 
-B3/B4/B5 must not introduce a second queue, pacing stack, retry policy or source-of-truth result model.
+B3–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
 
 ## 7. Security boundary
 
 The framework can represent high-intensity authorized testing, but it must not become a public abuse launcher. Do not implement arbitrary third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target DoS/DDoS.
 
-The defensive objectives are covered by simulation, owned applications, synthetic providers/recipients and bounded lab execution.
+Defensive objectives are covered by controlled simulations, owned applications, synthetic providers/recipients and bounded lab workers.
 
 ## 8. Rules for future work
 
 - Do not reopen A1–A8 without concrete regression evidence.
 - Preserve cancellation, hard limits, DryRun/TestMode, `--unauthorized` and secret redaction.
-- Keep `MailTestResult` as the source of truth.
-- Every retry must remain under existing pacing/concurrency controls.
+- Every retry remains under existing pacing/concurrency controls.
 - Every new status requires source/test/CI evidence.
 - Synchronize canonical documentation after verified implementation changes.
