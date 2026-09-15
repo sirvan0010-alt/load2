@@ -1,0 +1,25 @@
+name: Autonomous Swarm — A10 Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "src/MailLoadTester.Core/AutonomousAgent*"
+      - "src/MailLoadTester.Core/OpenHandsAgentExecutionBackend.cs"
+      - ".github/workflows/autonomous-*.yml"
+      - "scripts/verify-autonomous-swarm-gate.sh"
+      - "scripts/verify-agent-results.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  autonomy-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify A10 prerequisites
+        shell: bash
+        run: bash scripts/verify-autonomous-swarm-gate.sh
