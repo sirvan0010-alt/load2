@@ -14,21 +14,23 @@ The swarm depends on `IAgentExecutionBackend`, not on SWE-agent or OpenHands dir
 
 `OpenHandsAgentExecutionBackend` targets the native OpenHands Agent Server REST contract. Server URL, session key and model are supplied externally; no credentials are hardcoded.
 
-The adapter currently creates, polls and cleans up conversations. Structured event extraction is still an A5 prerequisite and is therefore intentionally enforced by the A10 gate.
+The adapter creates, polls and cleans up conversations and now reads the bounded OpenHands event-search API for structured execution evidence.
 
-## A4 — Isolated workspace boundary — FOUNDATION PRESENT
+## A4 — Isolated workspace boundary — FOUNDATION PRESENT / A10 BLOCKER
 
-Execution requests carry an explicit workspace and immutable commit. The production invariant remains strict: a plain host process is not a sandbox. Real execution must be bound to the repository's existing isolated workspace/container capability before A10 can pass.
+Execution requests carry an explicit workspace and immutable commit. The repository already contains a Docker-backed isolated agent sandbox, but the OpenHands adapter is not yet bound to that sandbox/runtime boundary.
 
-## A5 — Structured execution evidence — BLOCKING PREREQUISITE
+A plain host `working_dir` is deliberately not treated as a sandbox. A10 therefore remains blocked until OpenHands execution is proven to run inside the isolated workspace/container boundary.
 
-`AgentExecutionResult` already carries status, task identity, commit, changed files, commands, evidence, diagnostics, test/security state, iteration count and duration.
+## A5 — Structured execution evidence — IMPLEMENTED BASELINE
 
-However, the OpenHands adapter must populate these fields from observed Agent Server events rather than inference. The A10 gate explicitly checks for `/events/search` integration before full autonomy can be declared.
+The OpenHands adapter now consumes `GET /api/conversations/{id}/events/search` with bounded pagination and extracts observed commands, file actions, exit codes, diagnostics, observed commit identifiers and test-command success evidence. Sensitive command text is redacted before being returned.
+
+The adapter does not infer security approval from the final natural-language response. `SecurityPassed` remains false until the separate security gate supplies authoritative evidence.
 
 ## A6 — Bounded repair loop — IMPLEMENTED
 
-`AutonomousAgentLoop` now enforces a single total `TimeBudget` and `MaxIterations` across retries. Failed attempts produce bounded repair feedback for the next attempt. `Blocked`, `Cancelled` and `TimedOut` states stop immediately. There is no unbounded retry path.
+`AutonomousAgentLoop` now enforces a single total `TimeBudget` and `MaxIterations` across retries. Failed attempts produce bounded repair feedback for the next attempt. Policy-controlled evidence, test, security and changed-file limits are evaluated on every attempt. `Blocked`, `Cancelled` and `TimedOut` states stop immediately.
 
 ## A7 — Multi-agent orchestration — IMPLEMENTED FOUNDATION
 
@@ -38,7 +40,7 @@ The existing role registry/task factory remains authoritative for role definitio
 
 ## A8 — GitHub autonomous branch/PR flow — IMPLEMENTED FOUNDATION
 
-`.github/workflows/autonomous-pr-gate.yml` verifies an agent result, runs repository tests, and creates a pull request from an agent branch into `main`. The workflow has no merge step; protected-branch merge remains outside the autonomous path.
+`.github/workflows/autonomous-pr-gate.yml` verifies an agent result, restores/tests the repository, and creates a pull request from an agent branch into `main`. The workflow has no merge step; protected-branch merge remains outside the autonomous path.
 
 ## A9 — Scheduled maintenance — IMPLEMENTED FAIL-CLOSED DISPATCHER
 
@@ -50,7 +52,8 @@ The existing role registry/task factory remains authoritative for role definitio
 
 Current blocking condition:
 
-- A5 structured OpenHands event evidence is not yet wired into `OpenHandsAgentExecutionBackend`.
+- A4: OpenHands execution is not yet proven to be attached to an isolated Docker/VM/Kubernetes workspace boundary.
+- Security evidence is intentionally not inferred from model output; the authoritative security gate must be wired to the OpenHands execution result before A10 can pass.
 
 Therefore the project must still be described as an **autonomous-swarm foundation**, not a fully autonomous coding swarm.
 
@@ -62,7 +65,7 @@ A10 will pass only after all of the following are verified by CI/integration evi
 - bounded runtime and iterations;
 - structured evidence from observed execution events;
 - bounded repair loop;
-- security and scope gates;
+- authoritative security and scope gates;
 - tests and CodeQL;
 - branch/PR creation;
 - deterministic audit trail;
@@ -81,9 +84,9 @@ IAgentExecutionBackend
       ├── existing SWE-agent-compatible adapter
       └── OpenHandsAgentExecutionBackend
                 ↓
-         OpenHands Agent Server
+         isolated runtime boundary
                 ↓
-        isolated workspace/container
+         OpenHands Agent Server
                 ↓
              code + tests
                 ↓
