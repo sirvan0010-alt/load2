@@ -19,7 +19,8 @@ public sealed record AgentExecutionRequest(
     IReadOnlyList<string> AcceptanceCriteria,
     TimeSpan TimeBudget,
     int MaxIterations,
-    bool RealTargetRequired = false);
+    bool RealTargetRequired = false,
+    string? RepairFeedback = null);
 
 public sealed record AgentExecutionResult(
     AgentExecutionStatus Status,
@@ -102,7 +103,96 @@ public sealed class AutonomousAgentLoop
         _validator.Validate(request, _policy);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return await _backend.ExecuteAsync(request, cancellationToken)
-            .ConfigureAwait(false);
+        using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budgetCts.CancelAfter(request.TimeBudget);
+
+        var started = DateTimeOffset.UtcNow;
+        AgentExecutionResult? last = null;
+        var feedback = request.RepairFeedback;
+
+        for (var iteration = 1; iteration <= request.MaxIterations; iteration++)
+        {
+            budgetCts.Token.ThrowIfCancellationRequested();
+
+            var attempt = request with { RepairFeedback = feedback };
+            AgentExecutionResult result;
+            try
+            {
+                result = await _backend.ExecuteAsync(attempt, budgetCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (budgetCts.IsCancellationRequested)
+            {
+                return BuildTerminal(last, request.TaskId, AgentExecutionStatus.Cancelled,
+                    "Autonomous repair loop cancelled or exceeded its total time budget.",
+                    iteration - 1, started);
+            }
+
+            last = result with
+            {
+                Iterations = iteration,
+                Duration = DateTimeOffset.UtcNow - started
+            };
+
+            if (IsAccepted(last))
+                return last;
+
+            if (last.Status is AgentExecutionStatus.Blocked or AgentExecutionStatus.Cancelled or AgentExecutionStatus.TimedOut)
+                return last;
+
+            feedback = BuildRepairFeedback(last);
+            if (string.IsNullOrWhiteSpace(feedback))
+                break;
+        }
+
+        return last is null
+            ? BuildTerminal(null, request.TaskId, AgentExecutionStatus.Failed,
+                "Execution backend returned no result.", 0, started)
+            : last with
+            {
+                Status = AgentExecutionStatus.Failed,
+                Duration = DateTimeOffset.UtcNow - started,
+                Diagnostics = last.Diagnostics
+                    .Concat(new[] { "Bounded repair loop exhausted without satisfying the execution acceptance condition." })
+                    .ToArray()
+            };
+    }
+
+    private static bool IsAccepted(AgentExecutionResult result) =>
+        result.Status == AgentExecutionStatus.Completed && result.TestsPassed;
+
+    private static string? BuildRepairFeedback(AgentExecutionResult result)
+    {
+        var parts = result.Diagnostics
+            .Concat(result.Evidence)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Take(12)
+            .ToArray();
+
+        return parts.Length == 0
+            ? "Previous attempt did not satisfy the acceptance condition. Re-check the acceptance criteria, run the required tests, and correct the smallest safe defect."
+            : "Previous attempt did not satisfy the acceptance condition. Observed evidence/diagnostics:\n- " +
+              string.Join("\n- ", parts) +
+              "\nRepair only within the allowed scopes and re-run the required tests.";
+    }
+
+    private static AgentExecutionResult BuildTerminal(
+        AgentExecutionResult? last,
+        string taskId,
+        AgentExecutionStatus status,
+        string diagnostic,
+        int iterations,
+        DateTimeOffset started)
+    {
+        return last is null
+            ? new AgentExecutionResult(status, taskId, null, Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>(), new[] { diagnostic }, false, false, iterations,
+                DateTimeOffset.UtcNow - started)
+            : last with
+            {
+                Status = status,
+                Iterations = iterations,
+                Duration = DateTimeOffset.UtcNow - started,
+                Diagnostics = last.Diagnostics.Concat(new[] { diagnostic }).ToArray()
+            };
     }
 }
