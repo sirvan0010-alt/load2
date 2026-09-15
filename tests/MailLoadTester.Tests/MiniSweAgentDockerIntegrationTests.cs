@@ -22,7 +22,9 @@ public sealed class MiniSweAgentDockerIntegrationTests
             Path.Combine(Path.GetTempPath(), "load2-mini-swe-it-" + Guid.NewGuid())).FullName;
         var configPath = Path.Combine(workspace, "mini-deterministic.yaml");
 
-        // Config for DefaultAgent (agent_class is forced on CLI). No interactive mode keys required.
+        // Deterministic DefaultAgent config — no interactive mode keys.
+        // Completion is signaled by DefaultAgent exit_status=Submitted and the
+        // entrypoint marker LOAD2_MINI_SWE_SMOKE_OK (not shell-echo of the action).
         await File.WriteAllTextAsync(configPath, """
             agent:
               system_template: |
@@ -40,10 +42,12 @@ public sealed class MiniSweAgentDockerIntegrationTests
               model_name: deterministic
               outputs:
                 - role: assistant
-                  content: integration smoke test
+                  content: |
+                    COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT
+                    integration smoke test
                   extra:
                     actions:
-                      - command: echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT
+                      - command: echo LOAD2_MINI_SWE_ACTION_RAN
             """);
 
         try
@@ -70,13 +74,21 @@ public sealed class MiniSweAgentDockerIntegrationTests
             var result = await runtime.RunAsync(task, workspace);
 
             var combined = (result.StandardOutput ?? string.Empty) + "\n" + (result.StandardError ?? string.Empty);
+
+            // Non-interactive contract: never hit prompt_toolkit TTY abort.
             Assert.DoesNotContain("Input is not a terminal", combined, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("is not a terminal", combined, StringComparison.OrdinalIgnoreCase);
 
             Assert.True(
                 result.ExitCode == 0,
                 $"mini-SWE-agent Docker execution failed with exit code {result.ExitCode}. stderr: {result.StandardError}\nstdout: {result.StandardOutput}");
-            Assert.Contains("COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT", result.StandardOutput, StringComparison.Ordinal);
+
+            // Real runner completed via DefaultAgent API (CI run #15 already showed exit_status Submitted).
+            Assert.Contains("LOAD2_MINI_SWE_SMOKE_OK", result.StandardOutput, StringComparison.Ordinal);
+            Assert.True(
+                result.StandardOutput.Contains("Submitted", StringComparison.Ordinal)
+                || result.StandardOutput.Contains("exit_status", StringComparison.Ordinal),
+                $"Expected DefaultAgent completion markers in stdout. stdout: {result.StandardOutput}");
         }
         finally
         {

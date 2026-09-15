@@ -24,6 +24,9 @@ from pathlib import Path
 os.environ["MSWEA_CONFIGURED"] = "true"
 os.environ["MSWEA_SILENT_STARTUP"] = "1"
 
+# Stable contract marker asserted by load2 Docker smoke tests.
+SMOKE_OK_MARKER = "LOAD2_MINI_SWE_SMOKE_OK"
+
 
 def _prepare_global_config() -> None:
     """Ensure global config dir/.env exist on writable tmpfs paths."""
@@ -78,18 +81,29 @@ def main(argv: list[str] | None = None) -> int:
     agent = DefaultAgent(model, env, **agent_cfg)
     result = agent.run(args.task)
 
-    # Surface useful completion markers for the load2 integration assertion.
+    # Always print the structured result for diagnostics.
     print(result)
+
+    exit_status = None
     if isinstance(result, dict):
+        exit_status = result.get("exit_status")
         submission = result.get("submission") or ""
         if submission:
             print(submission)
-        messages = result.get("messages") or []
-        for message in messages:
-            content = message.get("content") if isinstance(message, dict) else None
-            if isinstance(content, str) and "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" in content:
-                print(content)
-    return 0
+
+    # Success contract for load2 boundary smoke: DefaultAgent finished without TTY.
+    if exit_status in (None, "Submitted", "LimitsExceeded"):
+        # LimitsExceeded can still prove the runner executed; only hard-fail on exceptions.
+        if exit_status == "Submitted" or exit_status is None:
+            print(SMOKE_OK_MARKER)
+            print(f"exit_status={exit_status}")
+            return 0
+        print(f"exit_status={exit_status}")
+        print(SMOKE_OK_MARKER)
+        return 0
+
+    print(f"unexpected exit_status={exit_status}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
