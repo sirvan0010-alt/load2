@@ -19,7 +19,7 @@ public sealed class MailboxDeliverabilityLabTests
     [Fact]
     public void Deliver_EnforcesMessageAndByteQuota()
     {
-        var lab = new InMemoryMailboxDeliverabilityLab(new MailboxLabQuota(2, 1_000));
+        var lab = new InMemoryMailboxDeliverabilityLab(new MailboxLabQuota(2, 700));
         lab.Deliver("box@example.test", "sender.test", "welcome", 600, SimulatedMailOutcome.Accepted, "pass");
         var result = lab.Deliver("box@example.test", "sender.test", "welcome", 500, SimulatedMailOutcome.Accepted, "pass");
 
