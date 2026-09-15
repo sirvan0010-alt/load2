@@ -125,8 +125,16 @@ public sealed class AiAgentRunner
         if (!workspace.IsVerified)
             return Blocked($"Workspace integrity gate rejected execution: {workspace.Reason}");
 
-        if (task.RealTargetRequired && !await _authorization.AuthorizeAsync(task, cancellationToken).ConfigureAwait(false))
-            return Blocked("Authorization policy rejected the task.");
+        // Real-target work requires both the task flag and the authorization policy.
+        // Do not throw: return Blocked so callers can report status without try/catch.
+        if (task.RealTargetRequired)
+        {
+            if (!task.Authorized)
+                return Blocked("Real-target task is not marked authorized.");
+
+            if (!await _authorization.AuthorizeAsync(task, cancellationToken).ConfigureAwait(false))
+                return Blocked("Authorization policy rejected the task.");
+        }
 
         using var budgetCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budgetCts.CancelAfter(task.TimeBudget);
@@ -171,8 +179,7 @@ public sealed class AiAgentRunner
             throw new ArgumentOutOfRangeException(nameof(task), "MaxIterations must be between 1 and 20.");
         if (task.TimeBudget < TimeSpan.FromSeconds(1) || task.TimeBudget > TimeSpan.FromMinutes(30))
             throw new ArgumentOutOfRangeException(nameof(task), "TimeBudget must be between 1 second and 30 minutes.");
-        if (task.RealTargetRequired && !task.Authorized)
-            throw new InvalidOperationException("A real-target task requires explicit authorization.");
+        // RealTargetRequired without Authorized is a soft Block in RunAsync, not a hard throw.
     }
 
     private static AiAgentExecutionResult Blocked(string reason) => new(

@@ -16,6 +16,22 @@ public sealed class AiAgentRunnerTests
 
         Assert.Equal(AgentRunStatus.Blocked, result.Status);
         Assert.Equal(0, agent.Calls);
+        // Soft-block on task.Authorized=false happens before the policy is consulted.
+        Assert.Equal(0, policy.Calls);
+        Assert.Contains("not marked authorized", result.Handoff, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RejectsWhenAuthorizationPolicyDeniesRealTarget()
+    {
+        var policy = new RecordingAuthorizationPolicy(false);
+        var agent = new RecordingAgent();
+        var runner = CreateRunner(policy, new AcceptingVerifier());
+
+        var result = await runner.RunAsync(CreateTask(realTargetRequired: true, authorized: true), agent);
+
+        Assert.Equal(AgentRunStatus.Blocked, result.Status);
+        Assert.Equal(0, agent.Calls);
         Assert.Equal(1, policy.Calls);
     }
 
