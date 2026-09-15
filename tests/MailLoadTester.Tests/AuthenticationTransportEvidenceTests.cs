@@ -1,3 +1,4 @@
+using System.Net;
 using MailLoadTester;
 using Xunit;
 
@@ -18,7 +19,7 @@ public sealed class AuthenticationTransportEvidenceTests
             "Tls13", null,
             new DnsPolicyChecker.PolicyResult(
                 "example.test", true, "v=spf1 -all", true, "v=DMARC1; p=reject", "ok"),
-            new[] { new MxRecord("mx.example.test", 10) },
+            new[] { new MxRecord("mx.example.test", 10, IPAddress.None) },
             new[] { "SMTP: connected", "SMTP: auth OK" },
             "ok", null);
 
