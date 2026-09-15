@@ -91,9 +91,23 @@ Delivered:
 
 The B7 implementation is intentionally a projection: it does not create a parallel network diagnostic stack. The current full CI suite passes.
 
-### B8 Replayable Artifacts — POST-BASELINE
+### B8 Replayable Artifacts — IMPLEMENTED, CI PENDING
 
-Persist redacted scenario/configuration/event/result artifacts sufficient for deterministic reproduction without secrets or unnecessary personal data.
+Implemented in `src/MailLoadTester.Core/ReplayableRunArtifact.cs` with focused tests in `tests/MailLoadTester.Tests/ReplayableRunArtifactTests.cs`.
+
+Delivered:
+
+- versioned scenario/configuration/event/result artifact contract;
+- deterministic SHA-256 integrity fingerprint over the unsigned artifact payload;
+- recursive redaction of passwords, secrets, tokens, API keys, authorization/cookie material and private keys;
+- deterministic JSON serialization for identical inputs;
+- cancellation-aware asynchronous persistence;
+- filesystem-safe run-id normalization;
+- atomic temporary-file replacement to avoid partial final artifacts;
+- no network I/O, credentials or replay execution;
+- data-only boundary suitable for later deterministic replay tooling.
+
+The artifact writer deliberately does not invent missing runtime events: callers supply the normalized event collection they actually observed.
 
 ### B9 Security Execution Gates — POST-BASELINE
 
