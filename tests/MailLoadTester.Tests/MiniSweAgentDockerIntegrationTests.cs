@@ -22,6 +22,7 @@ public sealed class MiniSweAgentDockerIntegrationTests
             Path.Combine(Path.GetTempPath(), "load2-mini-swe-it-" + Guid.NewGuid())).FullName;
         var configPath = Path.Combine(workspace, "mini-deterministic.yaml");
 
+        // Config for DefaultAgent (agent_class is forced on CLI). No interactive mode keys required.
         await File.WriteAllTextAsync(configPath, """
             agent:
               system_template: |
@@ -30,8 +31,6 @@ public sealed class MiniSweAgentDockerIntegrationTests
                 Execute the supplied integration task.
               step_limit: 2
               cost_limit: 1
-              mode: yolo
-              confirm_exit: false
             environment:
               environment_class: local
               cwd: /workspace
@@ -70,9 +69,13 @@ public sealed class MiniSweAgentDockerIntegrationTests
 
             var result = await runtime.RunAsync(task, workspace);
 
+            var combined = (result.StandardOutput ?? string.Empty) + "\n" + (result.StandardError ?? string.Empty);
+            Assert.DoesNotContain("Input is not a terminal", combined, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("is not a terminal", combined, StringComparison.OrdinalIgnoreCase);
+
             Assert.True(
                 result.ExitCode == 0,
-                $"mini-SWE-agent Docker execution failed with exit code {result.ExitCode}. stderr: {result.StandardError}");
+                $"mini-SWE-agent Docker execution failed with exit code {result.ExitCode}. stderr: {result.StandardError}\nstdout: {result.StandardOutput}");
             Assert.Contains("COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT", result.StandardOutput, StringComparison.Ordinal);
         }
         finally

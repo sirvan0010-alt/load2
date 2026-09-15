@@ -8,6 +8,13 @@ namespace MailLoadTester.Core;
 /// Docker itself must be trusted and correctly configured by the host.
 /// The image entrypoint is authoritative; the agent executable is retained
 /// as configuration metadata but is not appended as a duplicate command.
+///
+/// Non-interactive contract (mini-SWE-agent CLI):
+/// <list type="bullet">
+/// <item><description><c>MSWEA_CONFIGURED=true</c> skips first-time <c>configure_if_first_time()</c> / prompt_toolkit setup (root cause of "Input is not a terminal").</description></item>
+/// <item><description><c>--agent-class default</c> selects <c>DefaultAgent</c> instead of InteractiveAgent (confirm/yolo prompts).</description></item>
+/// <item><description><c>--task</c> is always supplied so the CLI never calls interactive multiline task prompt.</description></item>
+/// </list>
 /// </summary>
 public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
 {
@@ -79,52 +86,7 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(specification.TimeBudget);
 
-        var arguments = new List<string>
-        {
-            "run", "--rm",
-            "--network", "none",
-            "--read-only",
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
-            "--pids-limit", _pidsLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "--memory", $"{_memoryBytes}b",
-            "--cpus", _cpuLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
-            "--tmpfs", "/root/.config:rw,noexec,nosuid,size=16m",
-            "--mount", $"type=bind,src={workspace},dst=/workspace",
-            "--workdir", "/workspace"
-        };
-
-        foreach (var pair in _environment)
-        {
-            if (IsHostCredentialKey(pair.Key))
-                throw new ArgumentException($"Credential-like environment key is not permitted: {pair.Key}", nameof(specification));
-            arguments.Add("--env");
-            arguments.Add($"{pair.Key}={pair.Value}");
-        }
-
-        arguments.Add(_image);
-        // The pinned mini-SWE-agent image already declares its executable as
-        // ENTRYPOINT. Passing _agentExecutable here would invoke it twice.
-        // Explicitly select the non-interactive path because CI has no TTY.
-        // These flags are part of the execution boundary, not test-fixture config:
-        // -y disables action confirmation prompts.
-        // --exit-immediately disables the final interactive confirmation path.
-        arguments.Add("-y");
-        arguments.Add("--exit-immediately");
-        arguments.Add("--task");
-        arguments.Add(specification.TaskPrompt);
-
-        if (!string.IsNullOrWhiteSpace(specification.ConfigPath))
-        {
-            arguments.Add("--config");
-            arguments.Add(specification.ConfigPath);
-        }
-        if (!string.IsNullOrWhiteSpace(specification.Model))
-        {
-            arguments.Add("--model");
-            arguments.Add(specification.Model);
-        }
+        var arguments = BuildDockerArguments(specification, workspace);
 
         var psi = new ProcessStartInfo
         {
@@ -162,6 +124,64 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
             TryKill(process);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Builds docker run + mini-SWE-agent CLI arguments. Exposed for unit tests
+    /// so the non-interactive contract can be asserted without Docker.
+    /// </summary>
+    internal List<string> BuildDockerArguments(MiniSweAgentLaunchSpec specification, string workspace)
+    {
+        var arguments = new List<string>
+        {
+            "run", "--rm",
+            "--network", "none",
+            "--read-only",
+            "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges",
+            "--pids-limit", _pidsLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--memory", $"{_memoryBytes}b",
+            "--cpus", _cpuLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+            "--tmpfs", "/root/.config:rw,noexec,nosuid,size=16m",
+            "--mount", $"type=bind,src={workspace},dst=/workspace",
+            "--workdir", "/workspace"
+        };
+
+        // Primary non-TTY fix: skip mini-SWE-agent first-time interactive setup.
+        arguments.Add("--env");
+        arguments.Add("MSWEA_CONFIGURED=true");
+
+        foreach (var pair in _environment)
+        {
+            if (IsHostCredentialKey(pair.Key))
+                throw new ArgumentException($"Credential-like environment key is not permitted: {pair.Key}", nameof(specification));
+            if (string.Equals(pair.Key, "MSWEA_CONFIGURED", StringComparison.Ordinal))
+                continue; // already forced true above
+            arguments.Add("--env");
+            arguments.Add($"{pair.Key}={pair.Value}");
+        }
+
+        arguments.Add(_image);
+        // Image ENTRYPOINT is mini-swe-agent. Do not prepend the executable again.
+        // Use DefaultAgent — not InteractiveAgent — so no prompt_toolkit TTY path.
+        arguments.Add("--agent-class");
+        arguments.Add("default");
+        arguments.Add("--task");
+        arguments.Add(specification.TaskPrompt);
+
+        if (!string.IsNullOrWhiteSpace(specification.ConfigPath))
+        {
+            arguments.Add("--config");
+            arguments.Add(specification.ConfigPath);
+        }
+        if (!string.IsNullOrWhiteSpace(specification.Model))
+        {
+            arguments.Add("--model");
+            arguments.Add(specification.Model);
+        }
+
+        return arguments;
     }
 
     private static bool IsHostCredentialKey(string key) =>
