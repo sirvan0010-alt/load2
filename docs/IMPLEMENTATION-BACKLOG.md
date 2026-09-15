@@ -42,7 +42,7 @@ Delivered:
 
 Implemented in `src/MailLoadTester.Core/ProviderSimulator.cs`.
 
-Delivered deterministic local provider simulation, seeded reproducibility, provider/workflow identity, accepted/throttled/temporary/permanent outcomes, latency/authentication-result patterns, cancellation, bounded event count, B3 composition, duplicate-provider protection and focused tests. The implementation performs no network I/O and introduces no second queue/pacing/retry stack.
+Delivered deterministic local provider/workflow simulation, seeded reproducibility, accepted/throttled/temporary/permanent outcomes, latency/authentication-result patterns, cancellation, bounded event count, B3 composition, duplicate-provider protection and focused tests. The implementation performs no network I/O and introduces no second queue/pacing/retry stack.
 
 CI evidence: the verified B4 branch run was green across the required repository checks.
 
@@ -83,7 +83,7 @@ Delivered:
 - machine-readable SMTP/TLS/MX/SPF/DMARC evidence status;
 - observed TLS protocol and SMTP authentication state/mechanisms;
 - DNS-check failure distinguished from a confirmed missing record;
-- explicit DKIM `NotEvaluated` state when no selector is supplied rather than guessing;
+- explicit DKIM `NotEvaluated` state when no selector is supplied;
 - preserved diagnostic steps and error evidence;
 - compact JSON serialization;
 - no credentials or second diagnostics engine;
@@ -107,11 +107,27 @@ Delivered:
 - no network I/O, credentials or replay execution;
 - data-only boundary suitable for later deterministic replay tooling.
 
+A queue-metrics snapshot race was also corrected: the final queue depth is now derived from the authoritative enqueue/dequeue/drain identity, preventing a consumer from winning the race against the producer's instrumentation increment.
+
 The artifact writer deliberately does not invent missing runtime events: callers supply the normalized event collection they actually observed.
 
-### B9 Security Execution Gates — POST-BASELINE
+### B9 Security Execution Gates — IMPLEMENTED, CI PENDING
 
-Enforce SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI.
+Implemented in `src/MailLoadTester.Core/SecurityExecutionGate.cs` and wired into `ScenarioEngine` before execution.
+
+Enforce:
+
+- SCOPE: non-empty explicit scenario identity;
+- AUTHORIZATION: TestMode/DryRun or explicit `Unauthorized` acknowledgement;
+- HARD LIMIT: MessageCount 1..10000, MaxConcurrency 1..20, IntervalMs 0..3600000, DurationSeconds 0..86400;
+- CANCELLATION: cancellation checked between security stages and before execution;
+- PACING: existing `SmartPaceController` remains authoritative;
+- CONCURRENCY: existing bounded Channel/workers and adaptive limiter remain authoritative;
+- SECRETS: existing redaction in RunReport/ReplayableRunArtifact remains authoritative;
+- EVIDENCE: existing transport diagnostics/evidence and run observability remain authoritative;
+- TEST/CI: focused gate tests added; final status waits for current full CI verification.
+
+No second pacing, concurrency, retry, network-diagnostics or result pipeline was introduced.
 
 ## P2 — advanced authorized lab automation
 
