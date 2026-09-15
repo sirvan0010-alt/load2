@@ -19,7 +19,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 jobs:
@@ -50,11 +50,18 @@ jobs:
           test -f "$RESULT_PATH"
           bash scripts/verify-agent-results.sh "$(dirname "$RESULT_PATH")"
 
-      - name: Run repository tests
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore and test repository
         shell: bash
         run: |
           set -euo pipefail
-          dotnet test --configuration Release --no-restore
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore --verbosity normal
 
       - name: Create pull request, never merge
         env:
@@ -64,7 +71,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh pr view "$HEAD_BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_BRANCH" --json number --jq 'length')
+          if [[ "$existing" != "0" ]]; then
             echo "A pull request already exists for $HEAD_BRANCH."
             exit 0
           fi
