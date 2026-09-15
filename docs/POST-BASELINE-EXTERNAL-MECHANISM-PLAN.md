@@ -1,43 +1,130 @@
-# Post-baseline external mechanism implementation plan
+# load2 — Post-baseline mechanism and product plan
 
-Based on source-level audits of `slowhttptest@bbd33de733ccb5d7c87ffefebe1373d035a573a1` and `GoldenEye@792862f5c8cb98f9ffcb9fab245e2c663e3a1026`.
+**Authority:** source + tests on `main`  
+**Canonical roadmap:** `docs/LOAD2-ROADMAP.md`
 
-## Already covered by load2
+This document converts external research into concrete TRACK B work. It does not reopen TRACK A.
 
-| External mechanism | Existing load2 mechanism | Action |
+## 1. External mechanisms already covered
+
+| Mechanism | Current load2 capability | Decision |
 |---|---|---|
-| slowhttptest rate vs concurrency | `SmartPaceController` + bounded concurrency/session pool | HARDEN by regression coverage, not duplicate implementation |
-| slowhttptest timeout/probe separation | transport health/diagnostics + observability | ADOPT principle; verify separation |
-| slowhttptest authoritative event/report model | `MailTestResult` + `RunReport` + `RunObservability` | ADOPT principle; no second reporting model |
-| GoldenEye session reuse | `SmtpConnectionPool` persistent sessions | ADOPT; retain current lifecycle controls |
-| GoldenEye worker monitoring/shutdown | bounded async workers + `CancellationToken` | HARDEN tests and cleanup invariants |
-| GoldenEye explicit TLS verification policy | SMTP/TLS diagnostics and `TlsMatrixTests` | ADAPT only where a concrete policy gap is demonstrated |
+| rate vs concurrency separation | `SmartPaceController` + bounded concurrency | HARDEN, do not duplicate |
+| timeout/probe separation | transport diagnostics + observability | ADOPT principle |
+| event/report projection | `MailTestResult` → `RunReport` → `RunObservability` | ADOPT principle |
+| SMTP session reuse | `SmtpConnectionPool` | HAVE |
+| worker monitoring/shutdown | bounded workers + `CancellationToken` | HARDEN |
+| payload variation | `IMailPayloadPlugin` | HAVE / ADAPT where needed |
+| endpoint canonicalization | canonical health keys + target deduplication | HAVE |
 
-## Candidates requiring implementation work
+## 2. Mailcannon decision
 
-### EXT-001 — bounded diagnostic partial-I/O scenario
-Source: slowhttptest M-003.
+`rojberr/mailcannon` is **REFERENCE only** for the current product.
 
-Implement only as a domain-specific, explicitly authorized diagnostic scenario if a real load2 requirement exists. It must reuse existing pacing, concurrency, cancellation, authorization and reporting rather than creating a parallel engine.
+Its principal differentiator is distributed SMTP load generation through Docker/Swarm/Kubernetes and multiple machines. For a one-PC load2 deployment this adds operational complexity without a demonstrated requirement. load2 already has bounded local concurrency, pacing and connection/session controls.
 
-### EXT-002 — scenario diversity through payload plugins
-Source: slowhttptest M-006 and GoldenEye M-009.
+No mailcannon dependency or port is planned. Reconsider only if a concrete single-host mechanism, reproducibility feature or benchmark methodology is shown to improve load2.
 
-Use `IMailPayloadPlugin` for bounded message/header/body variation. Randomization must remain deterministic when a seed is supplied and must be represented in run evidence. It must not bypass transport controls.
+## 3. B2 — external repository transfer
 
-### EXT-003 — connection/session lifecycle state evidence
-Source: slowhttptest M-001.
+For every retained repository, record:
 
-Where session lifecycle transitions are currently implicit, expose them through existing observability/protocol-path mechanisms rather than adding a second state machine. Add focused tests only for a demonstrated observability gap.
+```text
+pinned revision
+→ entry points / symbols
+→ execution trace
+→ mechanism inventory
+→ load2 mapping
+→ decision
+→ focused evidence
+```
 
-## Non-goals
+Unknown source facts remain `PENDING`.
 
-- Do not port HTTP-specific reactor code into the C# SMTP engine.
-- Do not add a second rate limiter or concurrency controller.
-- Do not copy attack orchestration merely because an external project contains it.
-- Do not weaken TLS verification by default.
-- Do not claim an implementation is complete until source, tests and CI verify it.
+## 4. B3 — Scenario Engine
 
-## Next implementation gate
+Goal: represent test intent as typed scenarios while retaining the existing execution engine.
 
-Before implementing EXT-001/002/003, the implementation agent must inspect the current source and tests again and produce a minimal patch plan. If the current architecture already provides the required behavior, close the candidate as `ALREADY-COVERED` rather than duplicating it.
+Initial kinds:
+
+- `NormalDelivery`
+- `BurstDelivery`
+- `SustainedLoad`
+- `ConnectionSaturation`
+- `ProviderDistribution`
+- `FailureInjection`
+- `MailboxQuota`
+- `Deliverability`
+- controlled security simulations
+
+The scenario layer must translate into the existing bounded Channel/workers/pacing/concurrency/session/reporting path.
+
+Required properties:
+
+- cancellation-aware;
+- deterministic when a seed is supplied;
+- hard-limit aware;
+- authorization-aware;
+- no second queue;
+- no second pacing system;
+- no second retry pipeline;
+- existing `MailTestResult` remains the result authority.
+
+## 5. B4 — Provider Simulator
+
+Goal: model provider behavior locally or in a controlled lab so defensive workflows can be tested without automating abuse against third parties.
+
+The simulator should represent:
+
+- provider identity;
+- sender-domain population;
+- workflow/message type;
+- acceptance, throttling and rejection;
+- latency and transient failure;
+- authentication-result pattern;
+- mailbox outcome.
+
+A deterministic seed must reproduce the same generated event sequence. Simulation must not silently contact arbitrary external providers.
+
+## 6. B5 — Behavioral Analyzer
+
+Consume normalized events and calculate:
+
+- velocity;
+- burst size/duration;
+- sender/domain diversity;
+- recipient concentration;
+- provider diversity;
+- authentication-result distribution;
+- throttle/rejection rate;
+- mailbox pressure;
+- recovery time.
+
+Return evidence classification:
+
+`Normal | Elevated | Suspicious | HighRisk`
+
+## 7. B6/B7/B8/B9
+
+- B6: controlled SMTP/IMAP mailbox and deliverability lab;
+- B7: richer SPF/DKIM/DMARC/TLS evidence without duplicating diagnostics;
+- B8: replayable redacted scenario/config/event/result artifacts;
+- B9: explicit security execution gates.
+
+## 8. Controlled security boundary
+
+Subscription-bombing, Double-Opt-In, anti-abuse, botnet-distribution and proxy-diversity objectives may be represented as **controlled simulations** against owned/authorized systems.
+
+Do not implement arbitrary third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target flooding/DoS/DDoS launchers.
+
+The security objective is to reproduce observable conditions and measure defensive controls, not to remove those controls.
+
+## 9. Implementation gate
+
+Before each implementation item:
+
+```text
+source audit → minimal design → focused tests → security review → implementation → CI → documentation sync
+```
+
+If source evidence shows the behavior already exists, mark it `ALREADY-COVERED` instead of creating duplicate code.
