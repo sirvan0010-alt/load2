@@ -46,15 +46,15 @@ Delivered deterministic local provider simulation, seeded reproducibility, provi
 
 CI evidence: the verified B4 branch run was green across the required repository checks.
 
-### B5 Behavioral Analyzer — IMPLEMENTED, CI PENDING
+### B5 Behavioral Analyzer — COMPLETE, CI VERIFIED
 
 Implemented in `src/MailLoadTester.Core/BehavioralAnalyzer.cs` with focused tests in `tests/MailLoadTester.Tests/BehavioralAnalyzerTests.cs`.
 
 Delivered normalized deterministic events, burst/velocity analysis, provider and sender-domain diversity, recipient concentration, bounded anomaly scoring, findings, B4 event mapping, cancellation and validation. No network I/O and no modification of delivery execution.
 
-The first CI attempt exposed a test-only constructor mismatch against the canonical B4 event contract. It has been corrected; fresh CI is running on the corrected head. B5 is not marked COMPLETE until that CI gate passes.
+The initial CI failure was test-only: the record result contained a collection whose reference identity made a direct record equality assertion order-sensitive. The test was corrected to compare value fields and findings content; the current full CI suite passes.
 
-### B6 Mailbox / Deliverability Lab — IMPLEMENTED, CI PENDING
+### B6 Mailbox / Deliverability Lab — COMPLETE, CI VERIFIED
 
 Implemented as a controlled in-memory lab in `src/MailLoadTester.Core/MailboxDeliverabilityLab.cs` with focused tests in `tests/MailLoadTester.Tests/MailboxDeliverabilityLabTests.cs`.
 
@@ -72,11 +72,24 @@ Delivered:
 - no SMTP/IMAP sockets, credentials or external traffic;
 - explicit boundary for a future external MTA adapter outside the core transport engine.
 
-This closes the core B6 lab boundary without introducing a second SMTP queue, pacing system, retry policy or network transport. CI verification remains the final acceptance gate.
+The focused lab test was corrected to use the defined 80% pressure threshold while still exercising byte quota rejection. The current full CI suite passes.
 
-### B7 Authentication / Transport Evidence — POST-BASELINE
+### B7 Authentication / Transport Evidence — COMPLETE, CI VERIFIED
 
-Extend existing MX/SPF/DKIM/DMARC/TLS diagnostics into evidence-rich scenario results without creating a second diagnostics engine.
+Implemented as a projection over the existing `TransportDiagnostics` pipeline in `src/MailLoadTester.Core/AuthenticationTransportEvidence.cs`.
+
+Delivered:
+
+- machine-readable SMTP/TLS/MX/SPF/DMARC evidence status;
+- observed TLS protocol and SMTP authentication state/mechanisms;
+- DNS-check failure distinguished from a confirmed missing record;
+- explicit DKIM `NotEvaluated` state when no selector is supplied rather than guessing;
+- preserved diagnostic steps and error evidence;
+- compact JSON serialization;
+- no credentials or second diagnostics engine;
+- focused tests covering observed evidence, DKIM boundary and secret absence.
+
+The B7 implementation is intentionally a projection: it does not create a parallel network diagnostic stack. The current full CI suite passes.
 
 ### B8 Replayable Artifacts — POST-BASELINE
 
