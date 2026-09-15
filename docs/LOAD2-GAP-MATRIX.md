@@ -24,19 +24,21 @@ The existing bounded `Channel<T>`, workers/`MaxConcurrency`, `SmartPaceControlle
 | B2 external mechanism audit | COMPLETE — EXT-AUDIT-001 | future repos are separate audits |
 | B3 typed scenario engine | COMPLETE — REPAIRED | regression coverage |
 | B4 provider simulator | COMPLETE — CI VERIFIED | maintain deterministic/security boundary |
-| B5 behavioral analyzer | IMPLEMENTED — CI PENDING | CI verification |
-| B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP lab boundary |
+| B5 behavioral analyzer | IMPLEMENTED — CI PENDING | corrected tests + CI verification |
+| B6 mailbox/deliverability lab | IMPLEMENTED — CI PENDING | lab tests + CI verification |
 | B7 richer auth/transport evidence | POST-BASELINE | evidence model over existing diagnostics |
 | B8 replayable redacted artifacts | POST-BASELINE | deterministic artifact contract |
 | B9 security execution gates | POST-BASELINE | preflight/evidence enforcement |
 
-## B3/B4/B5 delivered behavior
+## B3–B6 delivered behavior
 
 **B3:** typed scenario definitions and a single `ScenarioEngine` adapter route supported scenarios through the existing SMTP runner. Simulation-only scenario kinds remain explicitly blocked from direct SMTP execution.
 
 **B4:** deterministic local provider simulation supports accepted, throttled, temporary-failure and permanent-failure outcomes, seeded reproducibility, cancellation and multi-provider composition. No network I/O and no second queue/pacing/retry stack.
 
-**B5:** side-effect-free analysis over normalized mail events calculates event velocity, peak burst size, provider diversity, sender-domain diversity, recipient concentration and a bounded transparent anomaly score. It also maps B4 simulator events and honors cancellation. No network I/O and no changes to delivery execution.
+**B5:** side-effect-free analysis over normalized mail events calculates event velocity, peak burst size, provider diversity, sender-domain diversity, recipient concentration and a bounded transparent anomaly score. It maps B4 simulator events and honors cancellation. A CI-only constructor mismatch was found and corrected.
+
+**B6:** controlled in-memory mailbox/deliverability lab supports message and byte quotas, provider-outcome rejection, mailbox pressure snapshots, reads and bounded recovery. It is thread-safe, cancellation-aware and intentionally performs no SMTP/IMAP network I/O. A future real MTA/IMAP environment remains an external adapter boundary rather than a second core transport stack.
 
 ## Security boundary
 
@@ -49,6 +51,7 @@ ScenarioDefinition → ScenarioEngine → existing bounded Channel
 → existing workers/MaxConcurrency → existing pacing + provider/recipient gates
 → existing SMTP pools → existing SEND/outcome classification
 → DeliveryLedger/RetryMetrics/RunReport → RunObservability + BehavioralAnalysis
+→ controlled MailboxDeliverabilityLab (lab boundary)
 ```
 
 B4–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
