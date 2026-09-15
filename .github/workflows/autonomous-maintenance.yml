@@ -1,0 +1,64 @@
+name: Autonomous Swarm — Scheduled Maintenance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  maintenance-dispatch:
+    if: ${{ vars.AUTONOMOUS_MAINTENANCE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source of truth
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Create bounded maintenance task
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Autonomous maintenance $(date -u +%Y-%m-%d)"
+          body=$(cat <<'EOF'
+          ## Scheduled autonomous maintenance task
+
+          Source of truth: `sirvan0010-alt/load2`, `main`.
+
+          Allowed task classes only:
+          - dependency/security audit
+          - failing-test repair
+          - documentation drift correction
+          - CI/action hygiene
+
+          Hard limits:
+          - no protected-branch merge
+          - no real-target mail delivery
+          - no arbitrary network load
+          - no credential changes
+          - execution must use the bounded agent contract and isolated workspace
+          EOF
+          )
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$title" \
+            --body "$body" \
+            --label "maintenance" || {
+              echo "Maintenance issue creation failed closed."
+              exit 1
+            }
+
+  disabled-by-default:
+    if: ${{ vars.AUTONOMOUS_MAINTENANCE_ENABLED != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Scheduled autonomous maintenance is disabled by default; no task dispatched."
