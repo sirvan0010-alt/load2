@@ -35,10 +35,8 @@ public sealed record BehavioralAnalysisResult(
     double AnomalyScore,
     bool BurstDetected,
     bool ConcentrationDetected,
-    IReadOnlyList<string> Findings)
-{
-    public bool Anomalous => AnomalyScore >= BehavioralAnalysisOptions.Default.AnomalyScoreThreshold;
-}
+    bool Anomalous,
+    IReadOnlyList<string> Findings);
 
 /// <summary>Deterministic, side-effect-free analysis of supplied normalized mail events.</summary>
 public sealed class BehavioralAnalyzer
@@ -64,7 +62,7 @@ public sealed class BehavioralAnalyzer
         }
 
         if (events.Count == 0)
-            return new BehavioralAnalysisResult(0, 0, 0, 0, 0, 0, 0, false, false, Array.Empty<string>());
+            return new BehavioralAnalysisResult(0, 0, 0, 0, 0, 0, 0, false, false, false, Array.Empty<string>());
 
         events.Sort(static (a, b) => a.Timestamp.CompareTo(b.Timestamp));
         var elapsedSeconds = Math.Max((events[^1].Timestamp - events[0].Timestamp).TotalSeconds, 1.0);
@@ -79,7 +77,6 @@ public sealed class BehavioralAnalyzer
         var burstScore = Math.Clamp((double)peak / options.BurstThreshold, 0, 1);
         var diversityScore = 1.0 - Math.Min(providerDiversity, senderDiversity);
         var anomalyScore = Math.Clamp((burstScore * 0.45) + (recipientConcentration * 0.35) + (diversityScore * 0.20), 0, 1);
-
         var findings = new List<string>();
         if (burstDetected) findings.Add("burst-velocity");
         if (concentrationDetected) findings.Add("recipient-concentration");
@@ -87,7 +84,8 @@ public sealed class BehavioralAnalyzer
         if (senderDiversity < 0.50) findings.Add("low-sender-domain-diversity");
 
         return new BehavioralAnalysisResult(events.Count, rate, peak, providerDiversity, senderDiversity,
-            recipientConcentration, anomalyScore, burstDetected, concentrationDetected, findings.AsReadOnly());
+            recipientConcentration, anomalyScore, burstDetected, concentrationDetected,
+            anomalyScore >= options.AnomalyScoreThreshold, findings.AsReadOnly());
     }
 
     public BehavioralAnalysisResult Analyze(
