@@ -26,14 +26,14 @@ A1 → A8 are complete and remain the protected baseline.
 
 ## P1 — TRACK B foundation
 
-### B1 Documentation reset
+### B1 Documentation reset — IMPLEMENTED (documentation foundation)
 
-- maintain `docs/DOCUMENTATION-MAP.md`;
-- keep one canonical roadmap, gap matrix and backlog;
-- classify old audit/version files as historical evidence;
-- synchronize status only from source/tests/CI.
+- `docs/DOCUMENTATION-MAP.md` is the canonical map;
+- roadmap, gap matrix and backlog now describe the same TRACK B direction;
+- historical audit/version files are explicitly evidence/history;
+- status remains evidence-driven.
 
-### B2 External repository audit
+### B2 External repository audit — IN PROGRESS
 
 For every retained repository:
 
@@ -45,9 +45,11 @@ Decision tags: `HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFER
 
 `rojberr/mailcannon` is reference-only for the current one-PC deployment; no dependency is planned.
 
-### B3 Scenario Engine
+### B3 Scenario Engine — FOUNDATION IMPLEMENTED
 
-Introduce typed scenario definitions over the existing engine:
+Added typed `LoadScenarioKind` / `LoadScenarioDefinition` with validation and authorization semantics. Full integration into the existing scenario runner remains the next implementation step.
+
+Required kinds:
 
 - `NormalDelivery`
 - `BurstDelivery`
@@ -59,7 +61,7 @@ Introduce typed scenario definitions over the existing engine:
 - `Deliverability`
 - controlled security simulations
 
-Acceptance criteria:
+Acceptance criteria for full completion:
 
 - no second queue;
 - no second pacing/limiting system;
@@ -68,49 +70,39 @@ Acceptance criteria:
 - scenario execution produces existing `MailTestResult`/report evidence;
 - focused unit/integration tests pass.
 
-### B4 Provider Simulator
+### B4 Provider Simulator — FOUNDATION IMPLEMENTED
 
-Introduce a local/controlled abstraction for provider behavior:
+Added `IMailProviderSimulator` and deterministic local `DeterministicMailProviderSimulator`. It models provider identity, workflow, throttling/transient failures, latency and authentication-result patterns without network access.
 
-- provider identity;
-- sender-domain population;
-- message/workflow type;
-- acceptance/throttle/rejection;
-- latency/transient failure;
-- authentication-result pattern;
-- mailbox outcome.
+Acceptance criteria for full completion:
 
-Acceptance criteria:
-
-- simulator is deterministic with a supplied seed;
-- no arbitrary external-provider calls are required;
-- it composes with existing scenario execution;
-- no credentials are embedded;
-- behavior is test-covered.
+- deterministic sequence with a supplied seed;
+- no arbitrary external-provider calls;
+- composition with B3 scenario execution;
+- no credentials embedded;
+- focused behavioral tests.
 
 ## P1/P2 — security analysis
 
-### B5 Behavioral Analyzer
+### B5 Behavioral Analyzer — POST-BASELINE
 
 Analyze normalized events for velocity, burst size/duration, sender/domain diversity, recipient concentration, provider diversity, authentication results, throttling/rejection and mailbox pressure.
 
-Return evidence classification:
+Return evidence classification: `Normal | Elevated | Suspicious | HighRisk`.
 
-`Normal | Elevated | Suspicious | HighRisk`
-
-### B6 Mailbox/Deliverability Lab
+### B6 Mailbox/Deliverability Lab — POST-BASELINE
 
 Provide a controlled SMTP/IMAP test environment and measure delivery, quota, recovery and authentication behavior. Keep the MTA/test environment outside the core transport layer.
 
-### B7 Authentication/transport evidence
+### B7 Authentication/transport evidence — POST-BASELINE
 
-Expand evidence for MX, SPF, DKIM, DMARC and TLS-related checks without duplicating the existing diagnostic primitives.
+Expand evidence for MX, SPF, DKIM, DMARC and TLS-related checks without duplicating existing diagnostic primitives.
 
-### B8 Replayable artifacts
+### B8 Replayable artifacts — POST-BASELINE
 
 Persist redacted scenario/configuration/event/result artifacts sufficient to reproduce a run without storing credentials or unnecessary personal data.
 
-### B9 Security gates
+### B9 Security gates — POST-BASELINE
 
 Enforce:
 
