@@ -1,42 +1,131 @@
-# load2 — SMTP-first Implementation Backlog
+# load2 — Implementation Backlog
 
-**Authority:** source + tests on `main`.
+**Authority:** source + tests on `main`.  
+**Canonical planning document:** `docs/LOAD2-ROADMAP.md`.
 
-## TRACK A — closed (A1–A8)
+## TRACK A — CLOSED
+
+A1 → A8 are complete and remain the protected baseline.
 
 | Item | Status |
-|------|--------|
-| Health / Report / Multi-account / Churn / Provider / Diagnostics | ✅ |
-| TargetSet / ScenarioLimits / DurationSeconds | ✅ |
-| GUI TransportDiagnostics / Accounts editor | ✅ |
-| **A1** destination-provider throttling | ✅ FIXED |
-| **A2** multi-account throttling regression | ✅ FIXED |
-| **A3** bounded scenario queue + metrics | ✅ FIXED |
-| **A4** retry / budget + RetryMetrics | ✅ FIXED |
-| **A5** SmtpOutcomeClassifier + OutcomeCounts | ✅ FIXED |
-| **A6** global concurrency audit | ✅ PASS (no change) |
-| **A7** RunObservability / RunReport projection | ✅ FIXED |
-| **A8** final baseline | ✅ see `docs/A8-BASELINE.md` |
+|---|---|
+| A1 destination-provider throttling | FIXED |
+| A2 multi-account throttling regression | FIXED |
+| A3 bounded scenario queue + metrics | FIXED |
+| A4 retry / budget + RetryMetrics | FIXED |
+| A5 SmtpOutcomeClassifier + OutcomeCounts | FIXED |
+| A6 global concurrency audit | PASS |
+| A7 RunObservability / RunReport | FIXED |
+| A8 final baseline | COMPLETE |
+
+## P0 — baseline integrity
+
+- finish and verify the current agent-runtime CI defect;
+- never claim runtime Phase 1.3/2.8 verified without real container CI evidence;
+- keep regression coverage for the A1–A8 invariants.
+
+## P1 — TRACK B foundation
+
+### B1 Documentation reset
+
+- maintain `docs/DOCUMENTATION-MAP.md`;
+- keep one canonical roadmap, gap matrix and backlog;
+- classify old audit/version files as historical evidence;
+- synchronize status only from source/tests/CI.
+
+### B2 External repository audit
+
+For every retained repository:
 
 ```text
-A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8   ALL COMPLETE
+pinned revision → entry points → execution trace → mechanisms → load2 mapping → decision → evidence
 ```
 
-## Invariants (engine)
+Decision tags: `HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`.
 
-- One SmartPace system; bounded workers = MaxConcurrency
-- AcquireSendSlotAsync before every real SEND (incl. retries)
-- DeliveryLedger Accepted terminal
-- RetryPolicy delegates to SmtpOutcomeClassifier
-- MailTestResult → RunReport → RunObservability (no parallel metrics pipeline)
+`rojberr/mailcannon` is reference-only for the current one-PC deployment; no dependency is planned.
 
-## Parallel track — external repository audit
+### B3 Scenario Engine
 
-External audits remain independent of TRACK A.  
-ADOPT only with: mechanism → source evidence → load2 mapping → decision.
+Introduce typed scenario definitions over the existing engine:
 
-## Optional post-baseline
+- `NormalDelivery`
+- `BurstDelivery`
+- `SustainedLoad`
+- `ConnectionSaturation`
+- `ProviderDistribution`
+- `FailureInjection`
+- `MailboxQuota`
+- `Deliverability`
+- controlled security simulations
 
-- GUI summary panel: `RunObservability.FromReport`
-- NET-AUDIT-001 on authorized endpoints only
-- Release packaging / version bump (product decision)
+Acceptance criteria:
+
+- no second queue;
+- no second pacing/limiting system;
+- no second retry policy;
+- existing `CancellationToken` and hard limits remain effective;
+- scenario execution produces existing `MailTestResult`/report evidence;
+- focused unit/integration tests pass.
+
+### B4 Provider Simulator
+
+Introduce a local/controlled abstraction for provider behavior:
+
+- provider identity;
+- sender-domain population;
+- message/workflow type;
+- acceptance/throttle/rejection;
+- latency/transient failure;
+- authentication-result pattern;
+- mailbox outcome.
+
+Acceptance criteria:
+
+- simulator is deterministic with a supplied seed;
+- no arbitrary external-provider calls are required;
+- it composes with existing scenario execution;
+- no credentials are embedded;
+- behavior is test-covered.
+
+## P1/P2 — security analysis
+
+### B5 Behavioral Analyzer
+
+Analyze normalized events for velocity, burst size/duration, sender/domain diversity, recipient concentration, provider diversity, authentication results, throttling/rejection and mailbox pressure.
+
+Return evidence classification:
+
+`Normal | Elevated | Suspicious | HighRisk`
+
+### B6 Mailbox/Deliverability Lab
+
+Provide a controlled SMTP/IMAP test environment and measure delivery, quota, recovery and authentication behavior. Keep the MTA/test environment outside the core transport layer.
+
+### B7 Authentication/transport evidence
+
+Expand evidence for MX, SPF, DKIM, DMARC and TLS-related checks without duplicating the existing diagnostic primitives.
+
+### B8 Replayable artifacts
+
+Persist redacted scenario/configuration/event/result artifacts sufficient to reproduce a run without storing credentials or unnecessary personal data.
+
+### B9 Security gates
+
+Enforce:
+
+```text
+SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI
+```
+
+## Controlled-security requirements
+
+The framework may test abuse patterns defensively in an owned or explicitly authorized environment.
+
+Do not implement third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target flooding/DoS/DDoS launchers.
+
+Use synthetic providers, controlled mailboxes, owned test applications and bounded lab workers instead.
+
+## Definition of done
+
+No item becomes `COMPLETE` until source implementation, focused tests, security review, CI evidence and canonical documentation are synchronized. Historical notes and external README claims cannot close backlog items.
