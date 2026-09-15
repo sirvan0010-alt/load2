@@ -28,6 +28,7 @@ public sealed class ScenarioEngine
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(progress);
+        SecurityExecutionGate.Validate(definition, ct);
         var prepared = Prepare(definition, options);
         return _runner.RunAsync(prepared, progress, ct);
     }
