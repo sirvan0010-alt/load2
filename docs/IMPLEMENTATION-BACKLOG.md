@@ -24,40 +24,47 @@ A1–A8 are complete and remain the protected baseline.
 
 EXT-AUDIT-001 is closed. Future repositories are separate audit items. `rojberr/mailcannon` is reference-only for the current one-PC deployment.
 
-### B3 Scenario Engine — COMPLETE
+### B3 Scenario Engine — COMPLETE, REPAIRED
 
-Implemented in `src/MailLoadTester.Core/ScenarioEngine.cs`.
+The first B3 adapter attempt introduced duplicate `LoadScenarioKind` / `LoadScenarioDefinition` declarations and failed the release build. That defect was removed. The canonical typed scenario contract remains `src/MailLoadTester.Core/LoadScenario.cs`, while `src/MailLoadTester.Core/ScenarioEngine.cs` now contains only the execution adapter.
 
 Delivered:
 
 - typed `LoadScenarioKind` / immutable `LoadScenarioDefinition`;
-- bounded `ScenarioTuning` with validation;
-- central `LoadScenarioCatalog`;
+- authorization validation for non-test execution;
+- bounded message/concurrency/interval/duration validation;
 - `ScenarioEngine` adapter over the existing `SmtpTestRunner`;
-- direct support for `NormalDelivery`, `BurstDelivery`, `SustainedLoad`, `ConnectionSaturation`, `ProviderDistribution` and `Deliverability`;
-- explicit simulation-only boundary for future lab scenarios;
 - no second queue, pacing/limiting stack, concurrency stack or retry policy;
-- existing cancellation, hard limits and `MailTestResult` remain authoritative;
-- focused `ScenarioEngineTests`.
+- existing cancellation and result/report pipeline remain authoritative;
+- focused scenario adapter tests.
 
-Simulation-only definitions remain unavailable through direct SMTP execution until their controlled provider/mailbox implementation exists:
+The adapter intentionally does not reinterpret scenario metadata into a second options engine. Existing load2 execution controls remain the single source of execution behavior.
 
-- `FailureInjection`
-- `MailboxQuota`
-- `SubscriptionBombSimulation`
-- `DoubleOptInSimulation`
-- `AntiAbuseControlSimulation`
-- `DistributedLab`
+### B4 Provider Simulator — IMPLEMENTED, CI PENDING
 
-### B4 Provider Simulator — NEXT
+Implemented in `src/MailLoadTester.Core/ProviderSimulator.cs`.
 
-Integrate deterministic provider behavior with B3 scenarios. Provider simulation must remain local/controlled and must not bypass existing execution controls.
+Delivered:
 
-Acceptance:
+- deterministic local provider simulation with a supplied seed;
+- provider identity and workflow/message type;
+- accepted/throttled/temporary/permanent outcomes;
+- latency and authentication-result patterns;
+- `CancellationToken` support;
+- bounded event count (1..10000);
+- `ProviderScenarioSimulator` composition with the B3 `LoadScenarioDefinition`;
+- deterministic multi-provider distribution for controlled scenarios;
+- duplicate provider-id protection;
+- no network access and no external-provider credentials;
+- focused deterministic, cancellation, outcome and B3-composition tests.
+
+Security boundary: simulation is local/controlled. It does not automate third-party registrations, bypass CAPTCHA/OTP, evade provider limits or create unrestricted public traffic.
+
+Acceptance after CI verification:
 
 - deterministic seed;
 - provider identity/workflow model;
-- throttling/transient failure/latency/authentication-result events;
+- throttling/transient/permanent failure/latency/authentication-result events;
 - no arbitrary external-provider calls;
 - composition with B3;
 - focused tests;
