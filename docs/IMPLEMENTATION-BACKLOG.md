@@ -1,123 +1,119 @@
 # load2 — Implementation Backlog
 
 **Authority:** source + tests on `main`.  
-**Canonical planning document:** `docs/LOAD2-ROADMAP.md`.
+**Canonical roadmap:** `docs/LOAD2-ROADMAP.md`.  
+**Current phase:** TRACK B post-baseline.
 
 ## TRACK A — CLOSED
 
-A1 → A8 are complete and remain the protected baseline.
-
-| Item | Status |
-|---|---|
-| A1 destination-provider throttling | FIXED |
-| A2 multi-account throttling regression | FIXED |
-| A3 bounded scenario queue + metrics | FIXED |
-| A4 retry / budget + RetryMetrics | FIXED |
-| A5 SmtpOutcomeClassifier + OutcomeCounts | FIXED |
-| A6 global concurrency audit | PASS |
-| A7 RunObservability / RunReport | FIXED |
-| A8 final baseline | COMPLETE |
+A1–A8 are complete and remain the protected baseline.
 
 ## P0 — baseline integrity
 
-- finish and verify the current agent-runtime CI defect;
-- never claim runtime Phase 1.3/2.8 verified without real container CI evidence;
-- keep regression coverage for the A1–A8 invariants.
+- preserve green CI for the verified agent-runtime Docker boundary;
+- keep regression coverage for A1–A8;
+- keep `--unauthorized`, DryRun/TestMode, hard limits, cancellation and secret redaction mandatory.
 
-## P1 — TRACK B foundation
+## P1 — TRACK B
 
-### B1 Documentation reset — IMPLEMENTED (documentation foundation)
+### B1 Documentation reset — COMPLETE
 
-- `docs/DOCUMENTATION-MAP.md` is the canonical map;
-- roadmap, gap matrix and backlog now describe the same TRACK B direction;
-- historical audit/version files are explicitly evidence/history;
-- status remains evidence-driven.
+`docs/DOCUMENTATION-MAP.md` is the canonical map. Historical audit/version files are evidence/history rather than competing plans.
 
-### B2 External repository audit — IN PROGRESS
+### B2 External repository audit — COMPLETE
 
-For every retained repository:
+EXT-AUDIT-001 is closed. Future repositories are separate audit items. `rojberr/mailcannon` is reference-only for the current one-PC deployment.
 
-```text
-pinned revision → entry points → execution trace → mechanisms → load2 mapping → decision → evidence
-```
+### B3 Scenario Engine — COMPLETE
 
-Decision tags: `HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`.
+Implemented in `src/MailLoadTester.Core/ScenarioEngine.cs`.
 
-`rojberr/mailcannon` is reference-only for the current one-PC deployment; no dependency is planned.
+Delivered:
 
-### B3 Scenario Engine — FOUNDATION IMPLEMENTED
+- typed `LoadScenarioKind` / immutable `LoadScenarioDefinition`;
+- bounded `ScenarioTuning` with validation;
+- central `LoadScenarioCatalog`;
+- `ScenarioEngine` adapter over the existing `SmtpTestRunner`;
+- direct support for `NormalDelivery`, `BurstDelivery`, `SustainedLoad`, `ConnectionSaturation`, `ProviderDistribution` and `Deliverability`;
+- explicit simulation-only boundary for future lab scenarios;
+- no second queue, pacing/limiting stack, concurrency stack or retry policy;
+- existing cancellation, hard limits and `MailTestResult` remain authoritative;
+- focused `ScenarioEngineTests`.
 
-Added typed `LoadScenarioKind` / `LoadScenarioDefinition` with validation and authorization semantics. Full integration into the existing scenario runner remains the next implementation step.
+Simulation-only definitions remain unavailable through direct SMTP execution until their controlled provider/mailbox implementation exists:
 
-Required kinds:
-
-- `NormalDelivery`
-- `BurstDelivery`
-- `SustainedLoad`
-- `ConnectionSaturation`
-- `ProviderDistribution`
 - `FailureInjection`
 - `MailboxQuota`
-- `Deliverability`
-- controlled security simulations
+- `SubscriptionBombSimulation`
+- `DoubleOptInSimulation`
+- `AntiAbuseControlSimulation`
+- `DistributedLab`
 
-Acceptance criteria for full completion:
+### B4 Provider Simulator — NEXT
 
-- no second queue;
-- no second pacing/limiting system;
-- no second retry policy;
-- existing `CancellationToken` and hard limits remain effective;
-- scenario execution produces existing `MailTestResult`/report evidence;
-- focused unit/integration tests pass.
+Integrate deterministic provider behavior with B3 scenarios. Provider simulation must remain local/controlled and must not bypass existing execution controls.
 
-### B4 Provider Simulator — FOUNDATION IMPLEMENTED
+Acceptance:
 
-Added `IMailProviderSimulator` and deterministic local `DeterministicMailProviderSimulator`. It models provider identity, workflow, throttling/transient failures, latency and authentication-result patterns without network access.
-
-Acceptance criteria for full completion:
-
-- deterministic sequence with a supplied seed;
+- deterministic seed;
+- provider identity/workflow model;
+- throttling/transient failure/latency/authentication-result events;
 - no arbitrary external-provider calls;
-- composition with B3 scenario execution;
-- no credentials embedded;
-- focused behavioral tests.
-
-## P1/P2 — security analysis
+- composition with B3;
+- focused tests;
+- CI green.
 
 ### B5 Behavioral Analyzer — POST-BASELINE
 
-Analyze normalized events for velocity, burst size/duration, sender/domain diversity, recipient concentration, provider diversity, authentication results, throttling/rejection and mailbox pressure.
+Normalize transport/provider/mailbox events and calculate evidence for velocity, burst duration, sender/domain diversity, recipient concentration, provider diversity, authentication results, throttling/rejection and mailbox pressure.
 
-Return evidence classification: `Normal | Elevated | Suspicious | HighRisk`.
+Output: `Normal | Elevated | Suspicious | HighRisk`.
 
-### B6 Mailbox/Deliverability Lab — POST-BASELINE
+### B6 Mailbox / Deliverability Lab — POST-BASELINE
 
-Provide a controlled SMTP/IMAP test environment and measure delivery, quota, recovery and authentication behavior. Keep the MTA/test environment outside the core transport layer.
+Use a controlled SMTP/IMAP environment for delivery, mailbox quota, recovery and authentication testing. Keep the MTA/test environment outside the core transport layer.
 
-### B7 Authentication/transport evidence — POST-BASELINE
+### B7 Authentication / Transport Evidence — POST-BASELINE
 
-Expand evidence for MX, SPF, DKIM, DMARC and TLS-related checks without duplicating existing diagnostic primitives.
+Extend existing MX/SPF/DKIM/DMARC/TLS diagnostics into evidence-rich scenario results without creating a second diagnostics engine.
 
-### B8 Replayable artifacts — POST-BASELINE
+### B8 Replayable Artifacts — POST-BASELINE
 
-Persist redacted scenario/configuration/event/result artifacts sufficient to reproduce a run without storing credentials or unnecessary personal data.
+Persist redacted scenario/configuration/event/result artifacts sufficient for deterministic reproduction without secrets or unnecessary personal data.
 
-### B9 Security gates — POST-BASELINE
+### B9 Security Execution Gates — POST-BASELINE
 
 Enforce:
 
 ```text
-SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI
+SCOPE
+→ AUTHORIZATION
+→ HARD LIMIT
+→ CANCELLATION
+→ PACING
+→ CONCURRENCY
+→ SECRETS
+→ EVIDENCE
+→ TEST
+→ CI
 ```
 
-## Controlled-security requirements
+## P2 — advanced authorized lab automation
 
-The framework may test abuse patterns defensively in an owned or explicitly authorized environment.
+- distributed authorized lab workers;
+- controlled proxy/IP diversity as a lab topology dimension;
+- registration/Double-Opt-In simulators for owned applications;
+- anti-bot/anti-abuse control testing without bypass;
+- mailbox saturation/recovery;
+- failure injection/replay;
+- GUI scenario selection and live observability.
 
-Do not implement third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target flooding/DoS/DDoS launchers.
+## Explicit non-goals
 
-Use synthetic providers, controlled mailboxes, owned test applications and bounded lab workers instead.
+Do not implement arbitrary third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnet operation, provider-limit evasion, credential/token theft, reflection/amplification or unrestricted public-target flooding/destructive DoS/DDoS.
+
+Use controlled simulations, owned applications, synthetic providers/recipients and bounded lab workers for defensive testing.
 
 ## Definition of done
 
-No item becomes `COMPLETE` until source implementation, focused tests, security review, CI evidence and canonical documentation are synchronized. Historical notes and external README claims cannot close backlog items.
+An item becomes `COMPLETE` only when source implementation, focused tests, security review, CI evidence and canonical documentation are synchronized. Historical notes and external README claims cannot close an item.
