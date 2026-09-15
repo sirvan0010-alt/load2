@@ -7,8 +7,10 @@ public sealed class TargetSetTests
     [Fact]
     public void FromRecipients_DedupesAndValidates()
     {
-        var set = TargetSet.FromRecipients(new[] { "a@example.com", "A@example.com", "b@example.com" });
-        Assert.Equal(2, set.Count);
+        // Domain is case-insensitive; local-part is preserved (RFC / EndpointCanonicalizer.Email).
+        // a@example.com and A@example.com therefore remain distinct recipients.
+        var set = TargetSet.FromRecipients(new[] { "a@example.com", "A@example.com", "b@example.com", "b@EXAMPLE.com" });
+        Assert.Equal(3, set.Count);
     }
 
     [Fact]

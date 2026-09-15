@@ -23,7 +23,8 @@ public sealed class SmtpAccountRegistryTests
         Assert.Equal("h", a.SmtpHost);
         Assert.Equal("u", a.Username);
         Assert.Equal("p", a.Password);
-        Assert.Equal("primary|h:25", a.HealthKey);
+        // HealthKey uses EndpointCanonicalizer.Smtp → host:port/security
+        Assert.Equal("primary|h:25/None", a.HealthKey);
     }
 
     [Fact]

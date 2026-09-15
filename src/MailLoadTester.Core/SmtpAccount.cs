@@ -14,7 +14,7 @@ public sealed record SmtpAccount(
     string Password,
     SmtpAuthMethod AuthMethod = SmtpAuthMethod.Auto)
 {
-    public string HealthKey => $"{Id}|{SmtpHost}:{Port}";
+    public string HealthKey => $"{Id}|{EndpointCanonicalizer.Smtp(SmtpHost, Port, Security)}";
 
     public static SmtpAccount FromOptions(MailTestOptions o, string? id = null) => new(
         Id: string.IsNullOrWhiteSpace(id) ? "primary" : id,

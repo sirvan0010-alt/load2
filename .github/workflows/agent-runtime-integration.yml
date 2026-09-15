@@ -1,0 +1,36 @@
+name: Agent Runtime Integration
+
+on:
+  pull_request:
+    paths:
+      - "src/MailLoadTester.Core/MiniSweAgentRuntime.cs"
+      - "src/MailLoadTester.Core/DockerMiniSweAgentSandbox.cs"
+      - "src/MailLoadTester.Core/MiniSweAgentDockerConfiguration.cs"
+      - "tests/MailLoadTester.Tests/MiniSweAgent*"
+      - "tools/mini-swe-agent/Dockerfile"
+      - ".github/workflows/agent-runtime-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mini-swe-docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build pinned mini-SWE-agent image
+        run: docker build --pull -t load2-mini-swe-agent:test tools/mini-swe-agent
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Run real mini-SWE-agent Docker smoke test
+        env:
+          LOAD2_RUN_MINI_SWE_INTEGRATION: "true"
+          LOAD2_MINI_SWE_IMAGE: "load2-mini-swe-agent:test"
+        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --filter FullyQualifiedName~MiniSweAgentDockerIntegrationTests --verbosity normal
