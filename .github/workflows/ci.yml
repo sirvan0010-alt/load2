@@ -13,6 +13,8 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # Prevent multi-hour zombie runs (several prior PR commits hung on full suite).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -31,5 +33,13 @@ jobs:
           dotnet build src/MailLoadTester.Core/MailLoadTester.Core.csproj -c Release --no-restore
           dotnet build tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore
 
-      - name: Test Release (full suite, no quarantine filter)
-        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --verbosity normal
+      - name: Test Release (full suite, hang-aware)
+        # --blame-hang dumps the hung test name after 90s of no progress.
+        # Integration Docker smoke is gated by LOAD2_RUN_MINI_SWE_INTEGRATION and is not part of default CI.
+        run: >
+          dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          -c Release
+          --no-build
+          --verbosity normal
+          --blame-hang
+          --blame-hang-timeout 90s
