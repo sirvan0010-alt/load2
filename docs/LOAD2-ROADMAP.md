@@ -20,14 +20,14 @@ The existing SMTP engine remains the foundation. New capabilities must reuse its
 ### P1 — controlled security scenarios
 
 1. **B1 Documentation reset and canonical map — COMPLETE.**
-2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.**
+2. **B2 External mechanism audit — COMPLETE for EXT-AUDIT-001.**
 3. **B3 Scenario Engine — COMPLETE.** Typed scenario definitions and a single execution adapter route supported scenarios through the existing SMTP runner.
 4. **B4 Provider Simulator — COMPLETE, CI VERIFIED.** Deterministic local provider/workflow simulation with controlled outcomes and B3 composition.
 5. **B5 Behavioral Analysis — COMPLETE, CI VERIFIED.** Deterministic burst, velocity, diversity, concentration and anomaly analysis over normalized mail events.
 6. **B6 Mailbox/Deliverability Lab — COMPLETE, CI VERIFIED.** Controlled in-memory mailbox lab with quotas, delivery dispositions, pressure observation and recovery. A real SMTP/IMAP MTA remains an external lab adapter, not a second core transport stack.
 7. **B7 Authentication and transport evidence — COMPLETE, CI VERIFIED.** Existing transport diagnostics are projected into structured SMTP/TLS/MX/SPF/DMARC evidence with an explicit DKIM selector boundary.
-8. **B8 Replayable runs.** Persist redacted scenario, configuration, event and result artifacts for deterministic reproduction.
-9. **B9 Security gates.** Enforce SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION → PACING → CONCURRENCY → SECRETS → EVIDENCE → TEST → CI.
+8. **B8 Replayable runs — IMPLEMENTED, CI PENDING.** Versioned redacted scenario/configuration/event/result artifacts with deterministic SHA-256 and cancellation-aware atomic persistence. A queue-metrics instrumentation race was also corrected.
+9. **B9 Security gates — IMPLEMENTED, CI PENDING.** `SecurityExecutionGate` is wired into `ScenarioEngine` and enforces SCOPE → AUTHORIZATION → HARD LIMIT → CANCELLATION before the existing runtime pipeline; pacing, concurrency, secrets and evidence remain owned by their existing components.
 
 ### P2 — advanced lab automation
 
@@ -75,6 +75,8 @@ The simulation-only boundary prevents a future scenario from silently turning in
 ```text
 ScenarioDefinition
     ↓
+SecurityExecutionGate
+    ↓
 ScenarioEngine
     ↓
 existing bounded scenario Channel
@@ -94,6 +96,8 @@ RunObservability + BehavioralAnalysis
 controlled MailboxDeliverabilityLab
     ↓
 AuthenticationTransportEvidence
+    ↓
+ReplayableRunArtifactBuilder
 ```
 
 No parallel queue, pacing stack or retry pipeline is permitted.
@@ -107,6 +111,7 @@ A feature is not complete until source, focused tests, security review, CI evide
 ```text
 B8 replayable artifacts
 → B9 execution/security gates
+→ post-B9 regression/maintenance
 ```
 
 B4+ status follows source + tests + CI, not document presence.
