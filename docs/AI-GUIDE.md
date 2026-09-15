@@ -42,7 +42,7 @@ load2 now evolves toward an **authorized email security and mail-system load-tes
 
 Priority order is defined in `docs/LOAD2-ROADMAP.md`.
 
-### B1 — documentation and governance
+### B1 — documentation and governance — COMPLETE
 
 - canonical documentation map;
 - current roadmap;
@@ -54,23 +54,41 @@ Priority order is defined in `docs/LOAD2-ROADMAP.md`.
 
 Historical audit files remain evidence, not competing plans.
 
-### B2 — external repository audit
+### B2 — external repository audit — COMPLETE for EXT-AUDIT-001
 
-Evaluate repositories by concrete mechanism and source evidence, not by repository name. Use:
+Evaluate future repositories by concrete mechanism and source evidence, not by repository name. Use:
 
 `HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`
 
 README claims are not implementation evidence. Pin revisions where possible and keep unknowns `PENDING`.
 
-`rojberr/mailcannon` is **REFERENCE only for load2's current one-PC product direction**. Its distributed Docker/Swarm/Kubernetes scaling is not a dependency; only an independently justified mechanism may be adapted later.
+`rojberr/mailcannon` is **REFERENCE only for load2's current one-PC product direction**. Its distributed Docker/Swarm/Kubernetes scaling is not a dependency.
 
-### B3 — scenario engine
+### B3 — scenario engine — COMPLETE
 
-Introduce typed scenario definitions for normal delivery, burst, sustained load, connection saturation, provider distribution, failure injection, mailbox quota, deliverability and controlled security simulations.
+Implemented in `src/MailLoadTester.Core/ScenarioEngine.cs` with focused tests.
 
-Scenario definitions describe test intent. Execution must flow through the existing bounded workers, pacing, concurrency, SMTP pools and evidence pipeline.
+Direct scenarios:
 
-### B4 — provider simulator
+- `NormalDelivery`
+- `BurstDelivery`
+- `SustainedLoad`
+- `ConnectionSaturation`
+- `ProviderDistribution`
+- `Deliverability`
+
+Typed simulation-only scenarios are represented but intentionally rejected by the direct SMTP adapter until their controlled provider/mailbox implementation exists:
+
+- `FailureInjection`
+- `MailboxQuota`
+- `SubscriptionBombSimulation`
+- `DoubleOptInSimulation`
+- `AntiAbuseControlSimulation`
+- `DistributedLab`
+
+`ScenarioEngine` delegates to the existing `SmtpTestRunner`, preserving the existing bounded queue, workers, pacing, concurrency, SMTP pools, retry policy, cancellation and result/report pipeline.
+
+### B4 — provider simulator — NEXT
 
 Introduce a local/controlled provider simulation layer able to model provider identity, sender population, workflow/message type, acceptance/throttling/rejection, latency/failure and authentication-result patterns.
 
