@@ -121,6 +121,8 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
         var testsPassed = false;
         var iterations = 0;
         string? commit = null;
+        string? pendingCommand = null;
+        bool pendingTestCommand = false;
         string? pageId = null;
 
         for (var page = 0; page < 10; page++)
@@ -137,7 +139,10 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
                 break;
 
             foreach (var item in items.EnumerateArray())
-                ExtractObservedEvent(item, commands, changedFiles, evidence, diagnostics, ref testsPassed, ref iterations, ref commit);
+            {
+                ExtractObservedEvent(item, commands, changedFiles, evidence, diagnostics,
+                    ref testsPassed, ref iterations, ref commit, ref pendingCommand, ref pendingTestCommand);
+            }
 
             if (!document.RootElement.TryGetProperty("next_page_id", out var next) || next.ValueKind != JsonValueKind.String)
                 break;
@@ -165,7 +170,9 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
         List<string> diagnostics,
         ref bool testsPassed,
         ref int iterations,
-        ref string? commit)
+        ref string? commit,
+        ref string? pendingCommand,
+        ref bool pendingTestCommand)
     {
         var kind = GetString(item, "kind") ?? GetString(item, "type") ?? string.Empty;
         var action = GetString(item, "action") ?? string.Empty;
@@ -177,14 +184,25 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
             iterations++;
 
         if (!string.IsNullOrWhiteSpace(command) &&
-            (kind.Contains("CmdRun", StringComparison.OrdinalIgnoreCase) ||
-             action.Contains("run", StringComparison.OrdinalIgnoreCase)))
+            (kind.Contains("CmdRun", StringComparison.OrdinalIgnoreCase) || action.Contains("run", StringComparison.OrdinalIgnoreCase)))
         {
             var safeCommand = Redact(command);
             commands.Add(safeCommand);
-            if (IsTestCommand(command) && exitCode == 0)
-                testsPassed = true;
+            pendingCommand = safeCommand;
+            pendingTestCommand = IsTestCommand(command);
             evidence.Add("Observed command: " + safeCommand);
+        }
+
+        if (exitCode is not null)
+        {
+            if (pendingTestCommand && exitCode == 0)
+                testsPassed = true;
+            if (exitCode != 0)
+                diagnostics.Add($"Observed command exit code: {exitCode.Value}");
+            if (pendingCommand is not null)
+                evidence.Add($"Observed exit code {exitCode.Value} for the preceding command.");
+            pendingCommand = null;
+            pendingTestCommand = false;
         }
 
         if (!string.IsNullOrWhiteSpace(path) &&
@@ -196,9 +214,6 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
             changedFiles.Add(path);
             evidence.Add("Observed file action: " + path);
         }
-
-        if (exitCode is not null && exitCode != 0)
-            diagnostics.Add($"Observed command exit code: {exitCode.Value}");
 
         if (kind.Contains("Error", StringComparison.OrdinalIgnoreCase))
             diagnostics.Add("Observed OpenHands error event.");
