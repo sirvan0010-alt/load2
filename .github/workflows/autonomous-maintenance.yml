@@ -51,8 +51,7 @@ jobs:
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "$title" \
-            --body "$body" \
-            --label "maintenance" || {
+            --body "$body" || {
               echo "Maintenance issue creation failed closed."
               exit 1
             }
