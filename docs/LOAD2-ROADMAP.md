@@ -20,8 +20,8 @@ The existing SMTP engine remains the foundation. New capabilities must reuse its
 ### P1 — controlled security scenarios
 
 1. **B1 Documentation reset and canonical map — COMPLETE.** Competing active plans were consolidated into the canonical documentation set; historical audit material remains evidence/history.
-2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.** The retained repository set and the explicitly queued slowhttptest/GoldenEye research have source-backed transfer decisions. Future repositories enter a new audit item rather than reopening B2.
-3. **B3 Scenario Engine.** Introduce a typed scenario model without creating a second queue, pacing or concurrency system.
+2. **B2 External repository mechanism audit — COMPLETE for EXT-AUDIT-001.** The retained repository set has source-backed transfer decisions. Future repositories enter a new audit item rather than reopening B2.
+3. **B3 Scenario Engine — COMPLETE.** Typed scenario definitions and a single execution adapter now route supported scenarios through the existing SMTP runner without a second queue, pacing, concurrency or retry stack.
 4. **B4 Provider Simulator.** Model multiple mail providers and message workflows locally/inside an authorized lab.
 5. **B5 Behavioral Analysis.** Measure burst velocity, sender/domain diversity, recipient concentration, provider diversity, authentication distribution and mailbox pressure.
 6. **B6 Mailbox/Deliverability Lab.** Integrate a controlled SMTP/IMAP test environment when useful.
@@ -51,26 +51,32 @@ The corresponding security-testing objectives remain supported through controlle
 
 ## Scenario families
 
-The first scenario catalog is:
+Direct SMTP scenarios now supported by B3:
 
 - `NormalDelivery`
 - `BurstDelivery`
 - `SustainedLoad`
 - `ConnectionSaturation`
 - `ProviderDistribution`
+- `Deliverability`
+
+Typed but intentionally simulation-only until later lab work:
+
 - `FailureInjection`
 - `MailboxQuota`
-- `Deliverability`
 - `SubscriptionBombSimulation`
 - `DoubleOptInSimulation`
 - `AntiAbuseControlSimulation`
+- `DistributedLab`
 
-`SubscriptionBombSimulation` and related scenarios are simulations against controlled recipients/providers. They are not third-party registration automation.
+The simulation-only boundary prevents a future scenario from silently turning into real SMTP traffic before its provider/mailbox controls exist.
 
 ## Architecture rule
 
 ```text
 ScenarioDefinition
+    ↓
+ScenarioEngine
     ↓
 existing bounded scenario Channel
     ↓
@@ -96,8 +102,7 @@ A feature is not complete until source, focused tests, security review, CI evide
 ## Next execution order
 
 ```text
-B3 Scenario Engine
-→ B4 Provider Simulator integration
+B4 Provider Simulator integration
 → B5 Behavioral Analyzer
 → B6 Mailbox/Deliverability Lab
 → B7 authentication/transport evidence
@@ -105,4 +110,4 @@ B3 Scenario Engine
 → B9 execution gates
 ```
 
-B3/B4 foundations may exist before their integration is marked complete; status follows source + tests + CI, not document presence.
+B4+ status follows source + tests + CI, not document presence.
