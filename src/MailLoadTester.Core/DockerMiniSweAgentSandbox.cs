@@ -106,6 +106,12 @@ public sealed class DockerMiniSweAgentSandbox : IMiniSweAgentSandbox
         arguments.Add(_image);
         // The pinned mini-SWE-agent image already declares its executable as
         // ENTRYPOINT. Passing _agentExecutable here would invoke it twice.
+        // Explicitly select the non-interactive path because CI has no TTY.
+        // These flags are part of the execution boundary, not test-fixture config:
+        // -y disables action confirmation prompts.
+        // --exit-immediately disables the final interactive confirmation path.
+        arguments.Add("-y");
+        arguments.Add("--exit-immediately");
         arguments.Add("--task");
         arguments.Add(specification.TaskPrompt);
 
