@@ -31,13 +31,11 @@ public sealed record ScenarioTuning(
     bool? EnableJitter = null,
     string? PaceProfile = null);
 
-/// <summary>
-/// Immutable, validated description of one executable scenario.
-/// </summary>
+/// <summary>Immutable, validated description of one scenario.</summary>
 public sealed record LoadScenarioDefinition(
     LoadScenarioKind Kind,
     SmtpScenario Scenario,
-    ScenarioTuning Tuning = null!)
+    ScenarioTuning? Tuning = null)
 {
     public bool RequiresSimulation => Kind is
         LoadScenarioKind.FailureInjection or
@@ -52,75 +50,70 @@ public sealed record LoadScenarioDefinition(
     public void Validate(MailTestOptions baseOptions)
     {
         ArgumentNullException.ThrowIfNull(baseOptions);
+        ArgumentNullException.ThrowIfNull(Scenario);
         Scenario.Limits.Validate();
+        var tuning = Tuning ?? new ScenarioTuning();
 
-        if (Tuning.MaxConcurrency is < 1 or > 20)
+        if (tuning.MaxConcurrency is < 1 or > 20)
             throw new ArgumentOutOfRangeException(nameof(Tuning), "Scenario MaxConcurrency musí být 1–20.");
-        if (Tuning.IntervalMs is < 0 or > 3_600_000)
+        if (tuning.IntervalMs is < 0 or > 3_600_000)
             throw new ArgumentOutOfRangeException(nameof(Tuning), "Scenario IntervalMs musí být 0–3600000 ms.");
-        if (Tuning.BurstSize is < 1 or > 1_000)
+        if (tuning.BurstSize is < 1 or > 1_000)
             throw new ArgumentOutOfRangeException(nameof(Tuning), "Scenario BurstSize musí být 1–1000.");
-        if (Tuning.BurstPauseSeconds is < 0 or > 86_400)
+        if (tuning.BurstPauseSeconds is < 0 or > 86_400)
             throw new ArgumentOutOfRangeException(nameof(Tuning), "Scenario BurstPauseSeconds musí být 0–86400.");
 
         if (RequiresMultipleAccounts && (baseOptions.Accounts is null || baseOptions.Accounts.Count < 2))
             throw new ArgumentException(
                 "ProviderDistribution vyžaduje alespoň dva SMTP účty/endpoints v MailTestOptions.Accounts.",
                 nameof(baseOptions));
-
-        // Simulation-only scenarios deliberately cannot silently fall through to the
-        // real SMTP transport. Their execution is enabled later by the provider/mailbox lab.
-        if (RequiresSimulation)
-            return;
     }
 
     public MailTestOptions ApplyTo(MailTestOptions baseOptions)
     {
         Validate(baseOptions);
+        var tuning = Tuning ?? new ScenarioTuning();
         var options = Scenario.ApplyTo(baseOptions);
 
         return Kind switch
         {
-            LoadScenarioKind.NormalDelivery => ApplyTuning(options),
+            LoadScenarioKind.NormalDelivery => ApplyTuning(options, tuning),
             LoadScenarioKind.BurstDelivery => ApplyTuning(options with
             {
-                EnableBurstMode = Tuning.EnableBurstMode ?? true,
-                BurstSize = Tuning.BurstSize ?? 10,
-                BurstPauseSeconds = Tuning.BurstPauseSeconds ?? 30
-            }),
+                EnableBurstMode = tuning.EnableBurstMode ?? true,
+                BurstSize = tuning.BurstSize ?? 10,
+                BurstPauseSeconds = tuning.BurstPauseSeconds ?? 30
+            }, tuning),
             LoadScenarioKind.SustainedLoad => ApplyTuning(options with
             {
                 DurationSeconds = options.DurationSeconds > 0 ? options.DurationSeconds : 300
-            }),
+            }, tuning),
             LoadScenarioKind.ConnectionSaturation => ApplyTuning(options with
             {
-                MaxConcurrency = Tuning.MaxConcurrency ?? 20,
-                PreWarmConnections = Tuning.PreWarmConnections ?? true
-            }),
-            LoadScenarioKind.ProviderDistribution => ApplyTuning(options),
-            LoadScenarioKind.Deliverability => ApplyTuning(options),
+                MaxConcurrency = tuning.MaxConcurrency ?? 20,
+                PreWarmConnections = tuning.PreWarmConnections ?? true
+            }, tuning),
+            LoadScenarioKind.ProviderDistribution => ApplyTuning(options, tuning),
+            LoadScenarioKind.Deliverability => ApplyTuning(options, tuning),
             _ => throw new NotSupportedException(
-                $"Scénář {Kind} je definovaný, ale zatím vyžaduje B4/B6 laboratorní adaptér a nelze jej spustit přes přímý SMTP runner.")
+                $"Scénář {Kind} je definovaný, ale vyžaduje B4/B6 laboratorní adaptér a nelze jej spustit přes přímý SMTP runner.")
         };
     }
 
-    private MailTestOptions ApplyTuning(MailTestOptions options)
+    private static MailTestOptions ApplyTuning(MailTestOptions options, ScenarioTuning tuning) => options with
     {
-        return options with
-        {
-            MaxConcurrency = Tuning.MaxConcurrency ?? options.MaxConcurrency,
-            IntervalMs = Tuning.IntervalMs ?? options.IntervalMs,
-            EnableBurstMode = Tuning.EnableBurstMode ?? options.EnableBurstMode,
-            BurstSize = Tuning.BurstSize ?? options.BurstSize,
-            BurstPauseSeconds = Tuning.BurstPauseSeconds ?? options.BurstPauseSeconds,
-            PreWarmConnections = Tuning.PreWarmConnections ?? options.PreWarmConnections,
-            EnableJitter = Tuning.EnableJitter ?? options.EnableJitter,
-            PaceProfile = Tuning.PaceProfile ?? options.PaceProfile
-        };
-    }
+        MaxConcurrency = tuning.MaxConcurrency ?? options.MaxConcurrency,
+        IntervalMs = tuning.IntervalMs ?? options.IntervalMs,
+        EnableBurstMode = tuning.EnableBurstMode ?? options.EnableBurstMode,
+        BurstSize = tuning.BurstSize ?? options.BurstSize,
+        BurstPauseSeconds = tuning.BurstPauseSeconds ?? options.BurstPauseSeconds,
+        PreWarmConnections = tuning.PreWarmConnections ?? options.PreWarmConnections,
+        EnableJitter = tuning.EnableJitter ?? options.EnableJitter,
+        PaceProfile = tuning.PaceProfile ?? options.PaceProfile
+    };
 }
 
-/// <summary>Central catalog of safe, bounded scenario defaults.</summary>
+/// <summary>Central catalog of bounded scenario definitions.</summary>
 public static class LoadScenarioCatalog
 {
     public static LoadScenarioDefinition Create(
@@ -137,13 +130,13 @@ public static class LoadScenarioCatalog
             throw new ArgumentOutOfRangeException(nameof(durationSeconds));
 
         var limits = new ScenarioLimits(messageCount, durationSeconds);
-        return new LoadScenarioDefinition(kind, new SmtpScenario(targets, limits), tuning ?? new ScenarioTuning());
+        return new LoadScenarioDefinition(kind, new SmtpScenario(targets, limits), tuning);
     }
 }
 
 /// <summary>
-/// Scenario adapter over the existing SMTP runner. It intentionally delegates all
-/// execution to SmtpTestRunner, so there is no second queue, pacing or retry stack.
+/// Scenario adapter over the existing SMTP runner. It deliberately delegates all
+/// execution to SmtpTestRunner: no second queue, pacing, concurrency or retry stack.
 /// </summary>
 public sealed class ScenarioEngine
 {
