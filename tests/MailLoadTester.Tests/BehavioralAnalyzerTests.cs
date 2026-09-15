@@ -31,7 +31,11 @@ public sealed class BehavioralAnalyzerTests
             .Select(i => new BehavioralMailEvent(start.AddSeconds(i), i % 2 == 0 ? "a" : "b", i % 2 == 0 ? "a.test" : "b.test", $"user{i}@example.test", SimulatedMailOutcome.Accepted))
             .ToArray();
         var analyzer = new BehavioralAnalyzer();
-        Assert.Equal(analyzer.Analyze(events), analyzer.Analyze(events.Reverse()));
+        var first = analyzer.Analyze(events);
+        var reversed = analyzer.Analyze(events.Reverse());
+
+        Assert.Equal(first with { Findings = null }, reversed with { Findings = null });
+        Assert.Equal(first.Findings.OrderBy(x => x), reversed.Findings.OrderBy(x => x));
     }
 
     [Fact]
