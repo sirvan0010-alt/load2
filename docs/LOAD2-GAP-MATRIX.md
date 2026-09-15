@@ -6,7 +6,7 @@
 
 ## 0. Status rules
 
-`HAVE` means demonstrated in current source/tests. `GAP` means a concrete source-level capability is missing. `POST-BASELINE` means planned work, not an implementation claim.
+`HAVE` means demonstrated in current source/tests. `FOUNDATION` means the contract exists but full engine integration is not complete. `POST-BASELINE` means planned work.
 
 External mechanisms use:
 
@@ -50,22 +50,22 @@ README claims are never implementation evidence.
 | RunObservability | HAVE | projection from report |
 | SMTP/TLS diagnostics | HAVE | `TransportDiagnostics` |
 | DNS/MX/SPF/DMARC diagnostics | HAVE | current diagnostics layer |
-| endpoint canonicalization/deduplication | HAVE | canonical SMTP health keys + target domain dedup |
+| endpoint canonicalization/deduplication | HAVE | canonical health keys + target dedup |
 | plugin payload architecture | HAVE | `IMailPayloadPlugin` pipeline |
 
-## 3. TRACK B — new product capability
+## 3. TRACK B — current state
 
-| Item | Status | Target |
+| Item | Status | Next step |
 |---|---|---|
-| B1 canonical documentation reset | IN PROGRESS | eliminate competing active plans |
-| B2 external mechanism audit | IN PROGRESS | source-backed transfer decisions |
-| B3 typed scenario engine | POST-BASELINE | scenario definitions over existing engine |
-| B4 provider simulator | POST-BASELINE | local/controlled provider workflows |
-| B5 behavioral analyzer | POST-BASELINE | normalized event analysis |
-| B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP lab |
-| B7 richer auth/transport evidence | POST-BASELINE | SPF/DKIM/DMARC/TLS evidence |
-| B8 replayable redacted artifacts | POST-BASELINE | deterministic reproduction |
-| B9 security execution gates | POST-BASELINE | explicit preflight and evidence |
+| B1 canonical documentation reset | FOUNDATION | keep canonical docs synchronized; migrate active docs |
+| B2 external mechanism audit | IN PROGRESS | pin/source-audit retained candidates |
+| B3 typed scenario model | FOUNDATION | integrate definitions with existing runner |
+| B4 deterministic provider simulator | FOUNDATION | compose simulators with B3 and event evidence |
+| B5 behavioral analyzer | POST-BASELINE | normalize simulator/transport/mailbox events |
+| B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP environment |
+| B7 richer auth/transport evidence | POST-BASELINE | extend evidence without duplicate diagnostics |
+| B8 replayable redacted artifacts | POST-BASELINE | deterministic scenario replay |
+| B9 security execution gates | POST-BASELINE | enforce preflight/evidence gate chain |
 
 ## 4. Security-pattern capability map
 
@@ -78,20 +78,20 @@ README claims are never implementation evidence.
 | automated registrations | synthetic/owned test application only | P2 |
 | botnet-like distribution | bounded distributed lab workers only | P2 |
 | proxy diversity | controlled lab topology only | P2 |
-| provider-limit behavior | observe and test throttling, do not evade it | P1/P2 |
+| provider-limit behavior | observe/test throttling, never evade it | P1/P2 |
 | behavioral/anomaly analysis | normalized events + evidence score | P1 |
-| smoke-screen detection | correlate burst/diversity/authentication/mailbox signals | P2 |
+| smoke-screen detection | correlate burst/diversity/auth/mailbox signals | P2 |
 | mailbox saturation | controlled quota/load/recovery scenario | P1 |
 
 ## 5. External repository decisions
 
 ### `rojberr/mailcannon`
 
-**Decision: REFERENCE.** The distributed Docker/Swarm/Kubernetes scaling model is not useful as a current dependency for a one-PC load2 deployment. load2 already has a local bounded execution model. Revisit only if a real single-host or reproducibility mechanism is identified.
+**Decision: REFERENCE.** Its distributed Docker/Swarm/Kubernetes scaling model is not a current dependency for a one-PC load2 deployment. load2 already has bounded local execution. Revisit only if a concrete single-host/reproducibility benefit is demonstrated.
 
 ### Mail-security lab references
 
-Controlled mail-server/testing projects are useful as environment references for B6/B7. They must remain separate from load2's SMTP transport engine; integration should use a stable test boundary rather than embedding another MTA inside the core.
+Controlled mail-server/testing projects are environment references for B6/B7. They remain outside the core SMTP transport layer.
 
 ## 6. Architecture constraints for B3/B4/B5
 
