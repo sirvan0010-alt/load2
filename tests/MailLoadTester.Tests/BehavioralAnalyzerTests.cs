@@ -8,7 +8,7 @@ public sealed class BehavioralAnalyzerTests
     [Fact]
     public void Analyze_DetectsBurstAndRecipientConcentration()
     {
-        var start = DateTimeOffset.UtcNow;
+        var start = DateTimeOffset.UnixEpoch;
         var events = Enumerable.Range(0, 25)
             .Select(i => new BehavioralMailEvent(start.AddMilliseconds(i * 100), "provider-a", "sender.example", "victim@example.test", SimulatedMailOutcome.Accepted))
             .ToArray();
@@ -19,6 +19,7 @@ public sealed class BehavioralAnalyzerTests
         Assert.True(result.ConcentrationDetected);
         Assert.Contains("burst-velocity", result.Findings);
         Assert.Contains("recipient-concentration", result.Findings);
+        Assert.True(result.Anomalous);
         Assert.InRange(result.AnomalyScore, 0, 1);
     }
 
