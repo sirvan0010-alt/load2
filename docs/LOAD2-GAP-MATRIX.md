@@ -53,8 +53,9 @@ README claims are never implementation evidence.
 | DNS/MX/SPF/DMARC diagnostics | HAVE | current diagnostics layer |
 | endpoint canonicalization/deduplication | HAVE | canonical health keys + target dedup |
 | plugin payload architecture | HAVE | `IMailPayloadPlugin` pipeline |
-| deterministic provider simulator | FOUNDATION | B4 contract/implementation foundation; integration pending |
-| typed scenario definitions | FOUNDATION | B3 model foundation; runner integration pending |
+| typed scenario definitions | HAVE | `LoadScenarioKind` + `LoadScenarioDefinition` |
+| scenario execution adapter | HAVE | `ScenarioEngine` delegates to `SmtpTestRunner` |
+| deterministic provider simulator | FOUNDATION | B4 integration remains next |
 
 ## 3. TRACK B status
 
@@ -62,15 +63,41 @@ README claims are never implementation evidence.
 |---|---|---|
 | B1 canonical documentation reset | COMPLETE | maintain synchronization |
 | B2 external mechanism audit | COMPLETE — EXT-AUDIT-001 | audit future repositories as separate items |
-| B3 typed scenario engine | IN PROGRESS | integrate definitions with existing execution pipeline |
-| B4 provider simulator | IN PROGRESS | integrate with B3 and event evidence |
+| B3 typed scenario engine | COMPLETE | B4 provider simulator integration |
+| B4 provider simulator | FOUNDATION | integrate provider events with B3 |
 | B5 behavioral analyzer | POST-BASELINE | normalized mail events + deterministic analysis |
 | B6 mailbox/deliverability lab | POST-BASELINE | controlled SMTP/IMAP lab boundary |
 | B7 richer auth/transport evidence | POST-BASELINE | evidence model over existing diagnostics |
 | B8 replayable redacted artifacts | POST-BASELINE | deterministic artifact contract |
 | B9 security execution gates | POST-BASELINE | preflight/evidence enforcement |
 
-## 4. Security-pattern capability map
+## 4. B3 delivered behavior
+
+B3 exposes typed scenario definitions while keeping execution in the existing SMTP runner.
+
+Directly executable through `ScenarioEngine`:
+
+- `NormalDelivery`
+- `BurstDelivery`
+- `SustainedLoad`
+- `ConnectionSaturation`
+- `ProviderDistribution` (requires at least two configured SMTP accounts/endpoints)
+- `Deliverability`
+
+The adapter reuses existing `Channel`, workers, `MaxConcurrency`, `SmartPaceController`, recipient/provider gates, SMTP pools, retry policy and `MailTestResult`.
+
+Simulation-only kinds are represented but deliberately rejected by the direct SMTP adapter until their controlled lab/provider implementation exists:
+
+- `FailureInjection`
+- `MailboxQuota`
+- `SubscriptionBombSimulation`
+- `DoubleOptInSimulation`
+- `AntiAbuseControlSimulation`
+- `DistributedLab`
+
+This is intentional: a scenario definition must never silently turn a future simulation into real SMTP traffic.
+
+## 5. Security-pattern capability map
 
 | Objective | Current direction | Priority |
 |---|---|---|
@@ -88,7 +115,7 @@ README claims are never implementation evidence.
 
 A future `YES` means a controlled/authorized testing capability, not unrestricted third-party abuse automation.
 
-## 5. External repository decisions
+## 6. External repository decisions
 
 The EXT-AUDIT-001 retained set is complete and normalized in `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`. Key decisions:
 
@@ -102,10 +129,12 @@ The EXT-AUDIT-001 retained set is complete and normalized in `docs/EXTERNAL-REPO
 - `usnistgov/dmarc-tester`: REFERENCE/TEST-FIXTURE source for controlled auth validation.
 - Mailpit/MailHog: REFERENCE/LAB for local mail capture.
 
-## 6. Architecture constraints
+## 7. Architecture constraints
 
 ```text
 ScenarioDefinition
+    ↓
+ScenarioEngine
     ↓
 existing bounded Channel
     ↓
@@ -122,15 +151,15 @@ DeliveryLedger / RetryMetrics / RunReport
 RunObservability + BehavioralAnalysis
 ```
 
-B3–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
+B4–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
 
-## 7. Security boundary
+## 8. Security boundary
 
 The framework can represent high-intensity authorized testing, but it must not become a public abuse launcher. Do not implement arbitrary third-party registration automation, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target DoS/DDoS.
 
 Defensive objectives are covered by controlled simulations, owned applications, synthetic providers/recipients and bounded lab workers.
 
-## 8. Rules for future work
+## 9. Rules for future work
 
 - Do not reopen A1–A8 without concrete regression evidence.
 - Preserve cancellation, hard limits, DryRun/TestMode, `--unauthorized` and secret redaction.
