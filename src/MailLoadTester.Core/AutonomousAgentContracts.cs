@@ -81,6 +81,8 @@ public sealed class AgentExecutionPolicyValidator
             throw new InvalidOperationException("The execution policy denies network access for this task.");
         if (policy.RequireIsolatedWorkspace && !Directory.Exists(request.WorkspacePath))
             throw new DirectoryNotFoundException(request.WorkspacePath);
+        if (policy.MaximumChangedFiles < 0)
+            throw new ArgumentOutOfRangeException(nameof(policy.MaximumChangedFiles));
     }
 }
 
@@ -133,15 +135,14 @@ public sealed class AutonomousAgentLoop
                 Duration = DateTimeOffset.UtcNow - started
             };
 
-            if (IsAccepted(last))
+            var acceptance = EvaluateAcceptance(last);
+            if (acceptance.Accepted)
                 return last;
 
             if (last.Status is AgentExecutionStatus.Blocked or AgentExecutionStatus.Cancelled or AgentExecutionStatus.TimedOut)
                 return last;
 
-            feedback = BuildRepairFeedback(last);
-            if (string.IsNullOrWhiteSpace(feedback))
-                break;
+            feedback = BuildRepairFeedback(last, acceptance.Reasons);
         }
 
         return last is null
@@ -157,22 +158,34 @@ public sealed class AutonomousAgentLoop
             };
     }
 
-    private static bool IsAccepted(AgentExecutionResult result) =>
-        result.Status == AgentExecutionStatus.Completed && result.TestsPassed;
-
-    private static string? BuildRepairFeedback(AgentExecutionResult result)
+    private (bool Accepted, IReadOnlyList<string> Reasons) EvaluateAcceptance(AgentExecutionResult result)
     {
-        var parts = result.Diagnostics
+        var reasons = new List<string>();
+        if (result.Status != AgentExecutionStatus.Completed)
+            reasons.Add($"execution status is {result.Status}");
+        if (_policy.RequireTests && !result.TestsPassed)
+            reasons.Add("required tests did not pass");
+        if (_policy.RequireSecurityGate && !result.SecurityPassed)
+            reasons.Add("security gate is not passed");
+        if (_policy.RequireEvidence && result.Evidence.Count == 0)
+            reasons.Add("structured evidence is missing");
+        if (result.ChangedFiles.Count > _policy.MaximumChangedFiles)
+            reasons.Add($"changed-file budget exceeded: {result.ChangedFiles.Count}>{_policy.MaximumChangedFiles}");
+
+        return (reasons.Count == 0, reasons);
+    }
+
+    private static string BuildRepairFeedback(AgentExecutionResult result, IReadOnlyList<string> acceptanceReasons)
+    {
+        var parts = acceptanceReasons
+            .Concat(result.Diagnostics)
             .Concat(result.Evidence)
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Take(12)
             .ToArray();
 
-        return parts.Length == 0
-            ? "Previous attempt did not satisfy the acceptance condition. Re-check the acceptance criteria, run the required tests, and correct the smallest safe defect."
-            : "Previous attempt did not satisfy the acceptance condition. Observed evidence/diagnostics:\n- " +
-              string.Join("\n- ", parts) +
-              "\nRepair only within the allowed scopes and re-run the required tests.";
+        return "Previous attempt did not satisfy the execution acceptance policy. Correct only within the allowed scopes, then re-run the required tests.\n- " +
+               string.Join("\n- ", parts);
     }
 
     private static AgentExecutionResult BuildTerminal(
