@@ -62,8 +62,8 @@ public sealed class ProviderSimulatorTests
     {
         var simulator = new ProviderScenarioSimulator(new IMailProviderSimulator[]
         {
-            new DeterministicMailProviderSimulator("provider-a", throttleRate: 0),
-            new DeterministicMailProviderSimulator("provider-b", throttleRate: 1)
+            new DeterministicMailProviderSimulator("provider-a", throttleRate: 0, temporaryFailureRate: 0),
+            new DeterministicMailProviderSimulator("provider-b", throttleRate: 1, temporaryFailureRate: 0)
         });
         var scenario = new LoadScenarioDefinition(
             LoadScenarioKind.ProviderDistribution,
