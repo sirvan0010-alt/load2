@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -31,9 +30,7 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
 
     public string Name => "openhands-agent-server";
 
-    public async Task<AgentExecutionResult> ExecuteAsync(
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<AgentExecutionResult> ExecuteAsync(AgentExecutionRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -43,26 +40,15 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
         {
             Content = JsonContent.Create(new
             {
-                agent = new
-                {
-                    kind = "Agent",
-                    llm = new { model = _model },
-                    tools = new[] { "terminal", "file_editor", "task_tracker" }
-                },
+                agent = new { kind = "Agent", llm = new { model = _model }, tools = new[] { "terminal", "file_editor", "task_tracker" } },
                 workspace = new { working_dir = Path.GetFullPath(request.WorkspacePath) },
-                initial_message = new
-                {
-                    role = "user",
-                    content = new[] { new { type = "text", text = prompt } },
-                    run = true
-                }
+                initial_message = new { role = "user", content = new[] { new { type = "text", text = prompt } }, run = true }
             })
         };
 
         AddAuthentication(create);
         using var response = await _httpClient.SendAsync(create, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
         var conversationId = document.RootElement.GetProperty("id").GetString();
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -75,8 +61,7 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
             if (DateTimeOffset.UtcNow - started > request.TimeBudget)
             {
                 await TryDeleteConversationAsync(conversationId, cancellationToken).ConfigureAwait(false);
-                return new AgentExecutionResult(
-                    AgentExecutionStatus.TimedOut, request.TaskId, null,
+                return new AgentExecutionResult(AgentExecutionStatus.TimedOut, request.TaskId, null,
                     Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
                     new[] { "OpenHands execution exceeded the task time budget." }, false, false, 0,
                     DateTimeOffset.UtcNow - started);
@@ -87,18 +72,11 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
             {
                 var finalResponse = await GetFinalResponseAsync(conversationId, cancellationToken).ConfigureAwait(false);
                 var completed = state.Status == "finished";
-                return new AgentExecutionResult(
-                    completed ? AgentExecutionStatus.Completed : AgentExecutionStatus.Failed,
-                    request.TaskId,
-                    null,
-                    Array.Empty<string>(),
-                    Array.Empty<string>(),
+                return new AgentExecutionResult(completed ? AgentExecutionStatus.Completed : AgentExecutionStatus.Failed,
+                    request.TaskId, null, Array.Empty<string>(), Array.Empty<string>(),
                     string.IsNullOrWhiteSpace(finalResponse) ? Array.Empty<string>() : new[] { finalResponse },
                     completed ? Array.Empty<string>() : new[] { $"OpenHands execution status: {state.Status}." },
-                    completed,
-                    false,
-                    0,
-                    DateTimeOffset.UtcNow - started);
+                    completed, false, 0, DateTimeOffset.UtcNow - started);
             }
 
             await Task.Delay(_pollInterval, cancellationToken).ConfigureAwait(false);
@@ -112,9 +90,7 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
         using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
-        var status = document.RootElement.TryGetProperty("execution_status", out var value)
-            ? value.GetString() ?? "unknown"
-            : "unknown";
+        var status = document.RootElement.TryGetProperty("execution_status", out var value) ? value.GetString() ?? "unknown" : "unknown";
         return new ConversationState(status);
     }
 
@@ -123,8 +99,7 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
         using var request = new HttpRequestMessage(HttpMethod.Get, $"api/conversations/{Uri.EscapeDataString(id)}/agent_final_response");
         AddAuthentication(request);
         using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            return null;
+        if (!response.IsSuccessStatusCode) return null;
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
         return document.RootElement.TryGetProperty("response", out var value) ? value.GetString() : null;
     }
@@ -139,18 +114,13 @@ public sealed class OpenHandsAgentExecutionBackend : IAgentExecutionBackend
 
     private void AddAuthentication(HttpRequestMessage request)
     {
-        if (!string.IsNullOrWhiteSpace(_sessionApiKey))
-            request.Headers.Add("X-Session-API-Key", _sessionApiKey);
+        if (!string.IsNullOrWhiteSpace(_sessionApiKey)) request.Headers.Add("X-Session-API-Key", _sessionApiKey);
     }
 
     private static string BuildPrompt(AgentExecutionRequest request) =>
-        $"Task ID: {request.TaskId}\n" +
-        $"Role: {request.AgentRole}\n" +
-        $"Repository: {request.Repository}\n" +
-        $"Immutable commit: {request.ImmutableCommit}\n" +
-        $"Allowed scopes:\n- {string.Join("\n- ", request.AllowedScopes)}\n" +
-        $"Acceptance criteria:\n- {string.Join("\n- ", request.AcceptanceCriteria)}\n" +
-        $"Maximum iterations: {request.MaxIterations}\n" +
+        $"Task ID: {request.TaskId}\nRole: {request.AgentRole}\nRepository: {request.Repository}\n" +
+        $"Immutable commit: {request.ImmutableCommit}\nAllowed scopes:\n- {string.Join("\n- ", request.AllowedScopes)}\n" +
+        $"Acceptance criteria:\n- {string.Join("\n- ", request.AcceptanceCriteria)}\nMaximum iterations: {request.MaxIterations}\n" +
         "Work only inside the supplied workspace. Do not access real targets unless explicitly authorized. " +
         "Do not expose credentials or secrets. Run the required tests and report results accurately.";
 
