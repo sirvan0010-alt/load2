@@ -29,9 +29,30 @@ public sealed class AiAgentModelAdapterTests
         var agent = new ModelBackedAiAgent(adapter, new AllowAllToolExecutor());
         var task = CreateTask();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => agent.ExecuteAsync(
+        // Must cancel — otherwise CancellingAdapter waits on infinite Delay and hangs CI.
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => agent.ExecuteAsync(
             new AiAgentContext(task, cts.Token, DateTimeOffset.UtcNow.AddMinutes(1), 1),
             cts.Token));
+    }
+
+    [Fact]
+    public async Task ModelBackedAgentPropagatesCancellationFromAdapterDelay()
+    {
+        using var cts = new CancellationTokenSource();
+        var adapter = new CancellingAdapter();
+        var agent = new ModelBackedAiAgent(adapter, new AllowAllToolExecutor());
+        var task = CreateTask();
+
+        var execute = agent.ExecuteAsync(
+            new AiAgentContext(task, cts.Token, DateTimeOffset.UtcNow.AddMinutes(1), 1),
+            cts.Token);
+
+        // Cancel while adapter is awaiting Delay — exercises cooperative cancellation path.
+        cts.CancelAfter(TimeSpan.FromMilliseconds(20));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execute);
     }
 
     private static AiAgentTask CreateTask() => new(
