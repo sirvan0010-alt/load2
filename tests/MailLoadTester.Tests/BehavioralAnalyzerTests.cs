@@ -40,8 +40,8 @@ public sealed class BehavioralAnalyzerTests
         var start = DateTimeOffset.UnixEpoch;
         var simulated = new[]
         {
-            new SimulatedMailEvent(start, "provider-a", "sender.example", "a@example.test", SimulatedMailOutcome.Accepted, 10, "pass"),
-            new SimulatedMailEvent(start.AddSeconds(1), "provider-b", "sender.example", "b@example.test", SimulatedMailOutcome.Throttled, 20, "pass")
+            new SimulatedMailEvent(start, "provider-a", "sender.example", "confirmation", "a@example.test", SimulatedMailOutcome.Accepted, 10, "pass"),
+            new SimulatedMailEvent(start.AddSeconds(1), "provider-b", "sender.example", "confirmation", "b@example.test", SimulatedMailOutcome.Throttled, 20, "pass")
         };
         var result = new BehavioralAnalyzer().Analyze(simulated);
         Assert.Equal(2, result.EventCount);
