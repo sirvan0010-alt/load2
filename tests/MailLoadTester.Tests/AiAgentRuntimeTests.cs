@@ -19,7 +19,7 @@ public sealed class AiAgentRuntimeTests
         var runner = new AiAgentRunner(new AllowAuthorization(), new RejectVerifier(), new VerifiedWorkspace());
         var result = await runner.RunAsync(TaskFor(realTarget: false, authorized: false), new NoOpAgent());
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
-        Assert.Equal(2, result.Findings.Count);
+        Assert.Single(result.Findings);
     }
 
     [Fact]
@@ -46,13 +46,10 @@ public sealed class AiAgentRuntimeTests
 
     private sealed class AllowAuthorization : IAiAgentAuthorizationPolicy
     { public Task<bool> AuthorizeAsync(AiAgentTask task, CancellationToken cancellationToken) => Task.FromResult(true); }
-
     private sealed class AcceptVerifier : IAiAgentResultVerifier
     { public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) => Task.FromResult(true); }
-
     private sealed class RejectVerifier : IAiAgentResultVerifier
     { public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) => Task.FromResult(false); }
-
     private sealed class VerifiedWorkspace : IAiAgentWorkspaceIntegrityGate
     { public Task<WorkspaceIntegrityResult> VerifyAsync(string workspacePath, string expectedCommit, CancellationToken cancellationToken) => Task.FromResult(new WorkspaceIntegrityResult(WorkspaceIntegrityStatus.Verified, workspacePath, workspacePath, expectedCommit, expectedCommit, true, true, "verified")); }
 
@@ -62,7 +59,6 @@ public sealed class AiAgentRuntimeTests
         public Task<AiAgentModelResponse> GenerateAsync(AiAgentModelRequest request, CancellationToken cancellationToken)
         { Request = request; return Task.FromResult(new AiAgentModelResponse("model output", Array.Empty<string>())); }
     }
-
     private sealed class NoOpTools : IAiAgentToolExecutor
     { public Task<string> ExecuteAsync(string operation, IReadOnlyDictionary<string, string> arguments, CancellationToken cancellationToken) => Task.FromResult(string.Empty); }
 }
