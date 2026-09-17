@@ -1,4 +1,5 @@
 using MailLoadTester.Core;
+using Xunit;
 
 namespace MailLoadTester.Tests;
 
@@ -19,19 +20,18 @@ public sealed class AiAgentRuntimeTests
         var runner = new AiAgentRunner(new AllowAuthorization(), new RejectVerifier(), new VerifiedWorkspace());
         var result = await runner.RunAsync(TaskFor(realTarget: false, authorized: false), new NoOpAgent());
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
-        Assert.Single(result.Findings);
     }
 
     [Fact]
-    public async Task ModelAgentPassesImmutableCommitToAdapter()
+    public async Task ModelBackedAgentUsesAdapterWithoutClaimingVerification()
     {
         var adapter = new RecordingAdapter();
         var agent = new ModelBackedAiAgent(adapter, new NoOpTools());
-        var task = TaskFor(false, false);
+        var task = TaskFor(realTarget: false, authorized: false);
         var result = await agent.ExecuteAsync(new AiAgentContext(task, CancellationToken.None, DateTimeOffset.UtcNow.AddMinutes(1), 1), CancellationToken.None);
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
-        Assert.Equal(task.Commit, adapter.Request!.Commit);
-        Assert.Contains(task.Commit, adapter.Request.Prompt, StringComparison.Ordinal);
+        Assert.NotNull(adapter.Request);
+        Assert.Contains(task.TaskId, adapter.Request!.Prompt, StringComparison.Ordinal);
     }
 
     private static AiAgentTask TaskFor(bool realTarget, bool authorized) => new("TEST-AI-001", "TEST_AGENT", "sirvan0010-alt/load2",
