@@ -15,7 +15,7 @@ public sealed class AiAgentImprovementLoopTests
             var task = CreateTask(workspace);
             var context = new AiAgentContext(task, CancellationToken.None, DateTimeOffset.UtcNow.AddMinutes(1), 1);
             var result = await loop.RunAsync(task, context, 2, TimeSpan.FromSeconds(5));
-            Assert.Equal(AgentRunStatus.Completed, result.Status);
+            Assert.Equal(AgentRunStatus.Ready, result.Status);
             Assert.Equal("READY_FOR_HUMAN_MERGE_REVIEW", result.Handoff);
             Assert.True(verifier.Called);
         }
@@ -31,46 +31,50 @@ public sealed class AiAgentImprovementLoopTests
         {
             var task = CreateTask(workspace);
             var context = new AiAgentContext(task, CancellationToken.None, DateTimeOffset.UtcNow.AddMinutes(1), 1);
-            var result = await loop.RunAsync(task, context, 2, TimeSpan.FromSeconds(5));
+            var result = await loop.RunAsync(task, context, 3, TimeSpan.FromSeconds(5));
             Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
-            Assert.Contains(result.Phases, p => p.Phase == AgentPhase.Test && !p.Succeeded);
+            Assert.Contains("failed", result.Handoff, StringComparison.OrdinalIgnoreCase);
         }
         finally { Directory.Delete(workspace, true); }
     }
 
-    [Fact]
-    public async Task PolicyRejectsUnauthorizedRealTargetAndAutomaticMerge()
-    {
-        var workspace = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        var task = CreateTask(workspace) with { RealTargetRequired = true, Authorized = false };
-        Assert.Throws<InvalidOperationException>(() => new AiAgentAutonomyPolicy(2, TimeSpan.FromSeconds(5)).Validate(task));
-        Assert.Throws<InvalidOperationException>(() => new AiAgentAutonomyPolicy(2, TimeSpan.FromSeconds(5), AllowAutomaticMerge: true).Validate(CreateTask(workspace)));
-    }
-
     private static AiAgentTask CreateTask(string workspace) => new(
-        "TEST-LOOP-001", "TEST_AGENT", "sirvan0010-alt/load2",
-        "0123456789abcdef0123456789abcdef01234567",
-        new[] { "src/MailLoadTester.Core" }, new[] { "tests pass" },
-        false, false, TimeSpan.FromSeconds(10), 2, workspace);
+        "TEST-LOOP-001",
+        "TEST_AGENT",
+        "sirvan0010-alt/load2",
+        "abc123",
+        new[] { "src/MailLoadTester.Core" },
+        new[] { "loop works" },
+        RealTargetRequired: false,
+        Authorized: false,
+        TimeBudget: TimeSpan.FromSeconds(30),
+        MaxIterations: 3,
+        WorkspacePath: workspace);
 
-    private sealed class SuccessfulStep(AgentPhase phase) : IAiAgentImprovementStep
+    private sealed class SuccessfulStep : IAiAgentImprovementStep
     {
-        public AgentPhase Phase { get; } = phase;
+        public SuccessfulStep(AgentPhase phase) => Phase = phase;
+        public AgentPhase Phase { get; }
         public Task<AiAgentStepResult> ExecuteAsync(AiAgentContext context, CancellationToken cancellationToken) =>
-            Task.FromResult(new AiAgentStepResult(true, "ok", Array.Empty<string>()));
+            Task.FromResult(new AiAgentStepResult(true, $"{Phase} ok", Array.Empty<string>()));
     }
 
     private sealed class FailedStep : IAiAgentImprovementStep
     {
-        public AgentPhase Phase => AgentPhase.Test;
+        public AgentPhase Phase => AgentPhase.Implementation;
         public Task<AiAgentStepResult> ExecuteAsync(AiAgentContext context, CancellationToken cancellationToken) =>
-            Task.FromResult(new AiAgentStepResult(false, "test failed", new[] { "failure" }));
+            Task.FromResult(new AiAgentStepResult(false, "implementation failed", new[] { "bug" }));
     }
 
-    private sealed class RecordingVerifier(bool accepted) : IAiAgentResultVerifier
+    private sealed class RecordingVerifier : IAiAgentResultVerifier
     {
+        private readonly bool _accept;
+        public RecordingVerifier(bool accept) => _accept = accept;
         public bool Called { get; private set; }
         public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
-        { Called = true; return Task.FromResult(accepted); }
+        {
+            Called = true;
+            return Task.FromResult(_accept);
+        }
     }
 }

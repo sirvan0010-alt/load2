@@ -125,7 +125,7 @@ public sealed class AiAgentImprovementLoop
             {
                 phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, "Independent verifier accepted the execution result."));
                 phases.Add(new AgentPhaseRecord(AgentPhase.Completed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, "Bounded autonomous improvement completed."));
-                return new AiAgentImprovementResult(AgentRunStatus.Completed, phases.AsReadOnly(), findings.AsReadOnly(), iteration, "READY_FOR_HUMAN_MERGE_REVIEW");
+                return new AiAgentImprovementResult(AgentRunStatus.Ready, phases.AsReadOnly(), findings.AsReadOnly(), iteration, "READY_FOR_HUMAN_MERGE_REVIEW");
             }
 
             phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false, "Independent verifier rejected the execution result; repair iteration required."));
