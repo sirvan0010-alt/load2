@@ -143,6 +143,32 @@ public class ValidationTests
         Assert.Throws<ArgumentException>(() => Validation.Validate(o));
     }
 
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8080/hook")]
+    [InlineData("http://10.0.0.5/hook")]
+    [InlineData("http://172.16.0.5/hook")]
+    [InlineData("http://192.168.1.5/hook")]
+    [InlineData("http://169.254.169.254/hook")]
+    [InlineData("http://224.0.0.1/hook")]
+    [InlineData("http://[::1]:8080/hook")]
+    public async Task WebhookRejectsNonPublicIp(string url)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => WebhookSecurityPolicy.ResolveSafeDestinationAsync(url, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("ftp://example.com/hook")]
+    [InlineData("https://user:pass@example.com/hook")]
+    [InlineData("not-a-url")]
+    public async Task WebhookRejectsUnsafeUriShape(string url)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => WebhookSecurityPolicy.ResolveSafeDestinationAsync(url, CancellationToken.None));
+    }
+
+
     [Fact]
     public void ExplainSmtpErrorContainsHintForTimeout()
     {
