@@ -367,6 +367,14 @@ public sealed class AiSupervisor
         ArgumentNullException.ThrowIfNull(context);
 
         plan.Validate();
+
+        var totalMessages = plan.Actions
+            .Where(a => a.Kind == AiActionKind.LoadTest)
+            .Sum(a => a.MaxMessages);
+        if (totalMessages > context.Options.MessageCount)
+            throw new InvalidOperationException(
+                "AI plan exceeds the configured total MessageCount budget.");
+
         var allowed = new List<AiAction>(plan.Actions.Count);
 
         foreach (var action in plan.Actions)
