@@ -19,6 +19,10 @@ public sealed class AiAgentImprovementLoopTests
             Assert.Equal(AgentRunStatus.Ready, result.Status);
             Assert.Equal("READY_FOR_HUMAN_MERGE_REVIEW", result.Handoff);
             Assert.True(verifier.Called);
+            Assert.NotNull(verifier.Result);
+            Assert.False(verifier.Result!.CancellationPassed);
+            Assert.False(verifier.Result.HardLimitsPassed);
+            Assert.False(verifier.Result.SecretsPassed);
         }
         finally { Directory.Delete(workspace, true); }
     }
@@ -72,9 +76,12 @@ public sealed class AiAgentImprovementLoopTests
         private readonly bool _accept;
         public RecordingVerifier(bool accept) => _accept = accept;
         public bool Called { get; private set; }
+        public AiAgentExecutionResult? Result { get; private set; }
+
         public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken)
         {
             Called = true;
+            Result = result;
             return Task.FromResult(_accept);
         }
     }
