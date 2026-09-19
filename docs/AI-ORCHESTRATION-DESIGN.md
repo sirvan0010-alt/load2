@@ -1,6 +1,6 @@
 # load2 — AI orchestration extension design
 
-**Status:** PHASE-2A IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
+**Status:** PHASE-2B IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
 **Authority:** source + tests on `main`.
 
 ## Goal
@@ -122,7 +122,8 @@ Before adding an evidence type, project existing `MailTestResult` / `RunReport` 
 3. implement guard — COMPLETE;
 4. implement specialist registry — COMPLETE;
 5. bounded configured planner + coordinator — COMPLETE;
-6. connect model-backed supervisor planning — NEXT;
+6. bounded deterministic replan loop — COMPLETE;
+7. connect model-backed supervisor planning — NEXT;
 7. add replay/checkpoint only after deterministic execution works;
 8. add focused tests and CI verification;
 9. synchronize docs.
@@ -139,3 +140,10 @@ Before adding an evidence type, project existing `MailTestResult` / `RunReport` 
 ### Phase 2A implementation
 
 The repository now contains `ConfiguredExecutionPlanner` and `AiExecutionCoordinator`. `ConfiguredExecutionPlanner` is deliberately deterministic: it derives its single bounded action from the already configured `MailTestOptions`. The coordinator performs planning followed by the existing authorization guard. It still does not execute SMTP operations; `SmtpTestRunner` remains the sole execution engine.
+
+
+### Phase 2B implementation
+
+`AiReplanContext`, `IAiReplanner` and `ConservativeAiReplanner` now provide a deterministic post-run replan boundary. The policy reacts only to observed failures/throttling/timeouts/circuit-breaker state and reduces concurrency; it never increases the configured message budget, concurrency, duration or target scope. `AiExecutionCoordinator.ReplanAsync` enforces a hard maximum of three replans and sends every generated plan back through `AiSupervisor` and `AiActionGuard`.
+
+The replanner consumes the existing `MailTestResult`; no parallel telemetry model or second SMTP executor was introduced. A model-backed replanner can replace the deterministic policy later through `IAiReplanner`.
