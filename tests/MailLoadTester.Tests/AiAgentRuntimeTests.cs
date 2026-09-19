@@ -8,7 +8,7 @@ public sealed class AiAgentRuntimeTests
     [Fact]
     public async Task RunnerRejectsPathTraversalScope()
     {
-        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
+        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
         var task = TaskFor(realTarget: false, authorized: false) with { AllowedScopes = new[] { "src/../secrets" } };
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -39,7 +39,7 @@ public sealed class AiAgentRuntimeTests
     [Fact]
     public async Task RunnerRequiresIndependentVerification()
     {
-        var runner = new AiAgentRunner(new AllowAuthorization(), new RejectVerifier(), new VerifiedWorkspace());
+        var runner = new AiAgentRunner(new AllowAuthorization(), new RejectVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
         var result = await runner.RunAsync(TaskFor(realTarget: false, authorized: false), new NoOpAgent());
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
     }
@@ -64,6 +64,12 @@ public sealed class AiAgentRuntimeTests
         public Task<AiAgentExecutionResult> ExecuteAsync(AiAgentContext context, CancellationToken cancellationToken) => Task.FromResult(new AiAgentExecutionResult(
             AgentRunStatus.NeedsEvidence, new[] { new AiAgentFinding("claim", Array.Empty<string>(), AgentEvidenceLevel.SourceDocumented) }, Array.Empty<string>(),
             new Dictionary<string, string>(), Array.Empty<string>(), true, true, true, true, true, "verify"));
+    }
+
+    private sealed class AllowedScopeGuard : IAiAgentChangeScopeGuard
+    {
+        public Task<AiAgentChangeScopeResult> VerifyAsync(string workspacePath, IReadOnlyList<string> allowedScopes, CancellationToken cancellationToken) =>
+            Task.FromResult(new AiAgentChangeScopeResult(true, Array.Empty<string>(), Array.Empty<string>()));
     }
 
     private sealed class AllowAuthorization : IAiAgentAuthorizationPolicy
