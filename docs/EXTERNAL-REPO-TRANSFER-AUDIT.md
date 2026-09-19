@@ -30,6 +30,7 @@ All 15 repositories in the current EXT-AUDIT-001 list have been source-audited a
 | `niushamjd/bomberman-rl-pinkbombers` | experiment reproducibility concepts | REFERENCE / ADOPT architecture where useful |
 | `Trehwmm/Email-Bomber-SMTP` | SMTP/TLS/session lifecycle comparison | REFERENCE / SECURITY-CRITICAL source audit |
 | `noluckkid/wade-miller-bombers` | comparative orchestration review | REFERENCE |
+| `AIPentest/CyberStrikeAI` | Plan/Execute, Supervisor routing, specialist agents, Skills, policy/HITL, structured evidence | ADAPT / EXTRACT / REFERENCE |
 
 The exact source evidence and decision rationale are maintained in `docs/external-repos/*.md`.
 
@@ -63,7 +64,8 @@ Only concrete gaps should become new implementation work. Current candidates are
 4. replayable/redacted run artifacts if required by the product;
 5. GUI summary projection using `RunObservability.FromReport`;
 6. authorized `NET-AUDIT-001` fixtures;
-7. further external ADOPT/ADAPT work supported by source evidence.
+7. further external ADOPT/ADAPT work supported by source evidence;
+8. AI orchestration layer: Supervisor + bounded Plan/Execute + pre-action guard, specified in `docs/AI-ORCHESTRATION-DESIGN.md`.
 
 No candidate should bypass the existing execution pipeline.
 
