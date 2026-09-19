@@ -30,7 +30,7 @@ public sealed class AiAgentRuntimeTests
     [Fact]
     public async Task RunnerBlocksUnauthorizedRealTarget()
     {
-        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
+        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
         var result = await runner.RunAsync(TaskFor(realTarget: true, authorized: false), new NoOpAgent());
         Assert.Equal(AgentRunStatus.Blocked, result.Status);
         Assert.Contains("not marked authorized", result.Handoff, StringComparison.Ordinal);
