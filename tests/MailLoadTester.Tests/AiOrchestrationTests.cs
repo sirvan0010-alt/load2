@@ -1,3 +1,4 @@
+using Xunit;
 using MailLoadTester;
 
 namespace MailLoadTester.Tests;
