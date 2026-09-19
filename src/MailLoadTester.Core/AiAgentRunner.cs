@@ -86,12 +86,14 @@ public sealed class AiAgentRunner
     private readonly IAiAgentAuthorizationPolicy _authorization;
     private readonly IAiAgentResultVerifier _verifier;
     private readonly IAiAgentWorkspaceIntegrityGate _workspaceIntegrity;
+    private readonly IAiAgentChangeScopeGuard _changeScopeGuard;
 
-    public AiAgentRunner(IAiAgentAuthorizationPolicy authorization, IAiAgentResultVerifier verifier, IAiAgentWorkspaceIntegrityGate workspaceIntegrity)
+    public AiAgentRunner(IAiAgentAuthorizationPolicy authorization, IAiAgentResultVerifier verifier, IAiAgentWorkspaceIntegrityGate workspaceIntegrity, IAiAgentChangeScopeGuard changeScopeGuard)
     {
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
         _workspaceIntegrity = workspaceIntegrity ?? throw new ArgumentNullException(nameof(workspaceIntegrity));
+        _changeScopeGuard = changeScopeGuard ?? throw new ArgumentNullException(nameof(changeScopeGuard));
     }
 
     public async Task<AiAgentExecutionResult> RunAsync(AiAgentTask task, IAiAgent agent, CancellationToken cancellationToken = default)
@@ -123,6 +125,11 @@ public sealed class AiAgentRunner
             last = await agent.ExecuteAsync(new AiAgentContext(task, budgetCts.Token, deadline, iteration), budgetCts.Token).ConfigureAwait(false);
             if (last.Status == AgentRunStatus.Blocked)
                 return last;
+
+            var scope = await _changeScopeGuard.VerifyAsync(task.WorkspacePath, task.AllowedScopes, budgetCts.Token).ConfigureAwait(false);
+            if (!scope.IsAllowed)
+                return last with { Status = AgentRunStatus.Blocked, ChangedFiles = scope.ChangedFiles, Handoff = $"Agent changed files outside allowed scopes: {string.Join(", ", scope.Violations)}" };
+
             if (await _verifier.VerifyAsync(task, last, budgetCts.Token).ConfigureAwait(false))
                 return last with { Status = AgentRunStatus.Ready };
         }
