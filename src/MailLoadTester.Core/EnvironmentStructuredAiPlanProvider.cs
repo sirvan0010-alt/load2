@@ -21,7 +21,8 @@ public sealed class EnvironmentStructuredAiPlanProvider : IStructuredAiPlanProvi
     {
         _httpClient = httpClient ?? new HttpClient();
         _ownsClient = httpClient is null;
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
+        if (_ownsClient)
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
     }
 
     public async ValueTask<string> CreatePlanJsonAsync(
@@ -78,29 +79,3 @@ public sealed class EnvironmentStructuredAiPlanProvider : IStructuredAiPlanProvi
             throw new InvalidOperationException("AI plan endpoint returned an empty response.");
 
         return body;
-    }
-
-    public void Dispose()
-    {
-        if (_ownsClient)
-            _httpClient.Dispose();
-    }
-
-    private static IReadOnlyList<string> GetTargets(AiTaskContext context) =>
-        context.Options.DirectMxDelivery
-            ? context.Options.Recipients
-                .Select(r => r[(r.LastIndexOf('@') + 1)..].TrimEnd('.'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-            : new[] { context.Options.SmtpHost };
-
-    private sealed record AiPlanRequest(
-        string SmtpHost,
-        int Port,
-        bool DirectMxDelivery,
-        int MessageCount,
-        int MaxConcurrency,
-        int DurationSeconds,
-        IReadOnlyList<string> Targets,
-        IReadOnlyList<string> AllowedTargets);
-}
