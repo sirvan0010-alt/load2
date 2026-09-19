@@ -1,6 +1,6 @@
 # load2 — AI orchestration extension design
 
-**Status:** POST-BASELINE design derived from the CyberStrikeAI audit.  
+**Status:** PHASE-1 IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
 **Authority:** source + tests on `main`.
 
 ## Goal
@@ -42,7 +42,7 @@ AiSupervisor
 
 ## Core contracts
 
-These are design contracts, not yet implementation claims.
+The Phase-1 contracts below are implemented. `IExecutionPlanner` remains the integration boundary for a future model-backed planner; no model dependency is introduced by Phase 1.
 
 ```csharp
 public interface IExecutionPlanner
@@ -113,16 +113,16 @@ public sealed record AiEvidence(
     IReadOnlyDictionary<string, object?> Data);
 ```
 
-Before implementation, verify whether an existing load2 result type should be projected instead of adding this type.
+Before adding an evidence type, project existing `MailTestResult` / `RunReport` / `RunObservability` where possible. Evidence persistence is intentionally not part of Phase 1.
 
 ## Rollout order
 
-1. source audit of current AI-related code;
-2. define/reuse action and evidence contracts;
-3. implement guard;
-4. implement specialist registry;
-5. implement bounded planner;
-6. connect supervisor;
+1. source audit of current AI-related code — COMPLETE;
+2. define/reuse action contracts — COMPLETE;
+3. implement guard — COMPLETE;
+4. implement specialist registry — COMPLETE;
+5. bounded planner integration — NEXT;
+6. connect model-backed supervisor planning — NEXT;
 7. add replay/checkpoint only after deterministic execution works;
 8. add focused tests and CI verification;
 9. synchronize docs.
