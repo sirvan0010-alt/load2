@@ -11,46 +11,60 @@ public sealed record WorkspaceChangeEvidence(
 
 public interface IAiAgentWorkspaceChangeGate
 {
-    Task<WorkspaceChangeEvidence> InspectAsync(
-        AiAgentTask task,
-        CancellationToken cancellationToken = default);
+    Task<WorkspaceChangeEvidence> InspectAsync(AiAgentTask task, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Evidence gate for the autonomous SWE loop. It only observes the workspace;
-/// it never stages, commits, pushes or merges changes.
-/// </summary>
 public sealed class AiAgentWorkspaceChangeGate : IAiAgentWorkspaceChangeGate
 {
+    private readonly IGitCommandExecutor _git;
     private readonly IAiAgentWorkspaceIntegrityGate _integrity;
 
-    public AiAgentWorkspaceChangeGate(IAiAgentWorkspaceIntegrityGate integrity)
-        => _integrity = integrity ?? throw new ArgumentNullException(nameof(integrity));
+    public AiAgentWorkspaceChangeGate(IAiAgentWorkspaceIntegrityGate integrity, IGitCommandExecutor? git = null)
+    {
+        _integrity = integrity ?? throw new ArgumentNullException(nameof(integrity));
+        _git = git ?? new ProcessGitCommandExecutor();
+    }
 
-    public async Task<WorkspaceChangeEvidence> InspectAsync(
-        AiAgentTask task,
-        CancellationToken cancellationToken = default)
+    public async Task<WorkspaceChangeEvidence> InspectAsync(AiAgentTask task, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(task);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var integrity = await _integrity.VerifyAsync(
-            task.WorkspacePath, task.Commit, cancellationToken).ConfigureAwait(false);
-
+        var integrity = await _integrity.VerifyAsync(task.WorkspacePath, task.Commit, cancellationToken).ConfigureAwait(false);
         if (!integrity.IsVerified)
-            return new(false, false, Array.Empty<string>(), Array.Empty<string>(),
-                task.Commit, null, $"Workspace integrity failed: {integrity.Reason}");
+            return new(false, false, Array.Empty<string>(), Array.Empty<string>(), task.Commit, null,
+                $"Workspace integrity failed: {integrity.Reason}");
 
-        // The authoritative implementation of git diff/scope inspection is deliberately
-        // kept behind the interface so a later Git-backed implementation can be tested
-        // independently without granting the agent commit/push/merge authority.
-        return new(
-            true,
-            true,
-            Array.Empty<string>(),
-            Array.Empty<string>(),
-            task.Commit,
-            null,
-            "Workspace integrity verified; no workspace mutation was observed by this gate.");
+        var diff = await _git.ExecuteAsync(integrity.RepositoryRoot,
+            new[] { "diff", "--name-only", "--no-renames", task.Commit, "--" }, cancellationToken).ConfigureAwait(false);
+        var untracked = await _git.ExecuteAsync(integrity.RepositoryRoot,
+            new[] { "ls-files", "--others", "--exclude-standard" }, cancellationToken).ConfigureAwait(false);
+
+        var changed = ParsePaths(diff).Concat(ParsePaths(untracked))
+            .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var outOfScope = changed.Where(path => !IsAllowed(path, task.AllowedScopes)).ToArray();
+        var head = (await _git.ExecuteAsync(integrity.RepositoryRoot,
+            new[] { "rev-parse", "HEAD" }, cancellationToken).ConfigureAwait(false)).Trim();
+
+        return new(true, outOfScope.Length == 0, changed, outOfScope, task.Commit, head,
+            outOfScope.Length == 0
+                ? $"Detected {changed.Length} changed file(s); all are within the task scope."
+                : $"Detected {outOfScope.Length} out-of-scope changed file(s).");
+    }
+
+    private static IEnumerable<string> ParsePaths(string output) =>
+        output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+              .Where(x => !Path.IsPathRooted(x)).Select(x => x.Replace('\\', '/'));
+
+    private static bool IsAllowed(string path, IReadOnlyList<string> scopes)
+    {
+        foreach (var scope in scopes)
+        {
+            var normalized = scope.Trim().Replace('\\', '/').Trim('/');
+            if (normalized.Length == 0) return true;
+            if (path.Equals(normalized, StringComparison.Ordinal) || path.StartsWith(normalized + "/", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 }
