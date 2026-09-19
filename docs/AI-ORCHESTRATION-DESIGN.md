@@ -1,5 +1,9 @@
 # load2 — AI orchestration extension design
 
+**Status:** PHASE-2C IMPLEMENTED + analysis-informed evidence/verification
+
+This design adopts only the transferable engineering ideas from OBLITERATUS: staged pipelines, observable intermediate artifacts, analysis-informed adaptation, explicit verification, and reproducible metadata. OBLITERATUS itself is a model-abliteration/refusal-removal research system; its weight-editing or guardrail-removal mechanisms are not part of load2. urlOBLITERATUS READMEhttps://github.com/elder-plinius/OBLITERATUS/blob/main/README.md
+
 **Status:** PHASE-2B IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
 **Authority:** source + tests on `main`.
 
@@ -165,3 +169,17 @@ No model provider is hardcoded yet. Provider credentials and network transport w
 ### Phase 2C provider
 
 `EnvironmentStructuredAiPlanProvider` adds the first model-facing boundary. `LOAD2_AI_PLAN_ENDPOINT` selects an HTTP(S) JSON endpoint and `LOAD2_AI_API_KEY` is optional bearer authentication. The provider serializes only a sanitized planning envelope; SMTP username/password, message body, headers and attachments are never sent to the AI endpoint. The endpoint response is consumed as structured `ExecutionPlan` JSON by `StructuredAiExecutionPlanner`, then authorization remains mandatory through `AiSupervisor`/`AiActionGuard` before `AiLoadTestExecutor` can reach `SmtpTestRunner`.
+
+### Analysis-informed execution and verification
+
+The OBLITERATUS README emphasizes a staged, observable pipeline (probe → extract → intervene → verify) and an analysis-informed feedback loop. For load2, the safe analogue is:
+
+`plan → authorize → execute → observe → verify → optionally replan`.
+
+The implementation deliberately keeps the existing SMTP engine authoritative. `AiExecutionEvidence` projects metrics already present in `MailTestResult`; it does not create a competing telemetry pipeline. `AiExecutionVerifier` performs mechanical post-run checks against the already-authorized action budget and records findings without changing execution authority. This evidence can feed a future model-backed replanner, while every resulting plan must still pass `AiSupervisor` and `AiActionGuard`.
+
+This preserves the useful research pattern of observable intermediate artifacts and feedback-driven adaptation without importing model-weight modification, refusal-removal, unrestricted generation, or any bypass of load2 authorization and rate/concurrency controls.
+
+### Provider hygiene
+
+The environment HTTP provider remains opt-in through `LOAD2_AI_PLAN_ENDPOINT`. It never serializes SMTP passwords, message bodies, headers or attachments. When an `HttpClient` is injected by the application, the provider does not mutate its timeout configuration; only an internally owned client receives the default 30-second timeout.
