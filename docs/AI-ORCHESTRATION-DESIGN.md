@@ -147,3 +147,13 @@ The repository now contains `ConfiguredExecutionPlanner` and `AiExecutionCoordin
 `AiReplanContext`, `IAiReplanner` and `ConservativeAiReplanner` now provide a deterministic post-run replan boundary. The policy reacts only to observed failures/throttling/timeouts/circuit-breaker state and reduces concurrency; it never increases the configured message budget, concurrency, duration or target scope. `AiExecutionCoordinator.ReplanAsync` enforces a hard maximum of three replans and sends every generated plan back through `AiSupervisor` and `AiActionGuard`.
 
 The replanner consumes the existing `MailTestResult`; no parallel telemetry model or second SMTP executor was introduced. A model-backed replanner can replace the deterministic policy later through `IAiReplanner`.
+
+### Phase 2C — structured model-planner boundary
+
+Phase 2C now adds a provider-neutral `IStructuredAiPlanProvider` and `StructuredAiExecutionPlanner`. The planner accepts only structured JSON, rejects unknown JSON fields, validates action kinds/bounds, and converts the response into the existing `ExecutionPlan` contract.
+
+The planner itself does **not** authorize or execute the plan. The required path remains:
+
+`model/provider → StructuredAiExecutionPlanner → ExecutionPlan.Validate → AiSupervisor → AiActionGuard → existing execution engine`
+
+No model provider is hardcoded yet. Provider credentials and network transport will be introduced only behind the provider interface and configuration boundary.
