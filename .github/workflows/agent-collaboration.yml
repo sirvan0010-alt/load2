@@ -1,0 +1,225 @@
+name: Agent Collaboration Contract
+
+on:
+  push:
+    branches: [ "main", "fix/**", "feat/**" ]
+    paths:
+      - "AI_AGENT_REGISTRY.md"
+      - "docs/AI-GUIDE.md"
+      - "docs/AI_AGENT_EXTENSIONS.md"
+      - "docs/LOAD2-GAP-MATRIX.md"
+      - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-ARCHITECTURE.md"
+      - ".github/workflows/agent-collaboration.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "AI_AGENT_REGISTRY.md"
+      - "docs/AI-GUIDE.md"
+      - "docs/AI_AGENT_EXTENSIONS.md"
+      - "docs/LOAD2-GAP-MATRIX.md"
+      - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-ARCHITECTURE.md"
+      - ".github/workflows/agent-collaboration.yml"
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "Optional collaboration focus"
+        required: false
+        default: "contract"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Agent contract and source-of-truth gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Verify agent documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f AI_AGENT_REGISTRY.md
+          test -f docs/AI-GUIDE.md
+          test -f docs/AI_AGENT_EXTENSIONS.md
+          test -f docs/LOAD2-GAP-MATRIX.md
+          test -f docs/RESEARCH-LEDGER.json
+          test -f docs/AI-SWARM-ARCHITECTURE.md
+          required=(ORCHESTRATOR SMTP_PROTOCOL_AGENT LOAD_ENGINE_AGENT NETWORK_AGENT METRICS_AGENT SCENARIO_AGENT EVIDENCE_AGENT SECURITY_AGENT FEATURE_ARCHITECT_AGENT EFFICIENCY_AGENT TEST_AGENT UX_AGENT RESEARCH_AGENT NETWORK_STRESS_AGENT INTEGRATION_AGENT RELEASE_AGENT)
+          for role in "${required[@]}"; do
+            if ! grep -RIn --fixed-strings "`$role`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null; then
+              echo "ERROR: required role missing from agent contract: $role"
+              exit 1
+            fi
+          done
+          grep -Fq -- '--unauthorized' docs/AI-GUIDE.md
+          echo "Agent contract is present and source-of-truth rules are intact."
+
+  research-ledger-gate:
+    name: Research Ledger schema and consistency gate
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate RESEARCH-LEDGER.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          path = Path("docs/RESEARCH-LEDGER.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+
+          required_top = ["schemaVersion", "sourceOfTruth", "auditCoverage", "lifecycleStates", "decisionTags", "repositories", "mechanisms", "rules"]
+          for key in required_top:
+              if key not in data:
+                  print(f"ERROR: missing top-level key: {key}")
+                  sys.exit(1)
+          if data["schemaVersion"] != 2:
+              print(f"ERROR: unsupported ledger schemaVersion: {data['schemaVersion']}")
+              sys.exit(1)
+          if data["sourceOfTruth"] != "sirvan0010-alt/load2:main":
+              print("ERROR: ledger sourceOfTruth must remain sirvan0010-alt/load2:main")
+              sys.exit(1)
+
+          allowed = set(data["lifecycleStates"])
+          decisions = set(data["decisionTags"])
+          repos = data["repositories"]
+          mechanisms = data["mechanisms"]
+          repo_ids = [r.get("id") for r in repos]
+          mech_ids = [m.get("id") for m in mechanisms]
+
+          if len(repo_ids) != len(set(repo_ids)):
+              print("ERROR: duplicate repository id")
+              sys.exit(1)
+          if len(mech_ids) != len(set(mech_ids)):
+              print("ERROR: duplicate mechanism id")
+              sys.exit(1)
+          repo_by_id = {r["id"]: r for r in repos}
+
+          for repo in repos:
+              if not {"id", "name", "status", "sourceUrl", "revision", "mechanisms"}.issubset(repo):
+                  print(f"ERROR: repository entry incomplete: {repo}")
+                  sys.exit(1)
+              if repo["status"] not in allowed:
+                  print(f"ERROR: invalid repository status {repo['status']} for {repo['id']}")
+                  sys.exit(1)
+              if repo["revision"] is None and repo["status"] in {"IMPLEMENTED", "TESTED", "VERIFIED", "CLOSED"}:
+                  print(f"ERROR: closed implementation lifecycle requires pinned source revision: {repo['id']}")
+                  sys.exit(1)
+              for mid in repo["mechanisms"]:
+                  if mid not in set(mech_ids):
+                      print(f"ERROR: repository {repo['id']} references unknown mechanism {mid}")
+                      sys.exit(1)
+
+          for mech in mechanisms:
+              required = {"id", "name", "repositoryId", "status", "category", "description", "decision", "load2Mapping", "evidence"}
+              if not required.issubset(mech):
+                  print(f"ERROR: mechanism entry incomplete: {mech}")
+                  sys.exit(1)
+              if mech["status"] not in allowed:
+                  print(f"ERROR: invalid mechanism status {mech['status']} for {mech['id']}")
+                  sys.exit(1)
+              if mech["repositoryId"] not in repo_by_id:
+                  print(f"ERROR: mechanism {mech['id']} references unknown repository {mech['repositoryId']}")
+                  sys.exit(1)
+              if mech["id"] not in repo_by_id[mech["repositoryId"]]["mechanisms"]:
+                  print(f"ERROR: reverse repository reference missing for {mech['id']}")
+                  sys.exit(1)
+              if mech["decision"] is not None and mech["decision"] not in decisions:
+                  print(f"ERROR: invalid decision tag {mech['decision']} for {mech['id']}")
+                  sys.exit(1)
+              if mech["status"] in {"IMPLEMENTED", "TESTED", "VERIFIED", "CLOSED"} and mech["decision"] is None:
+                  print(f"ERROR: implementation lifecycle without decision: {mech['id']}")
+                  sys.exit(1)
+              if mech["status"] in {"TESTED", "VERIFIED", "CLOSED"} and not mech["evidence"]:
+                  print(f"ERROR: tested/verified mechanism without evidence: {mech['id']}")
+                  sys.exit(1)
+
+          coverage = data["auditCoverage"]
+          if coverage.get("auditedRepositoryCount") != 15:
+              print("ERROR: EXT-AUDIT-001 coverage count must remain 15")
+              sys.exit(1)
+          if len(coverage.get("auditedRepositoryIds", [])) != 15:
+              print("ERROR: EXT-AUDIT-001 repository id coverage must contain 15 entries")
+              sys.exit(1)
+          if len(set(coverage["auditedRepositoryIds"])) != 15:
+              print("ERROR: duplicate EXT-AUDIT-001 repository id")
+              sys.exit(1)
+          for rid in coverage["auditedRepositoryIds"]:
+              if rid not in repo_by_id:
+                  print(f"ERROR: audited repository missing from ledger: {rid}")
+                  sys.exit(1)
+          if coverage.get("ledgerRepositoryCount") != len(repos):
+              print("ERROR: ledgerRepositoryCount does not match repositories array")
+              sys.exit(1)
+
+          rules = data["rules"]
+          required_rules = ("unknownStaysPending", "noInventedRevisions", "noInventedMechanisms", "researchAgentOwnsCompleteness", "orchestratorCannotCloseWithOpenMechanisms")
+          for rule in required_rules:
+              if rule not in rules or rules[rule] is not True:
+                  print(f"ERROR: required ledger rule missing/false: {rule}")
+                  sys.exit(1)
+
+          print(f"Research Ledger integrity OK: {len(repos)} repositories, {len(mechanisms)} mechanisms, EXT-AUDIT-001 coverage={len(coverage['auditedRepositoryIds'])}.")
+          PY
+
+  specialist-handoffs:
+    name: Specialist handoff ${{ matrix.agent }}
+    needs: [contract, research-ledger-gate]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: [RESEARCH_AGENT, NETWORK_STRESS_AGENT, INTEGRATION_AGENT, RELEASE_AGENT]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Generate deterministic handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p agent-handoffs
+          case "${{ matrix.agent }}" in
+            RESEARCH_AGENT) scope="external source audit; mechanism classification; research ledger completeness" ;;
+            NETWORK_STRESS_AGENT) scope="bounded TCP/network stress dimensions; timeouts; connection rate/concurrency; IPv4/IPv6" ;;
+            INTEGRATION_AGENT) scope="pipeline integrity; duplicate pacing/queue/retry/metrics detection; cross-layer boundaries" ;;
+            RELEASE_AGENT) scope="CI/CodeQL/action hygiene; packaging; documentation; release evidence" ;;
+          esac
+          {
+            echo "# Agent handoff"; echo ""; echo "- Agent: ${{ matrix.agent }}"; echo "- Commit: $GITHUB_SHA"; echo "- Focus: ${{ github.event.inputs.focus || 'automatic' }}"; echo "- Scope: $scope"; echo "- Status: READY_FOR_ORCHESTRATOR"; echo ""; echo "## Required evidence"; echo "- current main/source state"; echo "- research ledger consistency"; echo "- focused tests where implementation changes"; echo "- security/authorization review"; echo "- CI/CodeQL evidence where applicable";
+          } > "agent-handoffs/${{ matrix.agent }}.md"
+      - name: Upload handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-handoff-${{ matrix.agent }}
+          path: agent-handoffs/${{ matrix.agent }}.md
+          if-no-files-found: error
+
+  orchestrator:
+    name: Orchestrator handoff gate
+    needs: specialist-handoffs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate collaboration pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'ORCHESTRATOR' AI_AGENT_REGISTRY.md
+          grep -Fq 'SECURITY_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'EVIDENCE_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'TEST_AGENT' AI_AGENT_REGISTRY.md
+          grep -Fq 'INTEGRATION_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'RELEASE_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'NETWORK_STRESS_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          grep -Fq 'RESEARCH_AGENT' docs/AI_AGENT_EXTENSIONS.md
+          test -f docs/RESEARCH-LEDGER.json
+          echo "ORCHESTRATOR collaboration + Research Ledger contract validated."

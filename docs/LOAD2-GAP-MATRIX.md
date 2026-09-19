@@ -1,99 +1,76 @@
-# load2 — External mechanism gap matrix
+# load2 — Current Capability and Gap Matrix
 
 **Authority:** `sirvan0010-alt/load2` / `main`  
-**Current baseline:** TRACK A A1–A8 **ALL COMPLETE**.
+**Baseline:** TRACK A A1–A8 COMPLETE and protected.  
+**Current evolution:** TRACK B post-baseline.
 
-## 0. Interpretation rule
+## Status rules
 
-External repositories are audited **by mechanism**, not by project label. A repository named bomber, flooder, scanner, POC, stress tool or similar is not automatically rejected.
+`HAVE` means demonstrated in current source/tests. `FOUNDATION` means the contract exists but integration is incomplete. `POST-BASELINE` means planned work. `COMPLETE` requires source/tests/CI/documentation evidence.
 
-For each mechanism, distinguish reusable engineering from an abuse-specific execution path. Reusable scheduling, concurrency, pacing, retry, provider health, session lifecycle, diagnostics and observability may be adopted/adapted when they improve authorized load2 testing.
+## TRACK A — closed
 
-Decision tags:
+A1–A8 remain closed and regression-protected. Phase 1.3 agent-runtime Docker boundary is verified by green CI.
 
-`HAVE | GAP | ADOPT | ADAPT | HARDEN | EXTRACT | SIMULATE | REFERENCE | REJECT`
+## Existing engine capability
 
-`REJECT` applies to the mechanism, not automatically to an entire repository.
+The existing bounded `Channel<T>`, workers/`MaxConcurrency`, `SmartPaceController`, recipient/provider gates, SMTP pools, `RetryPolicy`, `DeliveryLedger`, `RunReport`, `RunObservability`, diagnostics and `IMailPayloadPlugin` remain the single execution/evidence pipeline.
 
-## 1. TRACK A status
+## TRACK B status
 
-| Area | Current status |
-|---|---|
-| A1 destination-provider throttling | ✅ FIXED |
-| A2 multi-account throttling regression | ✅ FIXED |
-| A3 bounded scenario queue + metrics | ✅ FIXED |
-| A4 retry policy + budget + RetryMetrics | ✅ FIXED |
-| A5 unified SMTP outcome classification | ✅ FIXED |
-| A6 global concurrency audit | ✅ PASS — no architecture change |
-| A7 RunObservability / RunReport | ✅ FIXED |
-| A8 final baseline/documentation | ✅ COMPLETE |
-| FEAT-022 phase timing | ✅ IMPLEMENTED |
-
-See `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` for the authoritative baseline record.
-
-## 2. Current capability map
-
-| Mechanism | load2 status | Current evidence / treatment |
+| Item | Status | Next gate |
 |---|---|---|
-| bounded worker queue | HAVE | bounded `Channel<T>` + fixed workers |
-| adaptive concurrency | HAVE | bounded by `MaxConcurrency` |
-| actual-SEND pacing | HAVE | `SmartPaceController` / `AcquireSendSlotAsync` |
-| per-recipient pacing | HAVE | existing recipient gate/limiter |
-| destination-provider throttling | HAVE | SmartPace provider windows |
-| SMTP session pool | HAVE | persistent `SmtpConnectionPool` |
-| multi-account SMTP pools | HAVE | `SmtpAccountRegistry` / `SmtpAccountPoolHub` |
-| endpoint health/quarantine | HAVE | `TransportHealthRegistry` |
-| delivery ledger / AutoRestart | HAVE | `DeliveryLedger` |
-| connection churn | HAVE | bounded scenario runner |
-| scenario model / target sets | HAVE | `TargetSet` + `ScenarioLimits` |
-| retry policy + retry budget | HAVE | `RetryPolicy` + `RetryMetrics` |
-| unified SMTP outcome classification | HAVE | `SmtpOutcomeClassifier` + `OutcomeCounts` |
-| queue metrics | HAVE | `ScenarioQueueMetrics` |
-| run report | HAVE | `RunReportBuilder` |
-| run observability projection | HAVE | `RunObservability` |
-| FEAT-022 timing breakdown | HAVE | phase timing fields on result/report |
-| DNS/MX/SPF/DMARC diagnostics | HAVE | read-only diagnostics layer where implemented |
-| SMTP/TLS diagnostics | HAVE | `TransportDiagnostics` |
-| provider/transport registry | PARTIAL / POST-BASELINE | evaluate external candidates against existing abstractions before extending |
-| endpoint canonicalization/deduplication | POST-BASELINE | only add if source-level gap is proven |
-| replayable run artifacts | POST-BASELINE | extend only with concrete product requirement |
-| failure injection | POST-BASELINE | controlled/lab scenarios only |
-| GUI summary binding | POST-BASELINE | use `RunObservability.FromReport` |
-| live NET-AUDIT-001 | POST-BASELINE | authorized endpoints/fixtures only |
+| B1 canonical documentation reset | COMPLETE | maintain synchronization |
+| B2 external mechanism audit | COMPLETE — EXT-AUDIT-001 | future repos are separate audits |
+| B3 typed scenario engine | COMPLETE — REPAIRED | regression coverage |
+| B4 provider simulator | COMPLETE — CI VERIFIED | maintain deterministic/security boundary |
+| B5 behavioral analyzer | COMPLETE — CI VERIFIED | maintain regression coverage |
+| B6 mailbox/deliverability lab | COMPLETE — CI VERIFIED | maintain lab/security boundary |
+| B7 richer auth/transport evidence | COMPLETE — CI VERIFIED | maintain evidence projection |
+| B8 replayable redacted artifacts | IMPLEMENTED — CI PENDING | deterministic artifact contract |
+| B9 security execution gates | IMPLEMENTED — CI PENDING | full CI verification |
 
-## 3. External audit
+## B3–B7 delivered behavior
 
-The retained external repositories are handled independently from TRACK A. Their useful mechanisms are recorded in `docs/external-repos/*.md` and summarized in `docs/EXTERNAL-REPO-TRANSFER-AUDIT.md`.
+**B3:** typed scenario definitions and a single `ScenarioEngine` adapter route supported scenarios through the existing SMTP runner. Simulation-only scenario kinds remain explicitly blocked from direct SMTP execution.
 
-Audit method:
+**B4:** deterministic local provider simulation supports accepted, throttled, temporary-failure and permanent-failure outcomes, seeded reproducibility, cancellation and multi-provider composition. No network I/O and no second queue/pacing/retry stack.
+
+**B5:** side-effect-free analysis over normalized mail events calculates event velocity, peak burst size, provider diversity, sender-domain diversity, recipient concentration and a bounded transparent anomaly score. It maps B4 simulator events and honors cancellation. A CI-only test equality issue was corrected by making the determinism assertion value-based.
+
+**B6:** controlled in-memory mailbox/deliverability lab supports message and byte quotas, provider-outcome rejection, mailbox pressure snapshots, reads and bounded recovery. It is thread-safe, cancellation-aware and intentionally performs no SMTP/IMAP network I/O. The focused pressure test now matches the defined 80% pressure threshold.
+
+**B7:** `AuthenticationTransportEvidence` projects existing `TransportDiagnosticReport` data into machine-readable evidence with explicit statuses for SMTP, TLS, MX, SPF and DMARC, authentication mechanisms, preserved diagnostic steps and an explicit DKIM-not-evaluated state when no selector is supplied. No second diagnostics engine or credential-bearing result model was introduced.
+
+## B8 — replayable artifacts
+
+`ReplayableRunArtifactBuilder` provides a versioned scenario/configuration/event/result artifact, deterministic SHA-256 fingerprinting, recursive secret-key redaction, deterministic JSON and cancellation-aware atomic persistence. It is data-only and does not execute replay or create network traffic.
+
+## B9 — security execution gate
+
+`SecurityExecutionGate` is the pre-execution admission boundary for typed scenarios. It enforces explicit scope, authorization, hard limits and cancellation checks before `ScenarioEngine` delegates to the existing SMTP runner. Runtime pacing, bounded concurrency, secret redaction and evidence remain enforced by their existing authoritative components rather than being duplicated in B9.
+
+## Security boundary
+
+The framework supports controlled/authorized security testing, not a public abuse launcher. No arbitrary third-party registrations, CAPTCHA/OTP bypass, anti-abuse evasion, real botnets, provider-limit evasion or unrestricted public-target DoS/DDoS. Defensive objectives use controlled simulators, owned applications, synthetic recipients/providers and bounded lab workers.
+
+## Architecture constraint
 
 ```text
-source audit
-  → mechanism inventory
-  → load2 comparison
-  → decision tag
-  → focused implementation only when justified
-  → tests
-  → CI / CodeQL
-  → documentation sync
+ScenarioDefinition → SecurityExecutionGate → ScenarioEngine → existing bounded Channel
+→ existing workers/MaxConcurrency → existing pacing + provider/recipient gates
+→ existing SMTP pools → existing SEND/outcome classification
+→ DeliveryLedger/RetryMetrics/RunReport → RunObservability + BehavioralAnalysis
+→ controlled MailboxDeliverabilityLab → AuthenticationTransportEvidence
+→ ReplayableRunArtifactBuilder
 ```
 
-README-only claims are not implementation evidence. Unknowns remain explicitly unknown.
+B4–B9 must not introduce a second queue, pacing/limiting stack, retry policy or source-of-truth result model.
 
-## 4. Authorized stress-testing boundary
+## Rules for future work
 
-The framework may implement controlled SMTP/application stress mechanisms such as repeated-send scenarios, rate/concurrency tests, connection churn, retry/failure stress and multi-target scenarios when targets and scope are explicitly authorized and existing controls remain intact.
-
-Network transport stress may be represented through bounded lab/authorized scenarios. A distributed authorized test is not automatically equivalent to an attack.
-
-Do not import credential/token theft, CAPTCHA/OTP bypass, stealth/evasion for abuse, arbitrary public-target discovery for flooding, provider-abuse bypass, reflection/amplification or unrestricted destructive DoS/DDoS launchers.
-
-## 5. Rules for future work
-
-- Do not reopen A1–A8 as unfinished without concrete regression evidence.
-- Do not add a second pacing/limiting stack when the existing `SmartPaceController` covers the contract.
-- Do not add a second queue when the bounded scenario `Channel` covers the contract.
-- Retry paths must use the existing pacing/concurrency controls.
-- Keep `MailTestResult` as the source of truth and `RunReport`/`RunObservability` as projections.
-- Preserve cancellation, hard limits, DryRun/TestMode and `--unauthorized` behavior.
-- Never introduce secrets into source, logs or reports.
+- Do not reopen A1–A8 without concrete regression evidence.
+- Preserve cancellation, hard limits, DryRun/TestMode, `--unauthorized` and secret redaction.
+- Every retry remains under existing pacing/concurrency controls.
+- Every new status requires source/test/CI evidence.
+- Synchronize canonical documentation after verified implementation changes.

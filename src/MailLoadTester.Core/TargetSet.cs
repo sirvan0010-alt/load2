@@ -22,14 +22,12 @@ public sealed class TargetSet
     {
         ArgumentNullException.ThrowIfNull(recipients);
         var list = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var raw in recipients)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
-            var email = raw.Trim();
+            var email = EndpointCanonicalizer.Email(raw);
             if (!seen.Add(email)) continue;
-            if (!Validation.IsValidEmail(email))
-                throw new ArgumentException($"Neplatný e-mail v TargetSet: '{email}'.");
             list.Add(email);
             if (list.Count > MaxTargets)
                 throw new ArgumentException($"TargetSet přesahuje limit {MaxTargets} adres.");
