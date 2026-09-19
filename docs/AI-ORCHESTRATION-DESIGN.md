@@ -161,3 +161,7 @@ No model provider is hardcoded yet. Provider credentials and network transport w
 ### Phase 2C execution bridge
 
 `AiLoadTestExecutor` is now the narrow execution boundary for AI-authorized load-test actions. It accepts only `LoadTest` actions, re-checks the configured message/concurrency bounds, re-applies `AuthorizationGate` immediately before network execution, and delegates to the existing `SmtpTestRunner`. No AI code calls MailKit directly and no second pacing, retry, queue, or SMTP transport was introduced.
+
+### Phase 2C provider
+
+`EnvironmentStructuredAiPlanProvider` adds the first model-facing boundary. `LOAD2_AI_PLAN_ENDPOINT` selects an HTTP(S) JSON endpoint and `LOAD2_AI_API_KEY` is optional bearer authentication. The provider serializes only a sanitized planning envelope; SMTP username/password, message body, headers and attachments are never sent to the AI endpoint. The endpoint response is consumed as structured `ExecutionPlan` JSON by `StructuredAiExecutionPlanner`, then authorization remains mandatory through `AiSupervisor`/`AiActionGuard` before `AiLoadTestExecutor` can reach `SmtpTestRunner`.
