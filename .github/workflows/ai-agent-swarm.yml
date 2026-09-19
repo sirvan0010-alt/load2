@@ -1,0 +1,199 @@
+name: AI Agent Swarm — Task Factory
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Engineering task for the swarm"
+        required: true
+        default: "Audit the next load2 mechanism and prepare an evidence-backed implementation plan"
+      mode:
+        description: "Swarm mode"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - review
+          - implement-ready
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "AI_AGENT_REGISTRY.md"
+      - "docs/AI_AGENT_EXTENSIONS.md"
+      - "docs/RESEARCH-LEDGER.json"
+      - "docs/AI-SWARM-RESULT-SCHEMA.json"
+      - "scripts/verify-agent-results.sh"
+      - ".github/workflows/ai-agent-swarm.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  task-factory:
+    name: Prepare ${{ matrix.agent }} task
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent:
+          - ORCHESTRATOR
+          - RESEARCH_AGENT
+          - BUG_TRIAGE_AGENT
+          - FEATURE_ARCHITECT_AGENT
+          - IMPLEMENTATION_AGENT
+          - REFACTOR_AGENT
+          - INTEGRATION_AGENT
+          - SECURITY_AGENT
+          - EVIDENCE_AGENT
+          - REVIEW_AGENT
+          - TEST_AGENT
+          - DOCUMENTATION_AGENT
+          - RELEASE_AGENT
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build deterministic agent task
+        shell: bash
+        env:
+          TASK_INPUT: ${{ github.event.inputs.task || 'Review current repository state and identify the next evidence-backed engineering task' }}
+          SWARM_MODE: ${{ github.event.inputs.mode || 'review' }}
+          AGENT: ${{ matrix.agent }}
+        run: |
+          set -euo pipefail
+          mkdir -p swarm-tasks
+          case "$AGENT" in
+            ORCHESTRATOR) scope="decompose task; assign smallest specialist set; reconcile outputs; identify next blocker" ;;
+            RESEARCH_AGENT) scope="inspect source-level evidence; pin revisions; classify mechanisms; update research ledger" ;;
+            BUG_TRIAGE_AGENT) scope="reproduce/model defect; isolate root cause; define smallest fix and regression test" ;;
+            FEATURE_ARCHITECT_AGENT) scope="propose useful function using the required 10-point proposal contract" ;;
+            IMPLEMENTATION_AGENT) scope="implement only an approved evidence-backed change; reuse existing architecture" ;;
+            REFACTOR_AGENT) scope="remove duplication without changing intended behavior; preserve lifecycle and metrics" ;;
+            INTEGRATION_AGENT) scope="verify cross-layer boundaries and prevent duplicate pacing/queue/retry/metrics systems" ;;
+            SECURITY_AGENT) scope="check authorization, secrets, supply-chain and safe operational boundaries" ;;
+            EVIDENCE_AGENT) scope="check every technical claim against source, tests and CI evidence" ;;
+            REVIEW_AGENT) scope="perform adversarial pre-merge review for correctness, regressions and missing gates" ;;
+            TEST_AGENT) scope="define and run focused verification appropriate to the change" ;;
+            DOCUMENTATION_AGENT) scope="synchronize documentation with current verified implementation and provenance" ;;
+            RELEASE_AGENT) scope="check CI, CodeQL, dependency/action hygiene, packaging and release evidence" ;;
+            *) echo "Unknown agent: $AGENT"; exit 1 ;;
+          esac
+
+          cat > "swarm-tasks/${AGENT}.md" <<EOF
+          # Agent Task — ${AGENT}
+
+          - Repository: ${GITHUB_REPOSITORY}
+          - Commit: ${GITHUB_SHA}
+          - Mode: ${SWARM_MODE}
+          - Task: ${TASK_INPUT}
+          - Specialist scope: ${scope}
+
+          ## Required inputs
+          - Current repository source and tests
+          - docs/RESEARCH-LEDGER.json when external mechanisms are involved
+          - Existing agent contract and architecture invariants
+
+          ## Required output
+          - Machine-readable result conforming to docs/AI-SWARM-RESULT-SCHEMA.json
+          - Findings grounded in repository evidence
+          - Explicit status: READY | BLOCKED | NEEDS-EVIDENCE
+          - Files/components in scope
+          - Acceptance criteria
+          - Focused verification plan
+          - Security/authorization constraints
+          - Next handoff / blocker
+
+          ## Hard boundaries
+          - Do not invent source revisions, mechanisms, performance results or hardware behavior.
+          - Do not create a parallel pacing, queue, retry or metrics subsystem.
+          - Do not bypass authorization, cancellation, hard limits or cleanup.
+          - Green CI is repository evidence, not production-load proof.
+          EOF
+
+      - name: Upload agent task
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-task-${{ matrix.agent }}
+          path: swarm-tasks/${{ matrix.agent }}.md
+          if-no-files-found: error
+
+  swarm-contract:
+    name: Swarm contract gate
+    needs: task-factory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify creation agents are registered
+        shell: bash
+        run: |
+          set -euo pipefail
+          for role in IMPLEMENTATION_AGENT BUG_TRIAGE_AGENT REFACTOR_AGENT DOCUMENTATION_AGENT REVIEW_AGENT; do
+            grep -RIn --fixed-strings "\`$role\`" AI_AGENT_REGISTRY.md docs/AI_AGENT_EXTENSIONS.md >/dev/null
+          done
+          test -f docs/RESEARCH-LEDGER.json
+          test -f docs/AI-SWARM-RESULT-SCHEMA.json
+          test -f scripts/verify-agent-results.sh
+          echo "Creation/review swarm contract is valid."
+
+  swarm-result-verifier:
+    name: Agent result verification gate
+    needs: task-factory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify verifier syntax and positive/negative behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/verify-agent-results.sh
+          mkdir -p swarm-results
+          agents=(
+            ORCHESTRATOR RESEARCH_AGENT BUG_TRIAGE_AGENT FEATURE_ARCHITECT_AGENT
+            IMPLEMENTATION_AGENT REFACTOR_AGENT INTEGRATION_AGENT SECURITY_AGENT
+            EVIDENCE_AGENT REVIEW_AGENT TEST_AGENT DOCUMENTATION_AGENT RELEASE_AGENT
+          )
+          for agent in "${agents[@]}"; do
+            cat > "swarm-results/${agent}.json" <<EOF
+          {
+            "schema_version":"1.0",
+            "agent":"${agent}",
+            "task_id":"contract-test",
+            "repository":"sirvan0010-alt/load2",
+            "commit":"0000000000000000000000000000000000000000",
+            "status":"READY",
+            "findings":[{"claim":"contract test","evidence":["CI fixture"]}],
+            "changed_files":[],
+            "acceptance":[{"id":"AC-001","result":"PASS","evidence":["CI fixture"]}],
+            "verification":{"tests":["contract fixture"],"ci_required":true},
+            "security":{"authorization":"PASS","cancellation":"PASS","hard_limits":"PASS","secrets":"PASS"},
+            "handoff":"REVIEW_AGENT"
+          }
+          EOF
+          done
+          bash scripts/verify-agent-results.sh swarm-results
+
+          jq '.security.authorization = "FAIL"' swarm-results/SECURITY_AGENT.json > swarm-results/SECURITY_AGENT.invalid.json
+          mv swarm-results/SECURITY_AGENT.invalid.json swarm-results/SECURITY_AGENT.json
+          if bash scripts/verify-agent-results.sh swarm-results; then
+            echo "Negative verifier test unexpectedly passed" >&2
+            exit 1
+          fi
+          echo "Positive and negative agent-result verification tests passed."
+
+      - name: Keep implement-ready mode blocked until execution backend exists
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'implement-ready' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "IMPLEMENT-READY is intentionally blocked: this workflow does not run an LLM or execution backend yet." >&2
+          echo "A future backend must publish real schema-valid results before this mode can authorize implementation." >&2
+          exit 1
+
+# NOTE: this workflow is an agent coordination/task factory plus a deterministic
+# result-contract verifier, not an LLM. An actual model runner must consume the
+# task artifacts and publish result JSON only after explicit provider, credential
+# and patch-authorization policy is configured.
