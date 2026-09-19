@@ -74,6 +74,7 @@ public sealed class AiAgentImprovementLoop
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(context);
         if (maxIterations is < 1 or > 20)
             throw new ArgumentOutOfRangeException(nameof(maxIterations));
         if (timeBudget <= TimeSpan.Zero)
@@ -94,7 +95,7 @@ public sealed class AiAgentImprovementLoop
             {
                 token.ThrowIfCancellationRequested();
                 var started = DateTimeOffset.UtcNow;
-                var result = await step.ExecuteAsync(context, token).ConfigureAwait(false);
+                var result = await step.ExecuteAsync(context with { Iteration = iteration, CancellationToken = token }, token).ConfigureAwait(false);
                 var completed = DateTimeOffset.UtcNow;
                 phases.Add(new AgentPhaseRecord(step.Phase, started, completed, result.Succeeded, result.Summary));
                 findings.AddRange(result.Findings);
@@ -112,14 +113,21 @@ public sealed class AiAgentImprovementLoop
                 changed |= result.Findings.Count > 0;
             }
 
+            // This orchestration layer does not itself prove CI, authorization,
+            // cancellation, hard limits, or secret handling. Those gates must be
+            // established by concrete steps and independently checked by the verifier.
             var execution = new AiAgentExecutionResult(
                 AgentRunStatus.NeedsEvidence,
                 findings.Select(f => new AiAgentFinding(f, Array.Empty<string>(), AgentEvidenceLevel.SourceDocumented)).ToArray(),
                 Array.Empty<string>(),
                 new Dictionary<string, string>(),
                 Array.Empty<string>(),
-                true, true, true, true, true,
-                "Autonomous loop completed phase execution; independent verification required.");
+                CiRequired: true,
+                AuthorizationPassed: !task.RealTargetRequired || task.Authorized,
+                CancellationPassed: false,
+                HardLimitsPassed: false,
+                SecretsPassed: false,
+                "Autonomous loop completed phase execution; independent verification must establish all execution gates.");
 
             if (await _verifier.VerifyAsync(task, execution, token).ConfigureAwait(false))
             {
