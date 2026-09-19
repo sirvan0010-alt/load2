@@ -6,6 +6,28 @@ namespace MailLoadTester.Tests;
 public sealed class AiAgentRuntimeTests
 {
     [Fact]
+    public async Task RunnerRejectsPathTraversalScope()
+    {
+        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
+        var task = TaskFor(realTarget: false, authorized: false) with { AllowedScopes = new[] { "src/../secrets" } };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            runner.RunAsync(task, new NoOpAgent()));
+
+        Assert.Contains("escapes", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunnerRejectsEmptyScopes()
+    {
+        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
+        var task = TaskFor(realTarget: false, authorized: false) with { AllowedScopes = Array.Empty<string>() };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            runner.RunAsync(task, new NoOpAgent()));
+    }
+
+    [Fact]
     public async Task RunnerBlocksUnauthorizedRealTarget()
     {
         var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
