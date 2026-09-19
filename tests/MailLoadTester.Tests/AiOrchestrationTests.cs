@@ -174,7 +174,7 @@ public sealed class AiOrchestrationTests
             context, initial, result, replanOrdinal: 1, CancellationToken.None);
 
         var action = Assert.Single(replanned!);
-        Assert.Equal(5, action.MaxMessages);
+        Assert.Equal(10, action.MaxMessages);
         Assert.Equal(2, action.MaxConcurrency);
         Assert.Equal("smtp.example.test", Assert.Single(action.Targets));
     }
