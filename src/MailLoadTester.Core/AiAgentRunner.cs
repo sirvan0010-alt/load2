@@ -143,9 +143,34 @@ public sealed class AiAgentRunner
         if (task.Commit.Length != 40 || !task.Commit.All(Uri.IsHexDigit))
             throw new ArgumentException("Task commit must be a 40-character SHA-1.", nameof(task));
         if (string.IsNullOrWhiteSpace(task.WorkspacePath)) throw new ArgumentException("WorkspacePath is required.", nameof(task));
+        ValidateScopes(task.AllowedScopes);
+        if (task.AcceptanceCriteria is null || task.AcceptanceCriteria.Count == 0)
+            throw new ArgumentException("At least one acceptance criterion is required.", nameof(task));
         if (task.MaxIterations is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(task), "MaxIterations must be between 1 and 20.");
         if (task.TimeBudget < TimeSpan.FromSeconds(1) || task.TimeBudget > TimeSpan.FromMinutes(30))
             throw new ArgumentOutOfRangeException(nameof(task), "TimeBudget must be between 1 second and 30 minutes.");
+    }
+
+    private static void ValidateScopes(IReadOnlyList<string> scopes)
+    {
+        if (scopes is null || scopes.Count == 0)
+            throw new ArgumentException("At least one allowed scope is required.", nameof(scopes));
+
+        foreach (var scope in scopes)
+        {
+            if (string.IsNullOrWhiteSpace(scope))
+                throw new ArgumentException("Allowed scopes cannot contain empty values.", nameof(scopes));
+
+            var normalized = scope.Replace('\\', '/').Trim();
+            if (Path.IsPathRooted(scope) ||
+                normalized == ".." ||
+                normalized.StartsWith("../", StringComparison.Ordinal) ||
+                normalized.Contains("/../", StringComparison.Ordinal) ||
+                normalized.EndsWith("/..", StringComparison.Ordinal))
+            {
+                throw new ArgumentException($"Allowed scope escapes the repository/workspace boundary: {scope}", nameof(scopes));
+            }
+        }
     }
 
     private static AiAgentExecutionResult Blocked(string reason) => new(
