@@ -61,9 +61,9 @@ See `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` for the authorita
 | GUI summary binding | POST-BASELINE | use `RunObservability.FromReport` |
 | live NET-AUDIT-001 | POST-BASELINE | authorized endpoints/fixtures only |
 | AI Supervisor / specialist routing | IMPLEMENTED PHASE-1 | `AiSupervisor` + `IAgentRegistry`; authorization only, no direct SMTP send |
-| bounded AI Plan/Execute/Replan | PARTIAL PHASE-1 | `ExecutionPlan` validation implemented; model-backed planning/replan not yet connected |
-| pre-action AI policy/authorization guard | POST-BASELINE | preserve `--unauthorized`, limits, cancellation and existing pacing |
-| structured AI evidence envelope | POST-BASELINE | defer until planner/executor integration; prefer existing result/report projections |
+| bounded AI Plan/Execute/Replan | IMPLEMENTED PHASE-2B | deterministic planner + bounded replan contract; every replan is re-authorized; model-backed planner remains future work |
+| pre-action AI policy/authorization guard | IMPLEMENTED PHASE-1 | `AiActionGuard` preserves `--unauthorized`, target scope, hard limits and cancellation |
+| structured AI evidence envelope | POST-BASELINE | replan consumes existing `MailTestResult`; no parallel telemetry envelope introduced |
 
 ## 3. External audit
 
