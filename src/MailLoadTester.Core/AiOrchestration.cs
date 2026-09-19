@@ -280,7 +280,7 @@ public sealed class MailLoadAgentRegistry : IAgentRegistry
         _agents = map;
     }
 
-    public IReadOnlyCollection<IMailLoadAgent> Agents => _agents.Values;
+    public IReadOnlyCollection<IMailLoadAgent> Agents => _agents.Values.ToArray();
 
     public IMailLoadAgent GetRequired(string id)
     {
