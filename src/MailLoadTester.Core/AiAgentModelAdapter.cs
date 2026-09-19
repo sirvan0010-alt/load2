@@ -47,6 +47,10 @@ public sealed class ModelBackedAiAgent : IAiAgent
         cancellationToken.ThrowIfCancellationRequested();
 
         var finding = new AiAgentFinding(response.Output, Array.Empty<string>(), AgentEvidenceLevel.SourceDocumented);
+
+        // A model response is evidence of what the model produced, not proof that
+        // CI, cancellation, hard limits, authorization or secret handling passed.
+        // Those gates belong to concrete execution steps and the independent verifier.
         return new AiAgentExecutionResult(
             AgentRunStatus.NeedsEvidence,
             new[] { finding },
@@ -55,9 +59,9 @@ public sealed class ModelBackedAiAgent : IAiAgent
             Array.Empty<string>(),
             CiRequired: true,
             AuthorizationPassed: context.Task.Authorized || !context.Task.RealTargetRequired,
-            CancellationPassed: true,
-            HardLimitsPassed: true,
-            SecretsPassed: true,
+            CancellationPassed: false,
+            HardLimitsPassed: false,
+            SecretsPassed: false,
             Handoff: "Model output requires independent verification before acceptance.");
     }
 
