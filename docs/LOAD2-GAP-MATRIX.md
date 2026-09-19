@@ -60,10 +60,10 @@ See `docs/IMPLEMENTATION-BACKLOG.md` and `docs/A8-BASELINE.md` for the authorita
 | failure injection | POST-BASELINE | controlled/lab scenarios only |
 | GUI summary binding | POST-BASELINE | use `RunObservability.FromReport` |
 | live NET-AUDIT-001 | POST-BASELINE | authorized endpoints/fixtures only |
-| AI Supervisor / specialist routing | POST-BASELINE | design added; implementation must wrap existing engine |
-| bounded AI Plan/Execute/Replan | POST-BASELINE | design added; no second execution pipeline |
+| AI Supervisor / specialist routing | IMPLEMENTED PHASE-1 | `AiSupervisor` + `IAgentRegistry`; authorization only, no direct SMTP send |
+| bounded AI Plan/Execute/Replan | PARTIAL PHASE-1 | `ExecutionPlan` validation implemented; model-backed planning/replan not yet connected |
 | pre-action AI policy/authorization guard | POST-BASELINE | preserve `--unauthorized`, limits, cancellation and existing pacing |
-| structured AI evidence envelope | POST-BASELINE | project into existing RunReport/RunObservability where possible |
+| structured AI evidence envelope | POST-BASELINE | defer until planner/executor integration; prefer existing result/report projections |
 
 ## 3. External audit
 
