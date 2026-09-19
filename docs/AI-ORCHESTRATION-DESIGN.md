@@ -1,6 +1,6 @@
 # load2 — AI orchestration extension design
 
-**Status:** PHASE-1 IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
+**Status:** PHASE-2A IMPLEMENTED — bounded contracts, registry, action guard and supervisor authorization are implemented in `src/MailLoadTester.Core/AiOrchestration.cs`; the AI model/planner integration remains a later phase.  
 **Authority:** source + tests on `main`.
 
 ## Goal
@@ -121,7 +121,7 @@ Before adding an evidence type, project existing `MailTestResult` / `RunReport` 
 2. define/reuse action contracts — COMPLETE;
 3. implement guard — COMPLETE;
 4. implement specialist registry — COMPLETE;
-5. bounded planner integration — NEXT;
+5. bounded configured planner + coordinator — COMPLETE;
 6. connect model-backed supervisor planning — NEXT;
 7. add replay/checkpoint only after deterministic execution works;
 8. add focused tests and CI verification;
@@ -134,3 +134,8 @@ Before adding an evidence type, project existing `MailTestResult` / `RunReport` 
 - no bypass of authorization, pacing, concurrency or cancellation;
 - no second SMTP transport implementation;
 - no hardcoded credentials.
+
+
+### Phase 2A implementation
+
+The repository now contains `ConfiguredExecutionPlanner` and `AiExecutionCoordinator`. `ConfiguredExecutionPlanner` is deliberately deterministic: it derives its single bounded action from the already configured `MailTestOptions`. The coordinator performs planning followed by the existing authorization guard. It still does not execute SMTP operations; `SmtpTestRunner` remains the sole execution engine.
