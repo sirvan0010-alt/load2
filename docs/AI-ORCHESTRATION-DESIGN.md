@@ -157,3 +157,7 @@ The planner itself does **not** authorize or execute the plan. The required path
 `model/provider → StructuredAiExecutionPlanner → ExecutionPlan.Validate → AiSupervisor → AiActionGuard → existing execution engine`
 
 No model provider is hardcoded yet. Provider credentials and network transport will be introduced only behind the provider interface and configuration boundary.
+
+### Phase 2C execution bridge
+
+`AiLoadTestExecutor` is now the narrow execution boundary for AI-authorized load-test actions. It accepts only `LoadTest` actions, re-checks the configured message/concurrency bounds, re-applies `AuthorizationGate` immediately before network execution, and delegates to the existing `SmtpTestRunner`. No AI code calls MailKit directly and no second pacing, retry, queue, or SMTP transport was introduced.
