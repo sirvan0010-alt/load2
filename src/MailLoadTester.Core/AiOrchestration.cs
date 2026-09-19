@@ -62,6 +62,78 @@ public interface IExecutionPlanner
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Deterministic planner used as the safe Phase-2 bridge before a model-backed
+/// planner is introduced. It creates one bounded action from the already validated
+/// MailTestOptions and never expands the configured target/message/concurrency scope.
+/// </summary>
+public sealed class ConfiguredExecutionPlanner : IExecutionPlanner
+{
+    private readonly string _agentId;
+
+    public ConfiguredExecutionPlanner(string agentId = "LOAD_ENGINE_AGENT")
+    {
+        if (string.IsNullOrWhiteSpace(agentId))
+            throw new ArgumentException("AgentId nesmí být prázdné.", nameof(agentId));
+        _agentId = agentId;
+    }
+
+    public ValueTask<ExecutionPlan> CreatePlanAsync(
+        AiTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var targets = context.Options.DirectMxDelivery
+            ? context.Options.Recipients
+                .Select(r => r[(r.LastIndexOf('@') + 1)..].TrimEnd('.'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : new[] { context.Options.SmtpHost };
+
+        var action = new AiAction(
+            ActionId: Guid.NewGuid().ToString("N"),
+            Kind: AiActionKind.LoadTest,
+            AgentId: _agentId,
+            Targets: targets,
+            MaxMessages: context.Options.MessageCount,
+            MaxConcurrency: context.Options.MaxConcurrency,
+            MaxDurationSeconds: context.Options.DurationSeconds);
+
+        return ValueTask.FromResult(new ExecutionPlan(new[] { action }));
+    }
+}
+
+/// <summary>
+/// Phase-2 orchestration boundary. Planning and authorization are separate from
+/// actual execution so the existing SmtpTestRunner remains the sole SMTP executor.
+/// </summary>
+public sealed class AiExecutionCoordinator
+{
+    private readonly IExecutionPlanner _planner;
+    private readonly AiSupervisor _supervisor;
+
+    public AiExecutionCoordinator(IExecutionPlanner planner, AiSupervisor supervisor)
+    {
+        _planner = planner ?? throw new ArgumentNullException(nameof(planner));
+        _supervisor = supervisor ?? throw new ArgumentNullException(nameof(supervisor));
+    }
+
+    public async ValueTask<IReadOnlyList<AiAction>> PrepareAsync(
+        AiTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var plan = await _planner.CreatePlanAsync(context, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await _supervisor.AuthorizePlanAsync(plan, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+}
+
 public interface IAiActionGuard
 {
     ValueTask<AiActionDecision> ValidateAsync(
