@@ -20,7 +20,7 @@ public sealed class AiAgentRuntimeTests
     [Fact]
     public async Task RunnerRejectsEmptyScopes()
     {
-        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace());
+        var runner = new AiAgentRunner(new AllowAuthorization(), new AcceptVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
         var task = TaskFor(realTarget: false, authorized: false) with { AllowedScopes = Array.Empty<string>() };
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
