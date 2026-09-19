@@ -54,6 +54,10 @@ public sealed class AiAgentRuntimeTests
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
         Assert.NotNull(adapter.Request);
         Assert.Contains(task.TaskId, adapter.Request!.Prompt, StringComparison.Ordinal);
+        Assert.True(result.AuthorizationPassed);
+        Assert.False(result.CancellationPassed);
+        Assert.False(result.HardLimitsPassed);
+        Assert.False(result.SecretsPassed);
     }
 
     private static AiAgentTask TaskFor(bool realTarget, bool authorized) => new("TEST-AI-001", "TEST_AGENT", "sirvan0010-alt/load2",
