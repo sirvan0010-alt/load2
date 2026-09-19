@@ -112,12 +112,23 @@ public sealed class ConfiguredExecutionPlanner : IExecutionPlanner
 public sealed class AiExecutionCoordinator
 {
     private readonly IExecutionPlanner _planner;
+    private readonly IAiReplanner _replanner;
     private readonly AiSupervisor _supervisor;
+    private readonly int _maxReplans;
 
-    public AiExecutionCoordinator(IExecutionPlanner planner, AiSupervisor supervisor)
+    public AiExecutionCoordinator(
+        IExecutionPlanner planner,
+        AiSupervisor supervisor,
+        IAiReplanner? replanner = null,
+        int maxReplans = 2)
     {
         _planner = planner ?? throw new ArgumentNullException(nameof(planner));
         _supervisor = supervisor ?? throw new ArgumentNullException(nameof(supervisor));
+        _replanner = replanner ?? new ConservativeAiReplanner();
+
+        if (maxReplans is < 0 or > 3)
+            throw new ArgumentOutOfRangeException(nameof(maxReplans));
+        _maxReplans = maxReplans;
     }
 
     public async ValueTask<IReadOnlyList<AiAction>> PrepareAsync(
@@ -131,6 +142,35 @@ public sealed class AiExecutionCoordinator
 
         return await _supervisor.AuthorizePlanAsync(plan, context, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Creates and re-authorizes one bounded follow-up plan from a completed run.
+    /// The method does not execute SMTP and never bypasses the supervisor guard.
+    /// </summary>
+    public async ValueTask<IReadOnlyList<AiAction>?> ReplanAsync(
+        AiTaskContext context,
+        IReadOnlyList<AiAction> previousActions,
+        MailTestResult result,
+        int replanOrdinal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(previousActions);
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (replanOrdinal < 1 || replanOrdinal > _maxReplans)
+            return null;
+
+        var plan = await _replanner.CreateReplanAsync(
+            new AiReplanContext(context, previousActions, result, replanOrdinal),
+            cancellationToken).ConfigureAwait(false);
+
+        if (plan is null)
+            return null;
+
+        return await _supervisor.AuthorizePlanAsync(
+            plan, context, cancellationToken).ConfigureAwait(false);
     }
 }
 
