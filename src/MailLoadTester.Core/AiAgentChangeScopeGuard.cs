@@ -28,16 +28,12 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
         ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
         ArgumentNullException.ThrowIfNull(allowedScopes);
 
-        var output = await _git.ExecuteAsync(
+        var status = await _git.ExecuteAsync(
             workspacePath,
-            new[] { "diff", "--name-only", "--diff-filter=ACDMRTUXB", "HEAD" },
-            cancellationToken);
+            new[] { "status", "--porcelain=v1", "--untracked-files=all" },
+            cancellationToken).ConfigureAwait(false);
 
-        var files = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(Normalize)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
+        var files = ParseChangedFiles(status);
         var scopes = allowedScopes
             .Where(static s => !string.IsNullOrWhiteSpace(s))
             .Select(Normalize)
@@ -49,6 +45,32 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
             .ToArray();
 
         return new AiAgentChangeScopeResult(violations.Length == 0, files, violations);
+    }
+
+    private static IReadOnlyList<string> ParseChangedFiles(string status)
+    {
+        var files = new List<string>();
+
+        foreach (var line in status.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length < 3)
+                continue;
+
+            var path = line[2..].Trim();
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+
+            var renameSeparator = path.IndexOf(" -> ", StringComparison.Ordinal);
+            if (renameSeparator >= 0)
+                path = path[(renameSeparator + 4)..];
+
+            files.Add(Normalize(path));
+        }
+
+        return files
+            .Where(static file => file.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string Normalize(string value) =>
