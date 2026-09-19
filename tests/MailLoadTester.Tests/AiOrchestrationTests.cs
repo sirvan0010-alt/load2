@@ -112,5 +112,35 @@ public sealed class AiOrchestrationTests
             async () => await supervisor.AuthorizePlanAsync(plan, context, cts.Token));
     }
 
+
+    [Fact]
+    public async Task ConfiguredPlanner_Stays_Within_Configured_Bounds()
+    {
+        var options = Options(messageCount: 7, maxConcurrency: 2);
+        var context = new AiTaskContext(options);
+        var plan = await new ConfiguredExecutionPlanner().CreatePlanAsync(context, CancellationToken.None);
+
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal(7, action.MaxMessages);
+        Assert.Equal(2, action.MaxConcurrency);
+        Assert.Equal("smtp.example.test", Assert.Single(action.Targets));
+        Assert.Equal("LOAD_ENGINE_AGENT", action.AgentId);
+    }
+
+    [Fact]
+    public async Task Coordinator_Plans_Then_Authorizes()
+    {
+        var options = Options();
+        var context = new AiTaskContext(options, new HashSet<string> { "smtp.example.test" });
+        var registry = new MailLoadAgentRegistry(new[] { new StubAgent("LOAD_ENGINE_AGENT") });
+        var coordinator = new AiExecutionCoordinator(
+            new ConfiguredExecutionPlanner(),
+            new AiSupervisor(registry, new AiActionGuard()));
+
+        var actions = await coordinator.PrepareAsync(context, CancellationToken.None);
+
+        Assert.Single(actions);
+    }
+
     private sealed record StubAgent(string Id) : IMailLoadAgent;
 }
