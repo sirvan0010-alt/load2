@@ -134,6 +134,72 @@ public sealed class AiExecutionCoordinator
     }
 }
 
+
+/// <summary>
+/// Input for a bounded post-run replan. The replanner receives the existing result
+/// and the previously authorized actions; it cannot widen the original scope.
+/// </summary>
+public sealed record AiReplanContext(
+    AiTaskContext Task,
+    IReadOnlyList<AiAction> PreviousActions,
+    MailTestResult Result,
+    int ReplanOrdinal);
+
+public interface IAiReplanner
+{
+    ValueTask<ExecutionPlan?> CreateReplanAsync(
+        AiReplanContext context,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Conservative deterministic replan policy. It only reduces concurrency when the
+/// previous run shows throttling, timeouts, SMTP 4xx/5xx failures, or a circuit break.
+/// It never increases message count, concurrency, duration, or target scope.
+/// A model-backed replanner can implement the same contract later.
+/// </summary>
+public sealed class ConservativeAiReplanner : IAiReplanner
+{
+    public ValueTask<ExecutionPlan?> CreateReplanAsync(
+        AiReplanContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (context.ReplanOrdinal < 1)
+            throw new ArgumentOutOfRangeException(nameof(context.ReplanOrdinal));
+
+        if (context.PreviousActions.Count == 0)
+            return ValueTask.FromResult<ExecutionPlan?>(null);
+
+        var result = context.Result;
+        var needsBackoff =
+            result.Cancelled ||
+            result.CircuitBreakerOpen ||
+            result.Timeouts > 0 ||
+            result.Smtp4xx > 0 ||
+            result.Smtp5xx > 0 ||
+            result.Failed > 0;
+
+        if (!needsBackoff)
+            return ValueTask.FromResult<ExecutionPlan?>(null);
+
+        var actions = context.PreviousActions.Select(action =>
+        {
+            var reducedConcurrency = Math.Max(1, action.MaxConcurrency / 2);
+            return action with
+            {
+                ActionId = $"{action.ActionId}-replan-{context.ReplanOrdinal}",
+                MaxConcurrency = reducedConcurrency
+            };
+        }).ToArray();
+
+        return ValueTask.FromResult<ExecutionPlan?>(
+            new ExecutionPlan(actions));
+    }
+}
+
 public interface IAiActionGuard
 {
     ValueTask<AiActionDecision> ValidateAsync(
