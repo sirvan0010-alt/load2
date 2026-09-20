@@ -1,0 +1,1 @@
+using System.Runtime.CompilerServices;\n\n[assembly: InternalsVisibleTo("MailLoadTester.Tests")]\n
