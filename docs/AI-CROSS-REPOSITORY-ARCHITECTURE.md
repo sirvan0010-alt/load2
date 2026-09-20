@@ -1,12 +1,12 @@
 # Cross-repository AI architecture
 
-**Status:** foundation + autonomous workspace gates implemented on main.
+**Status:** foundation + autonomous workspace gates + provider-neutral model adapter implemented on main.
 
 The goal is a shared autonomous engineering layer that can coordinate work across multiple repositories without giving the model a second unrestricted execution engine.
 
 ## Flow
 
-Task -> CrossRepositoryAiSupervisor -> repository registry/source-of-truth -> bounded repository actions -> repository-specific agent -> inspect/plan/implement/test/verify -> evidence/handoff -> replan
+Task -> CrossRepositoryAiSupervisor -> repository registry/source-of-truth -> bounded repository actions -> repository-specific agent -> model proposal/evidence -> inspect/plan/implement/test/verify -> evidence/handoff -> replan
 
 ## Autonomous task contract
 
@@ -29,6 +29,19 @@ The gate uses `ProcessStartInfo.ArgumentList`; it does not invoke a shell. Cance
 ## Change-scope protection
 
 `GitChangeScopeGuard` inspects Git porcelain status and rejects changes outside the task's explicitly allowed scopes. Renames are checked using the new path.
+
+## Model adapter boundary
+
+`IAiAgentModelAdapter` is provider-neutral. `EnvironmentAiAgentModelAdapter` can call an HTTP(S) endpoint selected through environment variables:
+
+- `LOAD2_AI_AGENT_ENDPOINT`
+- `LOAD2_AI_AGENT_API_KEY` (optional Bearer token)
+
+The outbound envelope contains only task metadata required for planning: task ID, role, repository, immutable commit, allowed scopes, acceptance criteria, iteration and deadline. SMTP credentials, message content, attachments and other secrets are not part of the envelope.
+
+The model response is converted to `AiAgentModelResponse` and treated as **unverified evidence/proposal only**. `ModelBackedAiAgent` never executes model-supplied shell, GitHub, SMTP, or other arbitrary tool commands. The existing runner still requires scope validation and independent verification before a result can become `Ready`.
+
+If the endpoint is not configured, the model-backed path is not available; normal non-AI operation is unaffected.
 
 ## Execution boundary
 
