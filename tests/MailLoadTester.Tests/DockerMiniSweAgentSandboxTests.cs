@@ -22,10 +22,10 @@ public sealed class DockerMiniSweAgentSandboxTests
         AssertContainsPair(args, "--network", "none");
         Assert.Contains(args, "--read-only");
         AssertContainsPair(args, "--cap-drop", "ALL");
-        Assert.ContainsPair(args, "--security-opt", "no-new-privileges");
-        Assert.ContainsPair(args, "--pids-limit", "32");
-        Assert.ContainsPair(args, "--memory", "134217728b");
-        Assert.ContainsPair(args, "--cpus", "1");
+        AssertContainsPair(args, "--security-opt", "no-new-privileges");
+        AssertContainsPair(args, "--pids-limit", "32");
+        AssertContainsPair(args, "--memory", "134217728b");
+        AssertContainsPair(args, "--cpus", "1");
         Assert.Contains(args, "/tmp:rw,noexec,nosuid,size=256m");
     }
 
