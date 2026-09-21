@@ -50,6 +50,24 @@ public sealed record AiAgentExecutionResult(
     bool SecretsPassed,
     string Handoff);
 
+public sealed record AiAgentVerificationResult(
+    bool Accepted,
+    bool CiPassed,
+    bool AuthorizationPassed,
+    bool CancellationPassed,
+    bool HardLimitsPassed,
+    bool SecretsPassed,
+    IReadOnlyList<string> Evidence,
+    string Handoff)
+{
+    public bool RequiredGatesPassed(AiAgentExecutionResult result) =>
+        (!result.CiRequired || CiPassed) &&
+        AuthorizationPassed &&
+        CancellationPassed &&
+        HardLimitsPassed &&
+        SecretsPassed;
+}
+
 public sealed record AiAgentContext(
     AiAgentTask Task,
     CancellationToken CancellationToken,
@@ -73,7 +91,7 @@ public interface IAiAgentAuthorizationPolicy
 
 public interface IAiAgentResultVerifier
 {
-    Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken);
+    Task<AiAgentVerificationResult> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken);
 }
 
 public interface IAiAgentWorkspaceIntegrityGate
@@ -130,14 +148,19 @@ public sealed class AiAgentRunner
             if (!scope.IsAllowed)
                 return last with { Status = AgentRunStatus.Blocked, ChangedFiles = scope.ChangedFiles, Handoff = $"Agent changed files outside allowed scopes: {string.Join(", ", scope.Violations)}" };
 
-            if (await _verifier.VerifyAsync(task, last, budgetCts.Token).ConfigureAwait(false))
-                return last with { Status = AgentRunStatus.Ready };
+            var verification = await _verifier.VerifyAsync(task, last, budgetCts.Token).ConfigureAwait(false);
+            if (verification.Accepted && verification.RequiredGatesPassed(last))
+                return last with
+                {
+                    Status = AgentRunStatus.Ready,
+                    Handoff = verification.Handoff
+                };
         }
 
         return last is null ? Blocked("Agent produced no result.") : last with
         {
             Status = AgentRunStatus.NeedsEvidence,
-            Handoff = "Independent verification did not accept the result within the configured iteration budget."
+            Handoff = "Independent verification did not establish every required execution gate within the configured iteration budget."
         };
     }
 
