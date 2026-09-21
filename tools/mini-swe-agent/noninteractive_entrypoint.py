@@ -68,9 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     if isinstance(result, dict) and result.get("submission"):
         print(result["submission"])
     print(f"exit_status={exit_status}")
-    if exit_status in ("Submitted", "LimitsExceeded", None):
+    if exit_status == "Submitted":
         print(SMOKE_OK_MARKER)
         return 0
+    if exit_status == "LimitsExceeded":
+        print("mini-swe-agent stopped because an execution limit was reached", file=sys.stderr)
+        return 2
     print(f"unexpected exit_status={exit_status}", file=sys.stderr)
     return 1
 
