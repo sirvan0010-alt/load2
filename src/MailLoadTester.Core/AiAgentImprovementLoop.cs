@@ -113,9 +113,6 @@ public sealed class AiAgentImprovementLoop
                 changed |= result.Findings.Count > 0;
             }
 
-            // This orchestration layer does not itself prove CI, authorization,
-            // cancellation, hard limits, or secret handling. Those gates must be
-            // established by concrete steps and independently checked by the verifier.
             var execution = new AiAgentExecutionResult(
                 AgentRunStatus.NeedsEvidence,
                 findings.Select(f => new AiAgentFinding(f, Array.Empty<string>(), AgentEvidenceLevel.SourceDocumented)).ToArray(),
@@ -129,14 +126,15 @@ public sealed class AiAgentImprovementLoop
                 SecretsPassed: false,
                 "Autonomous loop completed phase execution; independent verification must establish all execution gates.");
 
-            if (await _verifier.VerifyAsync(task, execution, token).ConfigureAwait(false))
+            var verification = await _verifier.VerifyAsync(task, execution, token).ConfigureAwait(false);
+            if (verification.Accepted && verification.RequiredGatesPassed(execution))
             {
-                phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, "Independent verifier accepted the execution result."));
+                phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, "Independent verifier accepted the execution result and established every required gate."));
                 phases.Add(new AgentPhaseRecord(AgentPhase.Completed, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, true, "Bounded autonomous improvement completed."));
                 return new AiAgentImprovementResult(AgentRunStatus.Ready, phases.AsReadOnly(), findings.AsReadOnly(), iteration, "READY_FOR_HUMAN_MERGE_REVIEW");
             }
 
-            phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false, "Independent verifier rejected the execution result; repair iteration required."));
+            phases.Add(new AgentPhaseRecord(AgentPhase.Verification, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false, "Independent verifier did not establish every required execution gate; repair iteration required."));
             if (!changed)
                 break;
         }
