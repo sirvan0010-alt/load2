@@ -37,9 +37,9 @@ public sealed class AiAgentRuntimeTests
     }
 
     [Fact]
-    public async Task RunnerRequiresIndependentVerification()
+    public async Task RunnerRequiresAllVerificationGates()
     {
-        var runner = new AiAgentRunner(new AllowAuthorization(), new RejectVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
+        var runner = new AiAgentRunner(new AllowAuthorization(), new PartialVerifier(), new VerifiedWorkspace(), new AllowedScopeGuard());
         var result = await runner.RunAsync(TaskFor(realTarget: false, authorized: false), new NoOpAgent());
         Assert.Equal(AgentRunStatus.NeedsEvidence, result.Status);
     }
@@ -78,10 +78,19 @@ public sealed class AiAgentRuntimeTests
 
     private sealed class AllowAuthorization : IAiAgentAuthorizationPolicy
     { public Task<bool> AuthorizeAsync(AiAgentTask task, CancellationToken cancellationToken) => Task.FromResult(true); }
+
     private sealed class AcceptVerifier : IAiAgentResultVerifier
-    { public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) => Task.FromResult(true); }
-    private sealed class RejectVerifier : IAiAgentResultVerifier
-    { public Task<bool> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) => Task.FromResult(false); }
+    {
+        public Task<AiAgentVerificationResult> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) =>
+            Task.FromResult(new AiAgentVerificationResult(true, true, true, true, true, true, new[] { "test verifier evidence" }, "verified"));
+    }
+
+    private sealed class PartialVerifier : IAiAgentResultVerifier
+    {
+        public Task<AiAgentVerificationResult> VerifyAsync(AiAgentTask task, AiAgentExecutionResult result, CancellationToken cancellationToken) =>
+            Task.FromResult(new AiAgentVerificationResult(true, true, true, false, true, true, new[] { "partial evidence" }, "not enough"));
+    }
+
     private sealed class VerifiedWorkspace : IAiAgentWorkspaceIntegrityGate
     { public Task<WorkspaceIntegrityResult> VerifyAsync(string workspacePath, string expectedCommit, CancellationToken cancellationToken) => Task.FromResult(new WorkspaceIntegrityResult(WorkspaceIntegrityStatus.Verified, workspacePath, workspacePath, expectedCommit, expectedCommit, true, true, "verified")); }
 
