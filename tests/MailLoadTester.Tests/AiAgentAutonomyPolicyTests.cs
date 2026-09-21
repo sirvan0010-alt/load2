@@ -17,6 +17,38 @@ public sealed class AiAgentAutonomyPolicyTests
     }
 
     [Fact]
+    public void RejectsTaskIterationLimitAbovePolicy()
+    {
+        var policy = new AiAgentAutonomyPolicy(2, TimeSpan.FromMinutes(1));
+        var task = TaskFor(false, false) with { MaxIterations = 3 };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => policy.Validate(task));
+
+        Assert.Contains("MaxIterations", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RejectsTaskTimeBudgetAbovePolicy()
+    {
+        var policy = new AiAgentAutonomyPolicy(5, TimeSpan.FromSeconds(10));
+        var task = TaskFor(false, false) with { TimeBudget = TimeSpan.FromSeconds(11) };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => policy.Validate(task));
+
+        Assert.Contains("TimeBudget", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RejectsDisabledIndependentVerification()
+    {
+        var policy = new AiAgentAutonomyPolicy(5, TimeSpan.FromMinutes(1), RequireIndependentVerification: false);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => policy.Validate(TaskFor(false, false)));
+
+        Assert.Contains("Independent verification", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RejectsAutomaticMergeAndRelease()
     {
         var task = TaskFor(false, false);
@@ -29,7 +61,7 @@ public sealed class AiAgentAutonomyPolicyTests
     }
 
     [Fact]
-    public void AcceptsAuthorizedNonTargetTask()
+    public void AcceptsAuthorizedNonTargetTaskWithinLimits()
     {
         var policy = new AiAgentAutonomyPolicy(5, TimeSpan.FromMinutes(1));
         policy.Validate(TaskFor(false, false));
