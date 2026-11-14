@@ -90,6 +90,7 @@ public sealed class RunReportTests
         Assert.DoesNotContain("cert-secret", json, StringComparison.Ordinal);
         Assert.Contains("user@example", json);
         Assert.Contains("smtp.example", json);
+        Assert.Contains("latencyHistogram", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
