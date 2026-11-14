@@ -48,7 +48,8 @@ public sealed class RunReportTests
         P95LatencyMs: 30,
         P99LatencyMs: 35,
         ThroughputPerSec: 5,
-        RunId: runId);
+        RunId: runId,
+        LatencyHistogram: LatencyHistogram.FromSamples(new[] { 12d, 20d }));
 
     [Fact]
     public void ToJson_IsDeterministic_ForSameReport()
