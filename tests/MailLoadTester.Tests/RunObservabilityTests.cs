@@ -89,6 +89,9 @@ public class RunObservabilityTests
         Assert.Contains("latency avg/p50/p95/p99=", line);
         Assert.Contains("wait prep/adaptive/pool/pace=", line);
         Assert.Contains("queue depth=", line);
+        Assert.Contains("activeTput=", line);
+        Assert.Contains("poolConn=", line);
+        Assert.Contains("circuit=", line);
     }
 
     static MailTestOptions MinimalOptions() => new(
