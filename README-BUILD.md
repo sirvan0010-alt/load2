@@ -1,4 +1,4 @@
-# MailLoadTester 2.9.16 — Maximum Brutal Edition (GUI)
+# MailLoadTester 2.9.39 — Maximum Brutal Edition (GUI)
 
 ## Co je v balíčku
 - **MailLoadTester.Core** — logika SMTP, pool, validace, stavový automat, circuit breaker, adaptive concurrency, MX resolver, dashboard server, bandwidth limiter, webhook, session logger
@@ -31,7 +31,7 @@ Vyžaduje [Inno Setup](https://jrsoftware.org/isdl.php). Výsledek: `installer\O
 8. Klikni **▶ START**
 9. Sleduj log, workery a checklist v dolní části okna
 
-## Všechny funkce v 2.9.16
+## Přehled funkcí
 
 ### Základní
 - Windows Forms GUI s tooltipy na každém poli
