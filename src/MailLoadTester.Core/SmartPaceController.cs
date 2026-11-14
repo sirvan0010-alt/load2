@@ -119,6 +119,11 @@ public sealed class SmartPaceController
         }
     }
 
+    /// <summary>
+    /// Reserves a global SEND start slot. The gate serializes only timestamp
+    /// reservation, never the SMTP network transfer itself; otherwise one slow
+    /// DATA operation would block every worker and defeat MaxConcurrency.
+    /// </summary>
     public async ValueTask<SendPaceLease> AcquireSendSlotAsync(CancellationToken ct)
     {
         await _sendGate.WaitAsync(ct).ConfigureAwait(false);
@@ -147,19 +152,19 @@ public sealed class SmartPaceController
                         intervalMs = (int)Math.Max(0, intervalMs * factor);
                     }
 
+                    var now = Stopwatch.GetTimestamp();
                     if (intervalMs <= 0 || _lastActualSendTicks == 0)
                     {
-                        _lastActualSendTicks = Stopwatch.GetTimestamp();
-                        return new SendPaceLease(this);
+                        _lastActualSendTicks = now;
+                        return new SendPaceLease();
                     }
 
-                    var now = Stopwatch.GetTimestamp();
                     var intervalTicks = (long)(intervalMs * (double)_freq / 1000.0);
                     var earliest = _lastActualSendTicks + intervalTicks;
                     if (now >= earliest)
                     {
                         _lastActualSendTicks = now;
-                        return new SendPaceLease(this);
+                        return new SendPaceLease();
                     }
 
                     var waitTicks = earliest - now;
@@ -168,30 +173,23 @@ public sealed class SmartPaceController
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
         }
-        catch
+        finally
         {
+            // Release immediately after reserving a start slot. The returned lease
+            // deliberately does not own this gate, so concurrent SMTP transfers overlap.
             _sendGate.Release();
-            throw;
         }
     }
 
+    /// <summary>
+    /// Compatibility lease for the call site's await-using scope. It represents
+    /// a reserved start slot, not ownership of the global pacing semaphore.
+    /// </summary>
     public sealed class SendPaceLease : IAsyncDisposable, IDisposable
     {
-        private SmartPaceController? _owner;
-
-        internal SendPaceLease(SmartPaceController owner) => _owner = owner;
-
-        public ValueTask DisposeAsync()
-        {
-            Dispose();
-            return ValueTask.CompletedTask;
-        }
-
-        public void Dispose()
-        {
-            var owner = Interlocked.Exchange(ref _owner, null);
-            owner?._sendGate.Release();
-        }
+        internal SendPaceLease() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void Dispose() { }
     }
 
     private TimeSpan ComputeAbsoluteBlock(string recipient, string providerKey)
