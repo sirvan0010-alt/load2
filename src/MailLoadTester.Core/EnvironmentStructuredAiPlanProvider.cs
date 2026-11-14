@@ -79,3 +79,32 @@ public sealed class EnvironmentStructuredAiPlanProvider : IStructuredAiPlanProvi
             throw new InvalidOperationException("AI plan endpoint returned an empty response.");
 
         return body;
+
+    private static IReadOnlyList<string> GetTargets(AiTaskContext context)
+    {
+        if (!context.Options.DirectMxDelivery)
+            return new[] { context.Options.SmtpHost };
+
+        return context.Options.Recipients
+            .Select(static recipient =>
+            {
+                var separator = recipient.LastIndexOf('@');
+                return separator >= 0
+                    ? recipient[(separator + 1)..].TrimEnd('.')
+                    : string.Empty;
+            })
+            .Where(static target => !string.IsNullOrWhiteSpace(target))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private sealed record AiPlanRequest(
+        string SmtpHost,
+        int Port,
+        bool DirectMxDelivery,
+        int MessageCount,
+        int MaxConcurrency,
+        int DurationSeconds,
+        IReadOnlyList<string> Targets,
+        IReadOnlyList<string> AllowedTargets);
+}
