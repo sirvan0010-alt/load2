@@ -6,7 +6,7 @@ namespace MailLoadTester.Tests;
 public sealed class AiLoadTestExecutorTests
 {
     [Fact]
-    public void Executor_Rejects_Non_Load_Action()
+    public async Task Executor_Rejects_Non_Load_Action()
     {
         var executor = new AiLoadTestExecutor(new SmtpTestRunner());
         var action = new AiAction(
@@ -18,7 +18,7 @@ public sealed class AiLoadTestExecutorTests
             1,
             0);
 
-        Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             executor.ExecuteAsync(
                 action,
                 new AiTaskContext(CreateOptions()),
