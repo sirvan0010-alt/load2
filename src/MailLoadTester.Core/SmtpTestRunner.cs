@@ -948,12 +948,20 @@ public sealed class SmtpTestRunner
                 {
                     for (var i = batchStart; i <= batchEnd; i++)
                     {
+                        queueMetrics.RecordEnqueued();
                         if (!workChannel.Writer.TryWrite(i))
                         {
                             queueMetrics.RecordFullWait();
-                            await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                            try
+                            {
+                                await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                            }
+                            catch
+                            {
+                                queueMetrics.RecordEnqueueAborted();
+                                throw;
+                            }
                         }
-                        queueMetrics.RecordEnqueued();
                     }
                     workChannel.Writer.TryComplete();
                     await Task.WhenAll(workers).ConfigureAwait(false);
