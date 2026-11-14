@@ -192,6 +192,8 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Cancelled);
         Assert.True(result.Sent + result.Failed < result.Requested,
             $"Expected partial results, got Sent={result.Sent}, Failed={result.Failed}, Requested={result.Requested}.");
+        Assert.NotNull(result.QueueMetrics);
+        Assert.Equal(0, result.QueueMetrics!.QueueDepth);
     }
 
     private static MailTestOptions CreateOptions(int port, int messageCount, int maxRetries, int maxConcurrency = 1) => new(
