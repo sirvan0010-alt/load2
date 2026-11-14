@@ -15,7 +15,11 @@ public sealed class CrossRepositoryAiOrchestrationTests
     [Fact]
     public void Registry_Rejects_Path_Traversal_Scope()
     {
-        Assert.Throws<ArgumentException>(() => Descriptor("repo-a", "../outside"));
+        Assert.Throws<ArgumentException>(() =>
+            new MailLoadTester.Core.AiRepositoryRegistry(new[]
+            {
+                Descriptor("repo-a", "../outside")
+            }));
     }
 
     [Fact]
