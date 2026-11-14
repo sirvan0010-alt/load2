@@ -2,6 +2,8 @@ namespace MailLoadTester;
 
 /// <summary>
 /// Thread-safe counters for the existing bounded scenario Channel pipeline.
+/// QueueDepth represents queued plus pending writer backlog; reserving before channel
+/// publication prevents a fast consumer from being counted before its enqueue.
 /// This is instrumentation only; it is not a rate limiter and does not control pacing.
 /// </summary>
 public sealed class ScenarioQueueMetrics
