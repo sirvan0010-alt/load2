@@ -22,6 +22,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check release version synchronization
+        shell: bash
+        run: |
+          version="$(tr -d '\\r\\n' < VERSION)"
+          app_version="$(sed -n 's/.*Current = "\\([^"]*\\)".*/\\1/p' src/MailLoadTester.Core/AppVersion.cs)"
+          build_readme_version="$(sed -n 's/^# MailLoadTester \\([0-9.]*\\).*/\\1/p' README-BUILD.md)"
+          test -n "$version"
+          test "$version" = "$app_version"
+          test "$version" = "$build_readme_version"
+
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
         with:
