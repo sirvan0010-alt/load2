@@ -56,8 +56,7 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
         var files = new List<string>();
 
         foreach (var line in status.Split(
-                     new[] { '', '
-' },
+                     new[] { '\r', '\n' },
                      StringSplitOptions.RemoveEmptyEntries))
         {
             if (line.Length < 3)
