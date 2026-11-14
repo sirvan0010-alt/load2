@@ -1267,7 +1267,7 @@ public sealed partial class MainForm : Form
             chkAuth.Checked = o.UseAuthentication;
             cmbAuthMethod.SelectedItem = o.AuthMethod.ToString();
             txtUser.Text = o.Username;
-            if (!string.IsNullOrEmpty(o.Password)) txtPass.Text = o.Password;
+            txtPass.Text = o.Password ?? string.Empty;
             txtSourceIp.Text = o.SourceIp;
             txtIpv6Prefix.Text = o.Ipv6Prefix;
             numIpv6PrefixLen.Value = Math.Clamp(o.Ipv6PrefixLength, numIpv6PrefixLen.Minimum, numIpv6PrefixLen.Maximum);
@@ -1310,7 +1310,7 @@ public sealed partial class MainForm : Form
             if (numProxyBanMinutes != null) numProxyBanMinutes.Value = Math.Clamp(o.ProxyBanMinutes <= 0 ? 15 : o.ProxyBanMinutes, 1, 1440);
             numProxyPort.Value = Math.Clamp(o.ProxyPort <= 0 ? 1080 : o.ProxyPort, numProxyPort.Minimum, numProxyPort.Maximum);
             txtProxyUser.Text = o.ProxyUsername;
-            if (!string.IsNullOrEmpty(o.ProxyPassword)) txtProxyPass.Text = o.ProxyPassword;
+            txtProxyPass.Text = o.ProxyPassword ?? string.Empty;
             chkJitter.Checked = o.EnableJitter;
             numJitterPercent.Value = Math.Clamp(o.JitterPercent, numJitterPercent.Minimum, numJitterPercent.Maximum);
             chkBurst.Checked = o.EnableBurstMode;
