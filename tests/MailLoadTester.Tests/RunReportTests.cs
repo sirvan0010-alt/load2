@@ -93,6 +93,29 @@ public sealed class RunReportTests
     }
 
     [Fact]
+    public void ToJson_RedactsKnownSecretsFromErrorText()
+    {
+        const string password = "VerySecretSmtpPassword!";
+        var options = SampleOptions(password);
+        var result = SampleResult() with
+        {
+            LastError = $"AUTH failed: {password}; encoded={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password))}"
+        };
+
+        var report = RunReportBuilder.Create(
+            "redacted",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            options,
+            result);
+        var json = RunReportBuilder.ToJson(report);
+
+        Assert.DoesNotContain(password, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password)), json, StringComparison.Ordinal);
+        Assert.Contains("[REDACTED]", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_EmptyRun_StillSerializes()
     {
         var opts = SampleOptions() with { MessageCount = 0, UseAuthentication = false, Username = "", Password = "" };
