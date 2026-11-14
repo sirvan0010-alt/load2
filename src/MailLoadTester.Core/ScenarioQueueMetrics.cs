@@ -24,11 +24,24 @@ public sealed class ScenarioQueueMetrics
     public long Cancelled => Math.Max(0, Volatile.Read(ref _cancelled));
     public long Drained => Math.Max(0, Volatile.Read(ref _drained));
 
+    /// <summary>
+    /// Reserve queue depth before publishing to the channel. A worker can read
+    /// immediately after Write/TryWrite succeeds, so recording after the write
+    /// creates a dequeue-before-enqueue accounting race.
+    /// </summary>
     public void RecordEnqueued()
     {
         Interlocked.Increment(ref _enqueued);
         var depth = Interlocked.Increment(ref _depth);
         UpdatePeak(depth);
+    }
+
+    /// <summary>Rolls back a reservation when the channel write is cancelled or rejected.</summary>
+    public void RecordEnqueueAborted()
+    {
+        Interlocked.Decrement(ref _enqueued);
+        Interlocked.Increment(ref _cancelled);
+        DecrementDepth();
     }
 
     public void RecordFullWait() => Interlocked.Increment(ref _fullWaits);
