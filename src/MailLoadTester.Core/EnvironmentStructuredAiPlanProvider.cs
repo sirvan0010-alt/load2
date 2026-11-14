@@ -99,6 +99,12 @@ public sealed class EnvironmentStructuredAiPlanProvider : IStructuredAiPlanProvi
             .ToArray();
     }
 
+    public void Dispose()
+    {
+        if (_ownsClient)
+            _httpClient.Dispose();
+    }
+
     private sealed record AiPlanRequest(
         string SmtpHost,
         int Port,
