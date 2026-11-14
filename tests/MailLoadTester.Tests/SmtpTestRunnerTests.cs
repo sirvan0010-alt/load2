@@ -115,6 +115,10 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(0, result.Failed);
         Assert.Equal(messageCount, server.MessagesAccepted);
         Assert.Equal(messageCount, server.DataAttempts);
+        Assert.NotNull(result.QueueMetrics);
+        Assert.Equal(0, result.QueueMetrics!.QueueDepth);
+        Assert.Equal(messageCount, result.QueueMetrics.Enqueued);
+        Assert.Equal(messageCount, result.QueueMetrics.Dequeued);
         var minimumExpectedConcurrency = maxConcurrency == 1 ? 1 : 2;
         Assert.InRange(server.MaxConcurrentData, minimumExpectedConcurrency, maxConcurrency);
         _output.WriteLine(
