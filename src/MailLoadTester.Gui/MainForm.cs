@@ -1263,7 +1263,7 @@ public sealed partial class MainForm : Form
             var profile = await ProfileStore.LoadAsync(dlg.FileName);
             var o = profile.Options;
             txtHost.Text = o.SmtpHost;
-            numPort.Value = Math.Clamp(o.SmtpPort, numPort.Minimum, numPort.Maximum);
+            numPort.Value = Math.Clamp(o.Port, numPort.Minimum, numPort.Maximum);
             cmbSecurity.SelectedItem = o.Security.ToString();
             chkIgnoreCert.Checked = o.IgnoreCertificateErrors;
             chkAuth.Checked = o.UseAuthentication;
@@ -1285,7 +1285,7 @@ public sealed partial class MainForm : Form
             txtSubject.Text = o.Subject;
             txtBody.Text = o.Body;
             chkHtmlBody.Checked = o.HtmlBody;
-            chkRandomData.Checked = o.RandomData;
+            chkRandomData.Checked = o.RandomTestData;
             chkBogusData.Checked = o.UseBogusData;
             chkRandomHtml.Checked = o.GenerateRandomHtml;
             chkRandomAttachments.Checked = o.GenerateRandomAttachments;
