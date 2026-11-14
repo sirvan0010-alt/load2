@@ -135,8 +135,6 @@ public sealed partial class MainForm : Form
     private TaskCompletionSource<bool>? _testConnectionCompletion;
     private bool _closeApproved;
     private DateTime _logThrottleWindow = DateTime.MinValue;
-    private int _logThrottleCount;
-    private int _logSuppressed;
     private DateTime _observedThrottle = DateTime.MinValue;
 
     public MainForm()
@@ -1279,8 +1277,8 @@ public sealed partial class MainForm : Form
             txtClientCertPass.Text = o.ClientCertificatePassword;
             txtFrom.Text = o.From;
             txtTo.Text = string.Join(Environment.NewLine, o.Recipients);
-            txtCc.Text = string.Join(",", o.CcRecipients);
-            txtBcc.Text = string.Join(",", o.BccRecipients);
+            txtCc.Text = string.Join(",", o.CcRecipients ?? Array.Empty<string>());
+            txtBcc.Text = string.Join(",", o.BccRecipients ?? Array.Empty<string>());
             txtDisplayName.Text = o.DisplayName;
             txtSubject.Text = o.Subject;
             txtBody.Text = o.Body;
