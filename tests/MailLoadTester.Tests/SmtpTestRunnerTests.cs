@@ -85,6 +85,8 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Smtp4xx >= 1);
         Assert.Equal(2, server.MessagesAccepted);
         Assert.Equal(3, server.DataAttempts);
+        Assert.NotNull(result.LatencyHistogram);
+        Assert.Equal(2, result.LatencyHistogram!.TotalCount);
     }
 
     [Theory]
