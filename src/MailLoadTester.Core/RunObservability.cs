@@ -113,7 +113,9 @@ public static class RunObservability
             $"ok={s.SuccessRatePct:0.0}% tput={s.ThroughputPerSec:0.00}/s " +
             $"latency avg/p50/p95/p99={s.AvgLatencyMs:0.0}/{s.P50LatencyMs:0.0}/{s.P95LatencyMs:0.0}/{s.P99LatencyMs:0.0}ms " +
             $"wait prep/adaptive/pool/pace={s.AvgPrepWaitMs:0.0}/{s.AvgAdaptiveWaitMs:0.0}/{s.AvgPoolWaitMs:0.0}/{s.AvgPaceWaitMs:0.0}ms " +
-            $"smtp={s.AvgSmtpSendMs:0.0}ms retries={s.Retries} 4xx={s.Smtp4xx} 5xx={s.Smtp5xx} to={s.Timeouts}" +
+            $"smtp={s.AvgSmtpSendMs:0.0}ms activeTput={s.ActiveThroughputPerSec:0.00}/s " +
+            $"poolConn={s.PoolConnections} adaptive={s.AdaptiveConcurrency} circuit={(s.CircuitBreakerOpen ? "OPEN" : "closed")} restarts={s.AutoRestartAttempts} " +
+            $"retries={s.Retries} 4xx={s.Smtp4xx} 5xx={s.Smtp5xx} to={s.Timeouts}" +
             q + o + h +
             (s.Cancelled ? " CANCELLED" : "");
     }
