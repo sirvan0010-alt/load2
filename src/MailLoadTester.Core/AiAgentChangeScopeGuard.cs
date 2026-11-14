@@ -84,7 +84,7 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
     }
 
     private static string Normalize(string value) =>
-        value.Trim().Replace('\', '/').Trim('/');
+        value.Trim().Replace('\\', '/').Trim('/');
 
     private static bool IsWithinScope(string file, string scope) =>
         string.Equals(file, scope, StringComparison.Ordinal) ||
