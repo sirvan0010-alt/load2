@@ -50,6 +50,29 @@ public sealed class ScenarioQueueMetricsTests
     }
 
     [Fact]
+    public void EnqueueReservation_PreventsFastConsumerFromDrivingDepthNegative()
+    {
+        var metrics = new ScenarioQueueMetrics();
+
+        metrics.RecordEnqueued();
+        metrics.RecordDequeued();
+
+        var snapshot = metrics.Snapshot();
+        Assert.Equal(0, snapshot.QueueDepth);
+        Assert.Equal(1, snapshot.PeakQueueDepth);
+        Assert.Equal(1, snapshot.Enqueued);
+        Assert.Equal(1, snapshot.Dequeued);
+
+        metrics.RecordEnqueued();
+        metrics.RecordEnqueueAborted();
+
+        snapshot = metrics.Snapshot();
+        Assert.Equal(0, snapshot.QueueDepth);
+        Assert.Equal(1, snapshot.Enqueued);
+        Assert.Equal(1, snapshot.Cancelled);
+    }
+
+    [Fact]
     public async Task ConcurrentProducersAndConsumers_DoNotCorruptDepthOrPeak()
     {
         var metrics = new ScenarioQueueMetrics();
