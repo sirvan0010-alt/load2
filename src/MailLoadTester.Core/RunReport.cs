@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -80,7 +81,15 @@ public static class RunReportBuilder
         if (string.IsNullOrWhiteSpace(runId))
             runId = Guid.NewGuid().ToString("N");
         health ??= result.EndpointHealth ?? Array.Empty<EndpointHealthSnapshot>();
-        var resultWithId = result.RunId == runId ? result : result with { RunId = runId };
+        var resultWithId = result with
+        {
+            RunId = runId,
+            LastError = RedactKnownSecrets(
+                result.LastError,
+                options.Password,
+                options.ProxyPassword,
+                options.ClientCertificatePassword)
+        };
         return new RunReport(
             RunId: runId,
             StartedUtc: startedUtc,
@@ -99,6 +108,21 @@ public static class RunReportBuilder
             .ToArray();
         var normalized = report with { EndpointHealth = health };
         return JsonSerializer.Serialize(normalized, JsonOpts);
+    }
+
+    private static string RedactKnownSecrets(string? text, params string?[] secrets)
+    {
+        if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+        foreach (var secret in secrets.Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal))
+        {
+            text = text.Replace(secret!, "[REDACTED]", StringComparison.Ordinal);
+            var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(secret!));
+            if (!string.IsNullOrEmpty(base64))
+                text = text.Replace(base64, "[REDACTED]", StringComparison.Ordinal);
+        }
+
+        return text;
     }
 
     public static bool JsonContainsSecretMaterial(string json) =>
