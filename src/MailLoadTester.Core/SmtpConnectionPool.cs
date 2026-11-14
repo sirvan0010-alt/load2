@@ -226,8 +226,11 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                 client.Timeout = Math.Max(_options.ConnectTimeoutMs, _options.ReadTimeoutMs);
                 if (_options.IgnoreCertificateErrors)
                     client.ServerCertificateValidationCallback = (_, _, _, _) => true;
-                if (_clientCert != null)
-                    client.ClientCertificates.Add(_clientCert!);
+                if (_clientCert is not null)
+                {
+                    var certificates = client.ClientCertificates ??= new();
+                    certificates.Add(_clientCert);
+                }
 
                 if (_proxyRotator != null)
                 {
