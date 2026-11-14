@@ -1000,9 +1000,7 @@ public sealed partial class MainForm : Form
             AppendLog($"\n=== VÝSLEDEK ===", Color.Cyan);
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
-            AppendLog($"Latence avg/p50/p95/p99: {result.AvgLatencyMs:F1} / {result.P50LatencyMs:F1} / {result.P95LatencyMs:F1} / {result.P99LatencyMs:F1} ms", Color.LightGray);
             AppendLog(RunObservability.FormatSummaryLine(RunObservability.FromReport(runReport)), Color.LightBlue);
-            AppendLog($"Čekání avg prep/adaptive/pool/pace: {result.AvgPrepWaitMs:F1} / {result.AvgAdaptiveWaitMs:F1} / {result.AvgPoolWaitMs:F1} / {result.AvgPaceWaitMs:F1} ms; SMTP SEND: {result.AvgSmtpSendMs:F1} ms", Color.LightGray);
             if (result.LatencyHistogram is { TotalCount: > 0 } histogram)
             {
                 var buckets = string.Join(", ", histogram.Buckets.Where(b => b.Count > 0).Select(b => $"{b.Label}:{b.Count}"));
