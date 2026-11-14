@@ -106,7 +106,15 @@ public static class RunReportBuilder
         var health = report.EndpointHealth
             .OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var normalized = report with { EndpointHealth = health };
+        var resultHealth = report.Result.EndpointHealth?
+            .OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var normalizedResult = report.Result with { EndpointHealth = resultHealth };
+        var normalized = report with
+        {
+            EndpointHealth = health,
+            Result = normalizedResult
+        };
         return JsonSerializer.Serialize(normalized, JsonOpts);
     }
 
