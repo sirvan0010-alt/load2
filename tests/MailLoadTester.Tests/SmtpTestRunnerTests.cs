@@ -86,7 +86,7 @@ public sealed class SmtpTestRunnerTests
         const int maxConcurrency = 3;
         const int messageCount = 12;
 
-        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(100));
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(200));
         var runner = new SmtpTestRunner();
 
         var result = await runner.RunAsync(
@@ -100,7 +100,7 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(messageCount, server.DataAttempts);
         // Exclusive actual-SEND gate may serialize DATA even when MaxConcurrency > 1.
         // Workers still complete the full message set without exceeding the configured bound.
-        Assert.InRange(server.MaxConcurrentData, 1, maxConcurrency);
+        Assert.InRange(server.MaxConcurrentData, 2, maxConcurrency);
     }
 
     [Fact]
