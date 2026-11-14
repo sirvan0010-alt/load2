@@ -16,6 +16,13 @@ permissions:
   issues: write
 
 jobs:
+  skip-push:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain intentional skip
+        run: echo "Feature Architect creates issues only on scheduled or manually dispatched runs."
+
   propose-improvements:
     # Defensive guard: only manual or scheduled runs may create proposal issues.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
