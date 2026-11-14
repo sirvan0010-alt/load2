@@ -87,6 +87,10 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(3, server.DataAttempts);
         Assert.NotNull(result.LatencyHistogram);
         Assert.Equal(2, result.LatencyHistogram!.TotalCount);
+        var endpoint = Assert.Single(result.EndpointHealth!);
+        Assert.Equal(2, endpoint.TotalSuccesses);
+        Assert.Equal(1, endpoint.TotalFailures);
+        Assert.Equal(EndpointHealthState.Healthy, endpoint.State);
     }
 
     [Theory]
