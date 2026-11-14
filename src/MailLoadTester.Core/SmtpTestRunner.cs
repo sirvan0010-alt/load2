@@ -40,6 +40,7 @@ public sealed class SmtpTestRunner
         RetryMetricsSnapshot? aggregatedRetryMetrics = null;
         SmtpOutcomeCountsSnapshot? aggregatedOutcomeCounts = null;
         LatencyHistogramSnapshot? aggregatedLatencyHistogram = null;
+        IReadOnlyList<EndpointHealthSnapshot>? aggregatedEndpointHealth = null;
 
         while (true)
         {
@@ -61,7 +62,9 @@ public sealed class SmtpTestRunner
             aggregatedOutcomeCounts =
                 AutoRestartMetrics.AggregateOutcomes(aggregatedOutcomeCounts, result.OutcomeCounts);
             aggregatedLatencyHistogram =
-                LatencyHistogram.Merge(aggregatedLatencyHistogram, result.LatencyHistogram);
+                AutoRestartMetrics.AggregateLatencyHistogram(aggregatedLatencyHistogram, result.LatencyHistogram);
+            aggregatedEndpointHealth =
+                AutoRestartMetrics.AggregateEndpointHealth(aggregatedEndpointHealth, result.EndpointHealth);
 
             if (result.Cancelled) break;
 
@@ -108,7 +111,8 @@ public sealed class SmtpTestRunner
             QueueMetrics = aggregatedQueueMetrics,
             RetryMetrics = aggregatedRetryMetrics,
             OutcomeCounts = aggregatedOutcomeCounts,
-            LatencyHistogram = aggregatedLatencyHistogram
+            LatencyHistogram = aggregatedLatencyHistogram,
+            EndpointHealth = aggregatedEndpointHealth
         };
     }
 
