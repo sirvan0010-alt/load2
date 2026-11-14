@@ -308,6 +308,7 @@ public sealed class SmtpTestRunner
         int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
+        var latencyHistogram = new LatencyHistogram();
         // FEAT-HEALTH: per SMTP endpoint health (host:port). Independent of circuit breaker / proxy ban.
         var endpointHealth = new TransportHealthRegistry();
         var endpointKey = $"{options.SmtpHost}:{options.Port}";
@@ -828,7 +829,9 @@ public sealed class SmtpTestRunner
                             {
                                 ledgerAccepted = true;
                                 var s = Interlocked.Increment(ref sent);
-                                latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                                var messageLatencyMs = msgSw.Elapsed.TotalMilliseconds;
+                                latencies.Add(messageLatencyMs);
+                                latencyHistogram.Add(messageLatencyMs);
                                 if (!multiAccount)
                                     endpointHealth.RecordSuccess(endpointKey);
                                 prepWaits.Add(samplePrepMs);
@@ -1047,7 +1050,8 @@ public sealed class SmtpTestRunner
             EndpointHealth: endpointHealth.SnapshotAll(),
             QueueMetrics: queueMetrics.Snapshot(),
             RetryMetrics: retryMetrics.Snapshot(),
-            OutcomeCounts: outcomeCounters.Snapshot());
+            OutcomeCounts: outcomeCounters.Snapshot(),
+            LatencyHistogram: latencyHistogram.Snapshot());
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
