@@ -63,6 +63,40 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public async Task PositiveInterval_OverlapsTransfersLongerThanTheInterval()
+    {
+        const int intervalMs = 40;
+        const int transferMs = 160;
+        const int messages = 5;
+        var pace = new SmartPaceController(BaseOptions(intervalMs));
+        var active = 0;
+        var maxActive = 0;
+        var starts = new System.Collections.Concurrent.ConcurrentBag<long>();
+        var sw = Stopwatch.StartNew();
+
+        var tasks = Enumerable.Range(0, messages).Select(async _ =>
+        {
+            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
+            starts.Add(sw.ElapsedMilliseconds);
+            var nowActive = Interlocked.Increment(ref active);
+            UpdateMax(ref maxActive, nowActive);
+            try { await Task.Delay(transferMs); }
+            finally { Interlocked.Decrement(ref active); }
+        });
+
+        await Task.WhenAll(tasks);
+
+        Assert.True(maxActive >= 2,
+            $"Expected overlapping transfers for interval={intervalMs}ms and duration={transferMs}ms; got {maxActive}.");
+        var ordered = starts.OrderBy(x => x).ToArray();
+        for (var i = 1; i < ordered.Length; i++)
+        {
+            Assert.True(ordered[i] - ordered[i - 1] >= intervalMs - 20,
+                $"SEND start gap was only {ordered[i] - ordered[i - 1]}ms.");
+        }
+    }
+
+    [Fact]
     public async Task ZeroInterval_SendLeasesAllowConcurrentNetworkTransfers()
     {
         const int workers = 5;
