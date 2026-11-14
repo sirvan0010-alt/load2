@@ -9,11 +9,12 @@ namespace MailLoadTester;
 public sealed class SmtpTestRunner
 {
     /// <summary>
-    /// Spustí test. Pokud je zapnutý AutoRestartOnFailure, celý test se po
-    /// "většinovém selhání" (víc zpráv selhalo než uspělo, a nebylo to STOPnuté
-    /// uživatelem) automaticky zopakuje s napůl sníženým paralelismem, max.
-    /// AutoRestartMaxAttempts-krát. Delivery ledger zajišťuje, že již přijaté
-    /// zprávy se při restartu nikdy neposílají znovu.
+    /// Spustí test. Pokud je zapnutý AutoRestartOnFailure, test se automaticky
+    /// zopakuje, pokud aktuální pokus skončí alespoň jednou nevyřešenou chybou
+    /// (a nebyl zrušen uživatelem). Při každém restartu se paralelismus sníží
+    /// na polovinu, nejvýše však na 1; počet opakování omezuje
+    /// AutoRestartMaxAttempts. Delivery ledger zajišťuje, že již přijaté
+    /// logické zprávy se při restartu nikdy neposílají znovu.
     /// </summary>
     public async Task<MailTestResult> RunAsync(
         MailTestOptions options,
