@@ -98,10 +98,23 @@ public sealed class RunReportTests
     public void ToJson_RedactsKnownSecretsFromErrorText()
     {
         const string password = "VerySecretSmtpPassword!";
-        var options = SampleOptions(password);
+        const string username = "smtp-user@example.test";
+        const string accountPassword = "MultiAccountSecret!42";
+        var authPayload = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes($"\0{username}\0{password}"));
+        var options = SampleOptions(password) with
+        {
+            Username = username,
+            Accounts = new[]
+            {
+                new SmtpAccount("secondary", "smtp.secondary.test", 587, SmtpSecurity.StartTls,
+                    true, "secondary-user", accountPassword)
+            }
+        };
         var result = SampleResult() with
         {
-            LastError = $"AUTH failed: {password}; encoded={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password))}"
+            LastError = $"AUTH failed: {password}; encoded={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password))}; " +
+                $"plain={authPayload}; account={accountPassword}"
         };
 
         var report = RunReportBuilder.Create(
@@ -114,6 +127,8 @@ public sealed class RunReportTests
 
         Assert.DoesNotContain(password, json, StringComparison.Ordinal);
         Assert.DoesNotContain(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password)), json, StringComparison.Ordinal);
+        Assert.DoesNotContain(authPayload, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(accountPassword, json, StringComparison.Ordinal);
         Assert.Contains("[REDACTED]", json, StringComparison.Ordinal);
     }
 
