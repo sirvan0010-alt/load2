@@ -201,4 +201,4 @@ public sealed partial class MainForm : Form
         if (!IsDisposed)
             Close();
     }
-
+}
