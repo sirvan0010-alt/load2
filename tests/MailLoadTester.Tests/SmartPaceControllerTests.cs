@@ -63,6 +63,46 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public async Task ZeroInterval_SendLeasesAllowConcurrentNetworkTransfers()
+    {
+        const int workers = 5;
+        var pace = new SmartPaceController(BaseOptions(0));
+        var active = 0;
+        var maxActive = 0;
+
+        var tasks = Enumerable.Range(0, workers).Select(async _ =>
+        {
+            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
+            var nowActive = Interlocked.Increment(ref active);
+            UpdateMax(ref maxActive, nowActive);
+            try
+            {
+                // Represents the time spent inside SMTP SendAsync. The pacing
+                // reservation must not hold a global lock for this duration.
+                await Task.Delay(100);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref active);
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        Assert.True(maxActive >= 2,
+            $"Expected overlapping SMTP transfers, observed max concurrency {maxActive}.");
+    }
+
+    private static void UpdateMax(ref int target, int value)
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref target);
+            if (value <= current || Interlocked.CompareExchange(ref target, value, current) == current)
+                return;
+        }
+    }
+
+    [Fact]
     public async Task ZeroInterval_DoesNotBlock()
     {
         var pace = new SmartPaceController(BaseOptions(0));
