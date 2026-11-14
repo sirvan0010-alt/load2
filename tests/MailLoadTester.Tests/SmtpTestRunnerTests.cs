@@ -27,6 +27,8 @@ public sealed class SmtpTestRunnerTests
         Assert.False(result.Cancelled);
         Assert.Equal(0, result.Retries);
         Assert.True(result.AvgLatencyMs >= 0);
+        Assert.NotNull(result.LatencyHistogram);
+        Assert.Equal(1, result.LatencyHistogram!.TotalCount);
         Assert.Equal(1, server.MessagesAccepted);
     }
 
