@@ -39,6 +39,7 @@ public sealed class SmtpTestRunner
         ScenarioQueueMetricsSnapshot? aggregatedQueueMetrics = null;
         RetryMetricsSnapshot? aggregatedRetryMetrics = null;
         SmtpOutcomeCountsSnapshot? aggregatedOutcomeCounts = null;
+        LatencyHistogramSnapshot? aggregatedLatencyHistogram = null;
 
         while (true)
         {
@@ -59,6 +60,8 @@ public sealed class SmtpTestRunner
                 AutoRestartMetrics.AggregateRetry(aggregatedRetryMetrics, result.RetryMetrics);
             aggregatedOutcomeCounts =
                 AutoRestartMetrics.AggregateOutcomes(aggregatedOutcomeCounts, result.OutcomeCounts);
+            aggregatedLatencyHistogram =
+                LatencyHistogram.Merge(aggregatedLatencyHistogram, result.LatencyHistogram);
 
             if (result.Cancelled) break;
 
@@ -104,7 +107,8 @@ public sealed class SmtpTestRunner
             AutoRestartAttempts = Math.Max(0, attempt - 1),
             QueueMetrics = aggregatedQueueMetrics,
             RetryMetrics = aggregatedRetryMetrics,
-            OutcomeCounts = aggregatedOutcomeCounts
+            OutcomeCounts = aggregatedOutcomeCounts,
+            LatencyHistogram = aggregatedLatencyHistogram
         };
     }
 
