@@ -163,7 +163,10 @@ public sealed class SmtpTestRunner
             var pct = requested > 0 ? Math.Round(100.0 * done / requested, 1) : 0.0;
             var elapsedSeconds = dashboardSw.Elapsed.TotalSeconds;
             var tput = elapsedSeconds > 0 ? s / elapsedSeconds : 0.0;
-            dashboard.Update(new DashboardState(s, f, requested, pct, tput, eta, phase, status));
+            var queue = queueMetrics.Snapshot();
+            dashboard.Update(new DashboardState(
+                s, f, requested, pct, tput, eta, phase, status,
+                queue.QueueDepth, queue.PeakQueueDepth, options.MaxConcurrency));
         }
 
         // Throttle progress: UI/IProgress is a major bottleneck at high concurrency.
