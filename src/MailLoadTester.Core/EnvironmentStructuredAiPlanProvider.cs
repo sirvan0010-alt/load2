@@ -79,6 +79,7 @@ public sealed class EnvironmentStructuredAiPlanProvider : IStructuredAiPlanProvi
             throw new InvalidOperationException("AI plan endpoint returned an empty response.");
 
         return body;
+    }
 
     private static IReadOnlyList<string> GetTargets(AiTaskContext context)
     {
