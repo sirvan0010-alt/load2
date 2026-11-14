@@ -81,14 +81,21 @@ public static class RunReportBuilder
         if (string.IsNullOrWhiteSpace(runId))
             runId = Guid.NewGuid().ToString("N");
         health ??= result.EndpointHealth ?? Array.Empty<EndpointHealthSnapshot>();
+        var sensitiveValues = new List<string?>
+        {
+            options.Password,
+            options.ProxyPassword,
+            options.ClientCertificatePassword
+        };
+        AddCredentialVariants(sensitiveValues, options.Username, options.Password);
+        AddCredentialVariants(sensitiveValues, options.ProxyUsername, options.ProxyPassword);
+        foreach (var account in options.Accounts ?? Array.Empty<SmtpAccount>())
+            AddCredentialVariants(sensitiveValues, account.Username, account.Password);
+
         var resultWithId = result with
         {
             RunId = runId,
-            LastError = RedactKnownSecrets(
-                result.LastError,
-                options.Password,
-                options.ProxyPassword,
-                options.ClientCertificatePassword)
+            LastError = RedactKnownSecrets(result.LastError, sensitiveValues.ToArray())
         };
         return new RunReport(
             RunId: runId,
@@ -114,6 +121,17 @@ public static class RunReportBuilder
             Result = normalizedResult
         };
         return JsonSerializer.Serialize(normalized, JsonOpts);
+    }
+
+    private static void AddCredentialVariants(List<string?> secrets, string? username, string? password)
+    {
+        if (string.IsNullOrEmpty(password)) return;
+        secrets.Add(password);
+        if (!string.IsNullOrEmpty(username))
+        {
+            secrets.Add($"{username}:{password}");
+            secrets.Add($"\0{username}\0{password}");
+        }
     }
 
     private static string RedactKnownSecrets(string? text, params string?[] secrets)
