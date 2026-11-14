@@ -3,11 +3,16 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MailLoadTester.Tests;
 
 public sealed class SmtpTestRunnerTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public SmtpTestRunnerTests(ITestOutputHelper output) => _output = output;
+
     [Fact]
     public async Task SuccessfulSend_ReportsSentAndLatency()
     {
@@ -104,6 +109,10 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(messageCount, server.DataAttempts);
         var minimumExpectedConcurrency = maxConcurrency == 1 ? 1 : 2;
         Assert.InRange(server.MaxConcurrentData, minimumExpectedConcurrency, maxConcurrency);
+        _output.WriteLine(
+            $"workers={maxConcurrency}; maxConcurrentDATA={server.MaxConcurrentData}; " +
+            $"throughput={result.ThroughputPerSec:F2} msg/s; avgSMTP={result.AvgSmtpSendMs:F1} ms; " +
+            $"elapsed={result.Elapsed.TotalMilliseconds:F0} ms");
     }
 
     [Fact]
