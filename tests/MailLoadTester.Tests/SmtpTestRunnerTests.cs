@@ -80,13 +80,17 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(3, server.DataAttempts);
     }
 
-    [Fact]
-    public async Task BoundedConcurrency_DoesNotExceedConfiguredWorkerCount()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(20)]
+    public async Task BoundedConcurrency_UsesConfiguredParallelSmtpTransfers(int maxConcurrency)
     {
-        const int maxConcurrency = 3;
-        const int messageCount = 12;
+        var messageCount = maxConcurrency * 2;
 
-        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(200));
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(250));
         var runner = new SmtpTestRunner();
 
         var result = await runner.RunAsync(
@@ -98,9 +102,8 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(0, result.Failed);
         Assert.Equal(messageCount, server.MessagesAccepted);
         Assert.Equal(messageCount, server.DataAttempts);
-        // Exclusive actual-SEND gate may serialize DATA even when MaxConcurrency > 1.
-        // Workers still complete the full message set without exceeding the configured bound.
-        Assert.InRange(server.MaxConcurrentData, 2, maxConcurrency);
+        var minimumExpectedConcurrency = maxConcurrency == 1 ? 1 : 2;
+        Assert.InRange(server.MaxConcurrentData, minimumExpectedConcurrency, maxConcurrency);
     }
 
     [Fact]
