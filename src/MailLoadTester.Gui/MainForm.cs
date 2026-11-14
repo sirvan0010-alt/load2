@@ -780,7 +780,7 @@ public sealed partial class MainForm : Form
             (int)numMaxRandomAttachments.Value,
             (int)numConcurrency.Value);
         var status = estimate.IsSafe ? "✓ Bezpečné" : "⚠ BLOKOVÁNO – před startem se RAM nebude alokovat";
-        lblRandomAttachmentSafety.Text = $"{status}\r\n{estimate.Explanation}\r\nDostupná RAM: {AttachmentPlanner.FormatBytes(estimate.AvailableMemoryBytes)}";
+        lblRandomAttachmentSafety.Text = $"{status}\r\n{estimate.Explanation}\r\nDostupná RAM: {AttachmentPlanner.FormatBytes(estimate.AvailableBytes)}";
         lblRandomAttachmentSafety.ForeColor = estimate.IsSafe ? Color.DarkGreen : Color.DarkRed;
     }
 
@@ -1123,10 +1123,11 @@ public sealed partial class MainForm : Form
             int stepIdx = u.MessageStep.Value switch
             {
                 MessageStep.Queued => 0,
-                MessageStep.RateLimited => 1,
-                MessageStep.Smtp => 2,
-                MessageStep.Mime => 3,
-                MessageStep.Sending => 4,
+                MessageStep.WaitingRateLimit => 1,
+                MessageStep.RentingConnection => 2,
+                MessageStep.BuildingMime => 3,
+                MessageStep.SmtpSend => 4,
+                MessageStep.Cancelled => 5,
                 MessageStep.Succeeded => 5,
                 MessageStep.FailedTransient => 5,
                 MessageStep.FailedFinal => 5,
@@ -1139,31 +1140,32 @@ public sealed partial class MainForm : Form
             }
         }
 
-        if (u.DeliveryStep.HasValue && _pathLabels.TryGetValue(u.DeliveryStep.Value, out var pathLabel))
+        if (u.PathStep.HasValue && _pathLabels.TryGetValue(u.PathStep.Value, out var pathLabel))
         {
             foreach (var pair in _pathLabels)
-                pair.Value.BackColor = pair.Key == u.DeliveryStep.Value ? Color.LightGreen : Color.Gainsboro;
-            pathLabel.BackColor = Color.LightGreen;
+                pair.Value.BackColor = Color.Gainsboro;
+            pathLabel.BackColor = u.PathStepSuccess switch
+            {
+                true => Color.LightGreen,
+                false => Color.LightCoral,
+                _ => Color.Khaki
+            };
         }
 
-        if (u.ObservedResponseCode.HasValue && gridObserved != null)
+        if (u.ObservedSnapshot is not null && gridObserved != null)
         {
             try
             {
-                var row = gridObserved.Rows.Cast<DataGridViewRow>().FirstOrDefault(r =>
-                    r.Cells[0].Value?.ToString() == u.ObservedResponseCode.Value.ToString());
-                if (row == null)
+                gridObserved.Rows.Clear();
+                foreach (var observed in u.ObservedSnapshot.Take(200))
                 {
-                    gridObserved.Rows.Add(u.ObservedResponseCode.Value, u.ObservedResponseText ?? "", 1, u.ObservedClassification ?? "", u.ObservedRecommendation ?? "");
+                    gridObserved.Rows.Add(
+                        observed.SmtpCode,
+                        observed.SampleText,
+                        observed.Count,
+                        observed.Classification.ToString(),
+                        observed.RecommendedAction);
                 }
-                else
-                {
-                    var count = Convert.ToInt32(row.Cells[2].Value ?? 0);
-                    row.Cells[2].Value = count + 1;
-                    row.Cells[1].Value = u.ObservedResponseText ?? row.Cells[1].Value;
-                }
-                while (gridObserved.Rows.Count > 200)
-                    gridObserved.Rows.RemoveAt(0);
             }
             catch { /* GUI-only telemetry must never fail the run */ }
         }
@@ -1227,18 +1229,12 @@ public sealed partial class MainForm : Form
         numBackoffAfter.Value = Math.Clamp(preset.BackoffAfterSuccesses, numBackoffAfter.Minimum, numBackoffAfter.Maximum);
         numBackoffMult.Value = Math.Clamp((decimal)(preset.BackoffMultiplier * 10), numBackoffMult.Minimum, numBackoffMult.Maximum);
         numMaxInterval.Value = Math.Clamp(preset.MaxIntervalMs, numMaxInterval.Minimum, numMaxInterval.Maximum);
-        chkPerRecipient.Checked = preset.EnablePerRecipientLimit;
-        numMaxPerRecipient.Value = Math.Clamp(preset.MaxMessagesPerRecipient, numMaxPerRecipient.Minimum, numMaxPerRecipient.Maximum);
-        numPerRecipientWindow.Value = Math.Clamp(preset.PerRecipientWindowMinutes, numPerRecipientWindow.Minimum, numPerRecipientWindow.Maximum);
-        chkTimeWindow.Checked = preset.EnableSendingTimeWindow;
-        numWindowFrom.Value = Math.Clamp(preset.SendingWindowFromHour, numWindowFrom.Minimum, numWindowFrom.Maximum);
-        numWindowTo.Value = Math.Clamp(preset.SendingWindowToHour, numWindowTo.Minimum, numWindowTo.Maximum);
+
         chkWarmup.Checked = preset.EnableWarmup;
         txtWarmupPhases.Text = preset.WarmupPhases;
         chkGreylist.Checked = preset.DetectGreylist;
         numGreylistMinutes.Value = Math.Clamp(preset.GreylistRetryMinutes, numGreylistMinutes.Minimum, numGreylistMinutes.Maximum);
-        numGreylistRetries.Value = Math.Clamp(preset.MaxGreylistRetries, numGreylistRetries.Minimum, numGreylistRetries.Maximum);
-        lblPaceStatus.Text = $"Stav tempa: {preset.DisplayName}";
+                lblPaceStatus.Text = $"Stav tempa: {preset.DisplayName}";
     }
 
     private async Task OnSaveProfileAsync()
@@ -1264,7 +1260,8 @@ public sealed partial class MainForm : Form
         {
             using var dlg = new OpenFileDialog { Filter = "MailLoadTester profil|*.json|Všechny soubory|*.*" };
             if (dlg.ShowDialog() != DialogResult.OK) return;
-            var o = await ProfileStore.LoadAsync(dlg.FileName);
+            var profile = await ProfileStore.LoadAsync(dlg.FileName);
+            var o = profile.Options;
             txtHost.Text = o.SmtpHost;
             numPort.Value = Math.Clamp(o.SmtpPort, numPort.Minimum, numPort.Maximum);
             cmbSecurity.SelectedItem = o.Security.ToString();
@@ -1379,4 +1376,31 @@ public sealed partial class MainForm : Form
             btnCheckRbl.Enabled = true;
         }
     }
+
+    private void AppendLog(string message, Color color)
+    {
+        if (IsDisposed || rtbLog is null || rtbLog.IsDisposed)
+            return;
+
+        if (rtbLog.InvokeRequired)
+        {
+            try
+            {
+                rtbLog.BeginInvoke(new Action(() => AppendLog(message, color)));
+            }
+            catch (InvalidOperationException)
+            {
+                // The form may be closing while a background operation completes.
+            }
+            return;
+        }
+
+        rtbLog.SelectionStart = rtbLog.TextLength;
+        rtbLog.SelectionLength = 0;
+        rtbLog.SelectionColor = color;
+        rtbLog.AppendText(message + Environment.NewLine);
+        rtbLog.SelectionColor = rtbLog.ForeColor;
+        rtbLog.ScrollToCaret();
+    }
+
 }
