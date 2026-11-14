@@ -1060,9 +1060,7 @@ public sealed partial class MainForm : Form
                     TryAuthenticate: options.UseAuthentication,
                     DryRun: options.DryRun),
                 cts.Token);
-            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? "" : "
-
-" + report.Error);
+            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
                 MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
                     report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
