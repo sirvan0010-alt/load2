@@ -107,6 +107,9 @@ h1{color:#38bdf8} .grid{display:grid;grid-template-columns:repeat(auto-fit,minma
 <div class='card'><div class='label'>Throughput</div><div class='value' id='tput'>0 msg/s</div></div>
 <div class='card'><div class='label'>ETA</div><div class='value' id='eta'>--</div></div>
 <div class='card'><div class='label'>Phase</div><div class='value' id='phase'>Idle</div></div>
+<div class='card'><div class='label'>Queue depth</div><div class='value' id='queueDepth'>0</div></div>
+<div class='card'><div class='label'>Queue peak</div><div class='value' id='queuePeak'>0</div></div>
+<div class='card'><div class='label'>Worker limit</div><div class='value' id='workerLimit'>0</div></div>
 </div>
 <div id='log'>Waiting for data...</div>
 <script>
@@ -122,6 +125,9 @@ document.getElementById('bar').style.width=(d.progressPct||0)+'%';
 document.getElementById('tput').textContent=(d.throughputPerSec||0).toFixed(2)+' msg/s';
 document.getElementById('eta').textContent=d.etaSeconds?d.etaSeconds.toFixed(0)+'s':'--';
 document.getElementById('phase').textContent=d.phase||'Idle';
+document.getElementById('queueDepth').textContent=d.queueDepth||0;
+document.getElementById('queuePeak').textContent=d.queuePeakDepth||0;
+document.getElementById('workerLimit').textContent=d.workerLimit||0;
 if(d.logLine){logLines.push(d.logLine);if(logLines.length>100)logLines.shift();document.getElementById('log').textContent=logLines.join('\n');}
 }catch(e){}
 setTimeout(poll,500);
@@ -144,4 +150,7 @@ public sealed record DashboardState(
     double ThroughputPerSec,
     double? EtaSeconds,
     string Phase,
-    string? LogLine = null);
+    string? LogLine = null,
+    long QueueDepth = 0,
+    long QueuePeakDepth = 0,
+    int WorkerLimit = 0);
