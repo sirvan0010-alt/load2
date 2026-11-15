@@ -743,7 +743,8 @@ public sealed class SmtpTestRunner
                                                 Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
                                                 Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
                                                     "CAPACITY STOP: " + capacityReason, null, 3,
-                                                    "Capacity guard", "Run stopped");
+                                                    "Capacity guard", "Run stopped",
+                                                    includeObserved: true);
                                                 batchCts.Cancel();
                                                 throw new OperationCanceledException(capacityReason, workerCt);
                                             }
