@@ -1,3 +1,6 @@
+using MailKit.Net.Smtp;
+using MimeKit;
+
 namespace MailLoadTester;
 
 /// <summary>
@@ -116,5 +119,54 @@ public sealed class CapacityRunGuard
             reason = string.Empty;
             return true;
         }
+    }
+}
+
+/// <summary>
+/// Mirrors MailKit 4.17 SMTP transport preparation before measuring MIME bytes:
+/// DOS newlines, final newline, negotiated UTF8/8BITMIME/BINARYMIME constraints,
+/// and the transport's 998-octet line ceiling. This avoids measuring the
+/// unprepared message when the SMTP transport will re-encode it before DATA.
+/// </summary>
+public static class CapacityRunMimeSizer
+{
+    public static long MeasurePreparedMimeBytes(SmtpClient client, MimeMessage message, FormatOptions? requestedFormat)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(message);
+
+        var capabilities = client.Capabilities;
+        var format = (requestedFormat ?? FormatOptions.Default).Clone();
+        format.NewLineFormat = NewLineFormat.Dos;
+        format.EnsureNewLine = true;
+
+        if (format.International && !capabilities.HasFlag(SmtpCapabilities.UTF8))
+            format.International = false;
+
+        if (format.International && !capabilities.HasFlag(SmtpCapabilities.EightBitMime))
+            throw new NotSupportedException("The SMTP server does not support the 8BITMIME extension required for international formatting.");
+
+        var constraint = capabilities.HasFlag(SmtpCapabilities.BinaryMime)
+            ? EncodingConstraint.None
+            : capabilities.HasFlag(SmtpCapabilities.EightBitMime)
+                ? EncodingConstraint.EightBit
+                : EncodingConstraint.SevenBit;
+
+        // MailKit deliberately avoids changing a signed message because doing so
+        // would invalidate DKIM/ARC signatures. Keep that behavior identical.
+        if (message.Headers.Contains(HeaderId.DomainKeySignature)
+            || message.Headers.Contains(HeaderId.DkimSignature)
+            || message.Headers.Contains(HeaderId.ArcSeal))
+        {
+            format.International = false;
+        }
+        else
+        {
+            message.Prepare(constraint, 998);
+        }
+
+        using var counter = new CountingStream();
+        message.WriteTo(format, counter);
+        return counter.BytesWritten;
     }
 }
