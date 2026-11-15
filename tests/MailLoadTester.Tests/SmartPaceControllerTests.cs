@@ -139,7 +139,7 @@ public sealed class SmartPaceControllerTests
     [Fact]
     public async Task MailboxPressureFloor_CannotBeUndercutByJitter()
     {
-        var pace = new SmartPaceController(BaseOptions(0, jitter: true) with { JitterPercent = 90 });
+        var pace = new SmartPaceController(BaseOptions(500, jitter: true) with { JitterPercent = 90 });
         pace.ApplyMailboxPressure(1);
 
         var sw = Stopwatch.StartNew();
