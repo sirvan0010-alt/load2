@@ -330,7 +330,11 @@ public sealed partial class MainForm
 
             RenderMailboxMonitorSnapshot(snapshot);
             if (enforceQuotaStop && _isRunning)
-                _runner?.ObserveMailboxSnapshot(snapshot);
+            {
+                var feedback = _runner?.ObserveMailboxSnapshot(snapshot);
+                if (feedback is not null)
+                    AppendLog($"Adaptivní řízení podle IMAP: úroveň {feedback.Severity}. {feedback.Reason}", Color.Orange);
+            }
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked
                 && MailboxMonitorMath.ShouldStop(snapshot.QuotaUsagePercent, (int)numMailboxStopPercent.Value)
                 && _cts is { IsCancellationRequested: false })
