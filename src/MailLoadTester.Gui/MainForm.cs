@@ -36,6 +36,8 @@ public sealed partial class MainForm : Form
     // Message tab
     private ComboBox txtFrom = null!;
     private TextBox txtTo = null!, txtCc = null!, txtBcc = null!;
+    private readonly List<string> _knownEmailAddresses = new();
+    private Button btnToAddressSuggestions = null!, btnCcAddressSuggestions = null!, btnBccAddressSuggestions = null!;
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
@@ -180,6 +182,9 @@ public sealed partial class MainForm : Form
         InitializeComponent();
         txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
         txtFrom.TextChanged += (_, _) => SyncFromAddressSuggestions(addCurrentAddress: true, copyLoginWhenEmpty: false);
+        txtTo.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
+        txtCc.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
+        txtBcc.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
         WireEvents();
         SetDefaults();
         SyncFromAddressSuggestions();
@@ -190,25 +195,117 @@ public sealed partial class MainForm : Form
         FormClosed += (_, _) => SaveLayoutPreferences();
     }
 
+    private static bool IsValidEmailSuggestion(string value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && System.Net.Mail.MailAddress.TryCreate(value.Trim(), out var parsed)
+        && parsed.Address.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase);
+
     private void SyncFromAddressSuggestions(bool addCurrentAddress = false, bool copyLoginWhenEmpty = true)
     {
-        static bool IsEmail(string value) =>
-            !string.IsNullOrWhiteSpace(value)
-            && System.Net.Mail.MailAddress.TryCreate(value.Trim(), out var parsed)
-            && parsed.Address.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase);
-
         var login = txtUser.Text.Trim();
-        if (IsEmail(login) && !txtFrom.Items.Contains(login))
-            txtFrom.Items.Add(login);
+        if (IsValidEmailSuggestion(login))
+            AddKnownEmailAddress(login);
+
+        foreach (var account in _accountDrafts)
+            if (account.Enabled && IsValidEmailSuggestion(account.Username))
+                AddKnownEmailAddress(account.Username);
 
         var current = txtFrom.Text.Trim();
-        if (addCurrentAddress && IsEmail(current) && !txtFrom.Items.Contains(current))
-            txtFrom.Items.Add(current);
+        if (addCurrentAddress && IsValidEmailSuggestion(current))
+            AddKnownEmailAddress(current);
+
+        RefreshEmailAddressSuggestions();
 
         // Most SMTP providers expect the authenticated mailbox to be the sender.
         // Use it as a convenience default, but never overwrite a manually entered From address.
-        if (copyLoginWhenEmpty && string.IsNullOrWhiteSpace(txtFrom.Text) && IsEmail(login))
+        if (copyLoginWhenEmpty && string.IsNullOrWhiteSpace(txtFrom.Text) && IsValidEmailSuggestion(login))
             txtFrom.Text = login;
+    }
+
+    private void AddKnownEmailAddress(string address)
+    {
+        address = address.Trim();
+        if (!IsValidEmailSuggestion(address)) return;
+        if (!_knownEmailAddresses.Contains(address, StringComparer.OrdinalIgnoreCase))
+            _knownEmailAddresses.Add(address);
+    }
+
+    private void RefreshEmailAddressSuggestions()
+    {
+        if (txtFrom is null) return;
+
+        foreach (var address in new[] { txtTo?.Text, txtCc?.Text, txtBcc?.Text })
+        {
+            if (string.IsNullOrWhiteSpace(address)) continue;
+            foreach (var token in address.Split(new[] { ',', ';', '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                if (IsValidEmailSuggestion(token))
+                    AddKnownEmailAddress(token);
+        }
+
+        foreach (var address in _knownEmailAddresses)
+            if (!txtFrom.Items.Contains(address))
+                txtFrom.Items.Add(address);
+
+        UpdateAddressSuggestionButton(btnToAddressSuggestions);
+        UpdateAddressSuggestionButton(btnCcAddressSuggestions);
+        UpdateAddressSuggestionButton(btnBccAddressSuggestions);
+    }
+
+    private void AddAddressSuggestionButton(FlowLayoutPanel parent, TextBox target, string caption)
+    {
+        var button = new Button
+        {
+            Text = caption,
+            Width = 220,
+            Height = 28,
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 0, 6),
+            Tag = target
+        };
+        button.Click += (_, _) => ShowAddressSuggestionMenu(button, target);
+        parent.Controls.Add(button);
+
+        if (ReferenceEquals(target, txtTo)) btnToAddressSuggestions = button;
+        else if (ReferenceEquals(target, txtCc)) btnCcAddressSuggestions = button;
+        else if (ReferenceEquals(target, txtBcc)) btnBccAddressSuggestions = button;
+        UpdateAddressSuggestionButton(button);
+    }
+
+    private void UpdateAddressSuggestionButton(Button? button)
+    {
+        if (button is null || button.IsDisposed) return;
+        button.Enabled = _knownEmailAddresses.Count > 0;
+        button.Text = button.Enabled
+            ? button.Text
+            : button.Text.Replace("Vybrat adresu", "Nejprve zadej e-mail");
+    }
+
+    private void ShowAddressSuggestionMenu(Button button, TextBox target)
+    {
+        RefreshEmailAddressSuggestions();
+        if (_knownEmailAddresses.Count == 0) return;
+
+        var menu = new ContextMenuStrip();
+        foreach (var address in _knownEmailAddresses)
+        {
+            var item = new ToolStripMenuItem(address);
+            item.Click += (_, _) =>
+            {
+                var existing = target.Text.Split(new[] { ',', ';', '\\r', '\\n' },
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (existing.Contains(address, StringComparer.OrdinalIgnoreCase)) return;
+                if (string.IsNullOrWhiteSpace(target.Text))
+                    target.Text = address;
+                else
+                    target.Text = target.Text.TrimEnd(' ', ',', ';', '\\r', '\\n')
+                        + (target.Multiline ? Environment.NewLine : ", ")
+                        + address;
+                target.Focus();
+            };
+            menu.Items.Add(item);
+        }
+        menu.Show(button, new Point(0, button.Height));
     }
 
     /// <summary>
