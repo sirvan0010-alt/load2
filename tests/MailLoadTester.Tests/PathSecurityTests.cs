@@ -57,7 +57,7 @@ public sealed class PathSecurityTests
 
             var input = Path.Combine(link, "file.eml");
             var rejected = Assert.Throws<ArgumentException>(() => PathSecurity.EnsureNoReparsePoints(input));
-            Assert.Contains("symlink/junction/reparse pointem", rejected.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symlinkem/junction/reparse pointem", rejected.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -88,7 +88,7 @@ public sealed class PathSecurityTests
 
             var logPath = Path.Combine(link, "session.log");
             var rejected = Assert.Throws<ArgumentException>(() => new SmtpSessionLogger(logPath));
-            Assert.Contains("symlink/junction/reparse pointem", rejected.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symlinkem/junction/reparse pointem", rejected.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
