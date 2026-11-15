@@ -135,7 +135,7 @@ public sealed partial class MainForm : Form
     // Status
     private StatusStrip statusStrip = null!;
     private ToolStripProgressBar progressBar = null!;
-    private ToolStripStatusLabel lblStatus = null!, lblEta = null!, lblSentFailed = null!;
+    private ToolStripStatusLabel lblStatus = null!, lblEta = null!, lblSentFailed = null!, lblCapacityRun = null!;
 
     // Runtime
     private CancellationTokenSource? _cts;
