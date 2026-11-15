@@ -5,6 +5,10 @@ namespace MailLoadTester.Gui;
 public sealed partial class MainForm
 {
     private MailboxUsageChart _mailboxUsageChart = null!;
+    private Button btnDiscoverRecipientMx = null!;
+    private Button btnDiscoverSubmission = null!;
+    private Label lblSmtpDiscovery = null!;
+
     private void InitializeMailboxMonitorTab()
     {
         var tab = new TabPage("Mailbox Monitor") { Padding = new Padding(12) };
@@ -33,6 +37,15 @@ public sealed partial class MainForm
         actionPanel.Controls.Add(btnMailboxRefresh);
         actionPanel.Controls.Add(btnMailboxClear);
         connectionFlow.Controls.Add(actionPanel);
+
+        var discoveryPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Margin = new Padding(0, 4, 0, 4) };
+        btnDiscoverRecipientMx = new Button { Text = "Zjistit MX příjemce", Width = 160, Height = 32 };
+        btnDiscoverSubmission = new Button { Text = "Zjistit SMTP server", Width = 160, Height = 32 };
+        discoveryPanel.Controls.Add(btnDiscoverRecipientMx);
+        discoveryPanel.Controls.Add(btnDiscoverSubmission);
+        connectionFlow.Controls.Add(discoveryPanel);
+        toolTip.SetToolTip(btnDiscoverRecipientMx, "Pouze naváže spojení na MX server(y) první adresy v poli Komu a přečte SMTP pozdrav a EHLO. Nic neodesílá a neověří kapacitu schránky.");
+        toolTip.SetToolTip(btnDiscoverSubmission, "Pouze se připojí k nastavenému SMTP serveru a načte EHLO/TLS parametry. Nepoužije přihlašovací údaje a nic neodesílá.");
 
         chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Volitelně zastaví právě běžící SMTP test, až když IMAP server poskytne skutečnou STORAGE kvótu a její využití dosáhne nastaveného limitu. Bez dostupné kvóty se automatické zastavení neaktivuje. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen.");
         numMailboxStopPercent = AddLabeledNumeric(connectionFlow, "Limit zaplnění (%):", 1, 100, 80, "Automatické zastavení při dosažení této hodnoty skutečné IMAP STORAGE kvóty. Výchozí hodnota je 80 %.");
@@ -69,6 +82,16 @@ public sealed partial class MainForm
 
         _mailboxUsageChart = new MailboxUsageChart { Width = 500, Margin = new Padding(0, 10, 0, 6), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
         summaryFlow.Controls.Add(_mailboxUsageChart);
+
+        lblSmtpDiscovery = new Label
+        {
+            Text = "SMTP průzkum: zatím neproveden.",
+            AutoSize = true,
+            MaximumSize = new Size(540, 0),
+            Margin = new Padding(0, 6, 0, 8),
+            ForeColor = Color.DimGray
+        };
+        summaryFlow.Controls.Add(lblSmtpDiscovery);
 
         lblMailboxMessages = CreateMailboxMetricLabel("Uložené zprávy: —");
         lblMailboxUnread = CreateMailboxMetricLabel("Nepřečtené v INBOX: —");
@@ -122,7 +145,86 @@ public sealed partial class MainForm
                 EnsureMailboxMonitorTimerStarted();
         };
         btnMailboxClear.Click += (_, _) => ClearMailboxMonitorCredentials();
+        btnDiscoverRecipientMx.Click += async (_, _) => await DiscoverRecipientMxAsync();
+        btnDiscoverSubmission.Click += async (_, _) => await DiscoverSubmissionEndpointAsync();
     }
+
+    private async Task DiscoverRecipientMxAsync()
+    {
+        var recipient = txtTo.Text
+            .Split(new[] { ',', ';', '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(Validation.IsValidEmail);
+        if (recipient is null)
+        {
+            lblSmtpDiscovery.Text = "Nejdříve zadej alespoň jednu platnou adresu příjemce do pole Komu.";
+            return;
+        }
+
+        btnDiscoverRecipientMx.Enabled = false;
+        lblSmtpDiscovery.Text = "Zjišťuji MX příjemce a čtu pouze SMTP greeting/EHLO…";
+        try
+        {
+            var result = await new SmtpCapabilityDiscoveryService().DiscoverRecipientMxAsync(
+                recipient, maxMxHosts: 3, timeoutMs: (int)numConnectTimeout.Value);
+            var lines = new List<string>
+            {
+                $"Doména příjemce: {result.RecipientDomain}",
+                $"MX záznamy: {result.MxRecords.Count}"
+            };
+            foreach (var probe in result.Probes)
+            {
+                lines.Add(probe.Connected
+                    ? $"{probe.Host}:25 – spojení OK; SIZE {(probe.MaxMessageBytes.HasValue ? FormatDiscoveryBytes(probe.MaxMessageBytes.Value) : "neoznámeno")}; TLS {(probe.TlsProtocol ?? (probe.StartTlsAdvertised ? "STARTTLS nabízen" : "nezjištěno"))}"
+                    : $"{probe.Host}:25 – nedostupný: {probe.Error}");
+            }
+            lines.Add("SIZE = limit jedné zprávy, nikoli kapacita schránky. Nebyla odeslána žádná zpráva.");
+            lblSmtpDiscovery.Text = string.Join(Environment.NewLine, lines);
+        }
+        catch (Exception ex)
+        {
+            lblSmtpDiscovery.Text = "MX průzkum se nezdařil: " + ex.Message;
+        }
+        finally
+        {
+            btnDiscoverRecipientMx.Enabled = true;
+        }
+    }
+
+    private async Task DiscoverSubmissionEndpointAsync()
+    {
+        if (string.IsNullOrWhiteSpace(txtHost.Text))
+        {
+            lblSmtpDiscovery.Text = "Zadej SMTP host v kartě SMTP Server.";
+            return;
+        }
+
+        btnDiscoverSubmission.Enabled = false;
+        lblSmtpDiscovery.Text = "Zjišťuji SMTP greeting/EHLO na nakonfigurovaném serveru…";
+        try
+        {
+            var security = Enum.TryParse<SmtpSecurity>(cmbSecurity.SelectedItem?.ToString(), true, out var parsed)
+                ? parsed
+                : SmtpSecurity.StartTls;
+            var result = await new SmtpCapabilityDiscoveryService().ProbeSubmissionEndpointAsync(
+                txtHost.Text.Trim(), (int)numPort.Value, security, (int)numConnectTimeout.Value);
+            lblSmtpDiscovery.Text = result.Connected
+                ? $"SMTP {result.Host}:{result.Port}: spojení OK; SIZE {(result.MaxMessageBytes.HasValue ? FormatDiscoveryBytes(result.MaxMessageBytes.Value) : "neoznámeno")}; AUTH {(result.AuthMechanisms.Count == 0 ? "neoznámeno" : string.Join(", ", result.AuthMechanisms))}; TLS {result.TlsProtocol ?? "nevyjednáno"}.\nSIZE je limit jedné zprávy, ne kvóta schránky. Nebyla odeslána žádná zpráva."
+                : $"SMTP {result.Host}:{result.Port}: spojení selhalo: {result.Error}";
+        }
+        catch (Exception ex)
+        {
+            lblSmtpDiscovery.Text = "SMTP průzkum se nezdařil: " + ex.Message;
+        }
+        finally
+        {
+            btnDiscoverSubmission.Enabled = true;
+        }
+    }
+
+    private static string FormatDiscoveryBytes(long bytes)
+        => bytes >= 1024L * 1024
+            ? $"{bytes / (1024d * 1024d):N1} MiB ({bytes:N0} B)"
+            : $"{bytes / 1024d:N1} KiB ({bytes:N0} B)";
 
     private void ClearMailboxMonitorCredentials()
     {
