@@ -71,7 +71,7 @@ public static class SmtpOutcomeClassifier
 
         if (code is >= 500 and < 600)
         {
-            var enhanced = Regex.Match(t, @"(?<!\\d)5\\.([0-9]{1,3})\\.([0-9]{1,3})(?!\\d)");
+            var enhanced = Regex.Match(t, @"(?<!\d)5\.([0-9]{1,3})\.([0-9]{1,3})(?!\d)");
             var enhancedClass = enhanced.Success ? enhanced.Groups[1].Value : "";
             var enhancedSubject = enhanced.Success ? enhanced.Groups[2].Value : "";
 
