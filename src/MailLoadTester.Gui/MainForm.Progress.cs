@@ -14,6 +14,9 @@ public sealed partial class MainForm
         progressBar.Value = Math.Min(100, (int)(done * 100.0 / total));
         lblSentFailed.Text = $"OK:{u.Sent} FAIL:{u.Failed}";
         lblStatus.Text = u.CurrentStep;
+        lblCapacityRun.Text = u.CapacityMimeBytesReserved.HasValue
+            ? $"MIME: {FormatMailboxBytes(u.CapacityMimeBytesReserved)} / {(u.CapacityMimeBytesTarget.HasValue ? FormatMailboxBytes(u.CapacityMimeBytesTarget) : "bez limitu")}"
+            : string.Empty;
         if (u.EtaSeconds.HasValue)
             lblEta.Text = $"ETA: {u.EtaSeconds.Value:F0}s";
 
