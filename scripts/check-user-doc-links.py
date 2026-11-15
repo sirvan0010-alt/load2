@@ -15,6 +15,7 @@ FILES = (
     "docs/RESULTS_AND_METRICS.md",
     "docs/SAFETY_AND_PRIVACY.md",
     "docs/TROUBLESHOOTING.md",
+    "docs/GITHUB_ACTIONS_SETUP.md",
 )
 LINK = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
