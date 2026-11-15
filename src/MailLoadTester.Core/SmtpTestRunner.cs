@@ -116,6 +116,20 @@ public sealed class SmtpTestRunner
         };
     }
 
+    private static bool IsAdaptiveServerPressure(Exception ex)
+    {
+        if (ex is SmtpCommandException smtp)
+        {
+            var code = (int)smtp.StatusCode;
+            return code >= 400 && code < 500;
+        }
+
+        return ex is TimeoutException
+            or System.Net.Sockets.SocketException
+            or IOException
+            or SmtpProtocolException;
+    }
+
     async Task<MailTestResult> RunSingleAsync(
         MailTestOptions options,
         IProgress<ProgressUpdate> progress,
@@ -696,11 +710,18 @@ public sealed class SmtpTestRunner
                                     {
                                         samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
                                         var smtpT0 = Stopwatch.GetTimestamp();
-                                        if (utf8Format != null)
-                                            await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
-                                        else
-                                            await client.SendAsync(message, workerCt).ConfigureAwait(false);
-                                        sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
+                                        try
+                                        {
+                                            if (utf8Format != null)
+                                                await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
+                                            else
+                                                await client.SendAsync(message, workerCt).ConfigureAwait(false);
+                                        }
+                                        finally
+                                        {
+                                            // Preserve duration even when SMTP rejects or times out during DATA.
+                                            sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
+                                        }
                                     }
 
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
@@ -720,7 +741,7 @@ public sealed class SmtpTestRunner
                                 if (attempt > 0)
                                     retryMetrics.RecordSuccessAfterRetry();
                                 circuit?.RecordSuccess();
-                                adaptive?.RecordAttempt(true);
+                                adaptive?.RecordAttempt(true, sampleSmtpMs, serverPressure: false);
                                 pace.CommitRecipient(recipient);
                                 recipientCommitted = true;
                                 pace.RecordSuccess(recipient);
@@ -770,7 +791,7 @@ public sealed class SmtpTestRunner
                                 }
                                 retryMetrics.RecordRetryAttempt(attempt + 1);
                                 circuit?.RecordFailure(ex);
-                                adaptive?.RecordAttempt(false);
+                                adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
@@ -810,7 +831,7 @@ public sealed class SmtpTestRunner
                                 }
                                 lastEx = ex;
                                 circuit?.RecordFailure(ex);
-                                adaptive?.RecordAttempt(false);
+                                adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
