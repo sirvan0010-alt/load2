@@ -124,7 +124,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
         limiter.RecordAttempt(true, 160, serverPressure: false);
         limiter.RecordAttempt(true, 170, serverPressure: false);
         limiter.RecordAttempt(true, 165, serverPressure: false);
-        Thread.Sleep(60); // allow the configured sample window to expire
+        Thread.Sleep(3); // allow the configured sample window to expire
         limiter.RecordAttempt(true, 160, serverPressure: false); // evaluates previous window
 
         Assert.Equal(4, limiter.Current);
@@ -154,7 +154,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
         // Establish a baseline for normal SMTP DATA transfer latency.
         for (var i = 0; i < 5; i++)
             limiter.RecordAttempt(true, 200, serverPressure: false);
-        Thread.Sleep(3);
+        Thread.Sleep(60);
         limiter.RecordAttempt(true, 200, serverPressure: false); // evaluate baseline window
         Assert.Equal(7, limiter.Current); // healthy window permits a cautious +1
 
@@ -162,7 +162,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
         // The first sample in this window is the final baseline sample above.
         for (var i = 0; i < 4; i++)
             limiter.RecordAttempt(true, 2_500, serverPressure: false);
-        Thread.Sleep(3);
+        Thread.Sleep(60);
         limiter.RecordAttempt(true, 2_500, serverPressure: false); // evaluate slow window
 
         Assert.Equal(6, limiter.Current); // latency pressure reduces concurrency by one
