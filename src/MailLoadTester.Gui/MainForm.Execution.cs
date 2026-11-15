@@ -435,6 +435,10 @@ public sealed partial class MainForm
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
                 throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+            if (configured.SmtpHost.Equals("smtp.example.com", StringComparison.OrdinalIgnoreCase)
+                || configured.From.EndsWith("@example.com", StringComparison.OrdinalIgnoreCase)
+                || configured.Recipients[0].EndsWith("@example.com", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("V nastavení jsou stále ukázkové adresy example.com. Nejdříve zadej skutečný SMTP server, odesílatele a testovací schránku.");
 
             // This is a single-message diagnostic, not a load test. Keep the selected
             // SMTP transport/auth/proxy settings, but remove batch, retry, attachment,
@@ -489,7 +493,8 @@ public sealed partial class MainForm
             $"Bude odeslána JEDNA skutečná e-mailová zpráva.\n\n" +
             $"SMTP: {options.SmtpHost}:{options.Port} ({options.Security})\n" +
             $"Od: {options.From}\nKomu: {recipient}\n\n" +
-            "Zátěžový test, opakování, přílohy a další příjemci jsou vypnuté. Pokračovat?",
+            "Zátěžový test, opakování, přílohy a další příjemci jsou vypnuté.\n" +
+            "Dry-run se pro tuto jednorázovou kontrolu vypne a zpráva bude skutečně odeslána. Pokračovat?",
             "Potvrdit odeslání testovací zprávy",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (confirm != DialogResult.Yes)
