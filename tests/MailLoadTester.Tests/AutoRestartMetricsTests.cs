@@ -57,7 +57,9 @@ public sealed class AutoRestartMetricsTests
         Assert.Equal(1, result.Authentication);
         Assert.Equal(2, result.PolicyRejected);
         Assert.Equal(3, result.Recipient);
-        Assert.Equal(2, result.Permanent);
+        Assert.Equal(4, result.Permanent);
+        Assert.Equal(0, result.MailboxFull);
+        Assert.Equal(0, result.MessageTooLarge);
         Assert.Equal(1, result.Cancelled);
         Assert.Equal(3, result.Unknown);
     }
