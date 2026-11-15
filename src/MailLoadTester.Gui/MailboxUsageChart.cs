@@ -70,11 +70,7 @@ internal sealed class MailboxUsageChart : Control
             return;
         }
 
-        var valid = _samples.Select((sample, index) => (sample, index))
-            .Where(x => x.sample.Percent.HasValue)
-            .ToArray();
-
-        if (valid.Length == 0)
+        if (!_samples.Any(x => x.Percent.HasValue))
         {
             g.DrawString("Server neposkytuje použitelnou STORAGE kvótu.", Font, mutedBrush,
                 plot.Left + 10, plot.Top + plot.Height / 2 - 8);
@@ -82,20 +78,19 @@ internal sealed class MailboxUsageChart : Control
         }
 
         PointF? previous = null;
-        foreach (var item in valid)
+        for (var index = 0; index < _samples.Count; index++)
         {
-            var x = plot.Left + (valid.Length == 1
-                ? plot.Width
-                : plot.Width * item.index / (float)Math.Max(1, _samples.Count - 1));
-            var clamped = Math.Clamp(item.sample.Percent!.Value, 0, 100);
+            var sample = _samples[index];
+            if (!sample.Percent.HasValue)
+            {
+                previous = null; // Preserve a visible gap for unavailable quota samples.
+                continue;
+            }
+
+            var x = plot.Left + (plot.Width * index / (float)Math.Max(1, _samples.Count - 1));
+            var clamped = Math.Clamp(sample.Percent.Value, 0, 100);
             var y = plot.Bottom - (plot.Height * (float)clamped / 100f);
             var current = new PointF(x, y);
-
-            // A null sample breaks the line: unavailable data must not imply zero usage.
-            if (previous.HasValue && item.index > 0 &&
-                _samples.Skip(valid.First(v => v.index == item.index).index == 0 ? 0 :
-                    valid.First(v => v.index == item.index).index).Take(0).Any())
-                previous = null;
 
             if (previous.HasValue)
                 g.DrawLine(line, previous.Value, current);
