@@ -26,6 +26,11 @@ public sealed partial class MainForm
             u.Smtp5xx,
             GetObservedQuotaMessageDelta(_mailboxLastSnapshot),
             _mailboxLastSnapshot?.QuotaUsagePercent);
+        adaptiveControlChart?.AddSample(
+            DateTimeOffset.UtcNow,
+            u.EffectiveIntervalMs,
+            u.AdaptiveConcurrency,
+            u.WorkerCount);
         lblCapacityRun.Text = u.CapacityMimeBytesReserved.HasValue
             ? $"MIME: {FormatMailboxBytes(u.CapacityMimeBytesReserved)} / {(u.CapacityMimeBytesTarget.HasValue ? FormatMailboxBytes(u.CapacityMimeBytesTarget) : "bez limitu")}"
             : string.Empty;
