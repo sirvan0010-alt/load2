@@ -21,10 +21,14 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
+        options = CapacityRunPlanner.Apply(options);
         var ledger = new DeliveryLedger(options.MessageCount);
+        var capacityGuard = options.CapacityRun is { Enabled: true } limits
+            ? new CapacityRunGuard(limits)
+            : null;
 
         if (!options.AutoRestartOnFailure)
-            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger).ConfigureAwait(false);
+            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger, capacityGuard).ConfigureAwait(false);
 
         var current = options;
         MailTestResult result;
@@ -44,7 +48,7 @@ public sealed class SmtpTestRunner
 
         while (true)
         {
-            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger).ConfigureAwait(false);
+            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger, capacityGuard).ConfigureAwait(false);
             attempt++;
 
             sumRetries += result.Retries;
@@ -135,7 +139,8 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct,
         int attemptIndex,
-        DeliveryLedger ledger)
+        DeliveryLedger ledger,
+        CapacityRunGuard? capacityGuard)
     {
         CancellationTokenSource? durationCts = null;
         var queueMetrics = new ScenarioQueueMetrics();
@@ -351,6 +356,7 @@ public sealed class SmtpTestRunner
         // RateLimiter zde nepřidává druhé čekání.
         var rateLimiter = new RateLimiter(0);
         bool cancelled = false;
+        string? capacityStopReason = null;
         var adaptive = options.UseAdaptiveConcurrency
             ? new AdaptiveConcurrencyLimiter(options.MaxConcurrency, min: 1, max: options.MaxConcurrency)
             : null;
@@ -690,11 +696,14 @@ public sealed class SmtpTestRunner
                                         await payloadPipeline.ApplyAsync(message, pluginCtx).ConfigureAwait(false);
                                     }
 
-                                    if (bandwidth != null)
+                                    long serializedMimeBytes = 0;
+                                    if (bandwidth != null || capacityGuard != null)
                                     {
                                         var sizeCounter = new CountingStream();
                                         message.WriteTo(sizeCounter);
-                                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, sizeCounter.BytesWritten), workerCt).ConfigureAwait(false);
+                                        serializedMimeBytes = sizeCounter.BytesWritten;
+                                        if (bandwidth != null)
+                                            await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, serializedMimeBytes), workerCt).ConfigureAwait(false);
                                     }
 
                                     Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"SEND #{i} · W{workerId}", null, 3,
@@ -710,6 +719,13 @@ public sealed class SmtpTestRunner
                                         await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
                                     {
                                         samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
+                                        if (capacityGuard != null
+                                            && !capacityGuard.TryReserve(serializedMimeBytes, out var capacityReason))
+                                        {
+                                            Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
+                                            batchCts.Cancel();
+                                            throw new OperationCanceledException(capacityReason, workerCt);
+                                        }
                                         var smtpT0 = Stopwatch.GetTimestamp();
                                         try
                                         {
@@ -1072,7 +1088,9 @@ public sealed class SmtpTestRunner
         double activeSeconds = activeTicks / (double)Stopwatch.Frequency;
         double activeThroughput = activeSeconds > 0 ? sent / activeSeconds : 0;
 
-        if (cancelled && string.IsNullOrEmpty(lastError))
+        if (!string.IsNullOrWhiteSpace(capacityStopReason))
+            lastError = capacityStopReason;
+        else if (cancelled && string.IsNullOrEmpty(lastError))
             lastError = "Zastaveno uživatelem";
 
         var poolConnections = multiAccount ? multiPoolConnections : (pool?.CreatedCount ?? 0);
