@@ -234,6 +234,10 @@ public sealed partial class MainForm : Form
     {
         if (txtFrom is null) return;
 
+        foreach (var account in _accountDrafts)
+            if (account.Enabled && IsValidEmailSuggestion(account.Username))
+                AddKnownEmailAddress(account.Username);
+
         foreach (var address in new[] { txtTo?.Text, txtCc?.Text, txtBcc?.Text })
         {
             if (string.IsNullOrWhiteSpace(address)) continue;
@@ -276,9 +280,9 @@ public sealed partial class MainForm : Form
     {
         if (button is null || button.IsDisposed) return;
         button.Enabled = _knownEmailAddresses.Count > 0;
-        button.Text = button.Enabled
-            ? button.Text
-            : button.Text.Replace("Vybrat adresu", "Nejprve zadej e-mail");
+        toolTip.SetToolTip(button, button.Enabled
+            ? "Otevře seznam známých e-mailových adres. Kliknutím vložíš adresu do pole."
+            : "Nejdříve zadej e-mail do pole Od, Komu, CC nebo BCC, případně nastav SMTP účet.");
     }
 
     private void ShowAddressSuggestionMenu(Button button, TextBox target)
