@@ -222,6 +222,16 @@ public sealed partial class MainForm
         rtbLog.SelectionLength = 0;
         rtbLog.SelectionColor = color;
         rtbLog.AppendText(message + Environment.NewLine);
+        const int maxUiLogChars = 1_000_000;
+        const int retainedUiLogChars = 800_000;
+        if (rtbLog.TextLength > maxUiLogChars)
+        {
+            var trimCount = rtbLog.TextLength - retainedUiLogChars;
+            rtbLog.Select(0, trimCount);
+            rtbLog.SelectedText = string.Empty;
+        }
+        rtbLog.SelectionStart = rtbLog.TextLength;
+        rtbLog.SelectionLength = 0;
         rtbLog.SelectionColor = rtbLog.ForeColor;
         rtbLog.ScrollToCaret();
     }
