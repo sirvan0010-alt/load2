@@ -96,9 +96,10 @@ public sealed class CapacityRunGuard
 
             if (effectiveMessageLimit != long.MaxValue && mimeMessageBytes > effectiveMessageLimit)
             {
-                var source = serverMaxMessageBytes is > 0 && serverMaxMessageBytes.Value <= _limits.MaxMimeMessageBytes
-                    ? "server-advertised SMTP SIZE limit"
-                    : "configured per-message ceiling";
+                var source = serverMaxMessageBytes is > 0
+                    && (_limits.MaxMimeMessageBytes == 0 || serverMaxMessageBytes.Value <= _limits.MaxMimeMessageBytes)
+                        ? "server-advertised SMTP SIZE limit"
+                        : "configured per-message ceiling";
                 reason = $"Capacity stop: MIME message is {mimeMessageBytes:N0} B, above the {source} of {effectiveMessageLimit:N0} B.";
                 return false;
             }
