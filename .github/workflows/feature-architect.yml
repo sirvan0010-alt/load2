@@ -16,6 +16,14 @@ permissions:
   issues: write
 
 jobs:
+  skip-non-proposal-events:
+    # Keep pull-request/push checks green without creating proposal issues.
+    if: github.event_name != 'workflow_dispatch' && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain intentional skip
+        run: echo "Feature Architect runs only on schedule or manual dispatch; no proposal issue is created for this event."
+
   skip-push:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
