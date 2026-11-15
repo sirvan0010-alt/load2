@@ -137,6 +137,21 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public async Task MailboxPressureFloor_CannotBeUndercutByJitter()
+    {
+        var pace = new SmartPaceController(BaseOptions(0, jitter: true) with { JitterPercent = 90 });
+        pace.ApplyMailboxPressure(1);
+
+        var sw = Stopwatch.StartNew();
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        sw.Stop();
+
+        Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(850),
+            $"Jitter shortened a mailbox-pressure floor: {sw.Elapsed.TotalMilliseconds:F0} ms.");
+    }
+
+    [Fact]
     public void MailboxPressure_OnlyIncreasesGlobalInterval()
     {
         var pace = new SmartPaceController(BaseOptions(250));
