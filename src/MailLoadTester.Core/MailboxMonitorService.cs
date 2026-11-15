@@ -129,7 +129,7 @@ public sealed class MailboxMonitorService
 
         var pending = new Queue<IMailFolder>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var roots = await client.GetFoldersAsync(client.PersonalNamespaces[0], StatusItems.None, cancellationToken).ConfigureAwait(false);
+        var roots = await client.GetFoldersAsync(client.PersonalNamespaces[0], StatusItems.None, false, cancellationToken).ConfigureAwait(false);
         foreach (var folder in roots)
             pending.Enqueue(folder);
 
