@@ -427,16 +427,28 @@ public sealed partial class MainForm
         rightTestPanel.Controls.Add(chartTabs, 0, 1);
         tblTest.Controls.Add(rightTestPanel, 1, 0);
 
-        tabTest.Controls.Add(tblTest);
-        tblTest.Dock = DockStyle.Fill;
-
-        var gbMode = new GroupBox { Text = "Režim", Dock = DockStyle.Bottom, Height = 110 };
-        var flMode = new FlowLayoutPanel { Dock = DockStyle.Fill };
+        var gbMode = new GroupBox { Text = "Režim", Dock = DockStyle.Fill };
+        var flMode = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
         chkDryRun = AddCheckBox(flMode, "Dry-run (bez reálného SMTP)", false, "Simuluje odesílání bez spojení k serveru. Pipeline cesty je v dry-run jen ilustrativní, ne skutečná SMTP komunikace.");
         chkTestMode = AddCheckBox(flMode, "Test mode (omezit domény)", false, "Povolí odesílat jen na vybrané domény.");
         txtAllowedDomains = AddLabeledText(flMode, "Povolené domény:", "Seznam domén oddělených čárkou (např. example.com,test.cz).");
         gbMode.Controls.Add(flMode);
-        tabTest.Controls.Add(gbMode);
+
+        // Use explicit rows instead of mixing Dock=Fill and Dock=Bottom on the tab page.
+        // This prevents the mode panel from covering or being covered by the parameter/chart area.
+        var testLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        testLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        testLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        testLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110F));
+        testLayout.Controls.Add(tblTest, 0, 0);
+        testLayout.Controls.Add(gbMode, 0, 1);
+        tabTest.Controls.Add(testLayout);
         tabs.TabPages.Add(tabTest);
 
         // --- Tab: Proxy ---
@@ -614,7 +626,7 @@ public sealed partial class MainForm
             Dock = DockStyle.Fill,
             Size = new Size(1280, 600),
             Orientation = Orientation.Vertical,
-            SplitterDistance = 760,
+            SplitterDistance = 640,
             SplitterWidth = 8,
             Panel1MinSize = 400,
             Panel2MinSize = 300,
@@ -704,7 +716,7 @@ public sealed partial class MainForm
             Dock = DockStyle.Fill,
             Size = new Size(1280, 800),
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 480,
+            SplitterDistance = 390,
             SplitterWidth = 8,
             Panel1MinSize = 260,
             Panel2MinSize = 180,
