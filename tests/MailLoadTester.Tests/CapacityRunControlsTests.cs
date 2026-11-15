@@ -83,6 +83,19 @@ public sealed class CapacityRunControlsTests
     }
 
     [Fact]
+    public void Guard_UsesTheStricterOfConfiguredAndServerAdvertisedMessageLimits()
+    {
+        var guard = new CapacityRunGuard(new CapacityRunLimits(
+            Enabled: true,
+            MaxMessageCount: 10,
+            MaxMimeMessageBytes: 100));
+
+        Assert.False(guard.TryReserve(81, 80, out var reason));
+        Assert.Contains("server-advertised SMTP SIZE limit", reason);
+        Assert.True(guard.TryReserve(80, 90, out _));
+    }
+
+    [Fact]
     public void Guard_CountsRetryAttemptsAgainstCumulativeMimeBudget()
     {
         var guard = new CapacityRunGuard(new CapacityRunLimits(
