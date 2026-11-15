@@ -293,9 +293,37 @@ public sealed partial class MainForm
         numCapacityTargetMiB = AddLabeledNumeric(flParams, "Capacity: celkový MIME limit (MiB):", 0, 1048576, 0,
             "Maximální součet serializovaných MIME bajtů napříč všemi SEND pokusy včetně retry. 0 = bez limitu.", decimalPlaces: 2);
         numCapacityMaxMessageMiB = AddLabeledNumeric(flParams, "Capacity: max. MIME zpráva (MiB):", 0, 1048576, 0,
-            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Později lze doplnit automatické převzetí limitu SMTP SIZE.", decimalPlaces: 2);
+            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Aktivní SMTP SIZE limit se automaticky uplatní, pokud ho server po připojení oznámí.", decimalPlaces: 2);
         numCapacityMaxPerMinute = AddLabeledNumeric(flParams, "Capacity: max. zpráv/min:", 0, 60000, 0,
             "Pevný strop globálního tempa včetně retry. 0 = bez dodatečného stropu; nikdy nezrychlí již pomalejší interval.");
+        btnCapacityEstimate = new Button { Text = "Odhad MIME objemu", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+        btnCapacityEstimate.Click += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); }
+            catch (Exception ex) { lblCapacityEstimate.Text = "Odhad nelze spočítat: " + ex.Message; }
+        };
+        lblCapacityEstimate = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(450, 0),
+            ForeColor = Color.DimGray,
+            Text = "Orientační MIME odhad se zobrazí po kliknutí na tlačítko.",
+            Margin = new Padding(3, 2, 3, 8)
+        };
+        chkCapacityRun.CheckedChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        numCount.ValueChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        numCapacityMaxMessages.ValueChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        flParams.Controls.Add(btnCapacityEstimate);
+        flParams.Controls.Add(lblCapacityEstimate);
         gbParams.Controls.Add(flParams);
         tblTest.Controls.Add(gbParams, 0, 0);
 
