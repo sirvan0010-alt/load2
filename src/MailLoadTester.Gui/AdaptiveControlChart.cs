@@ -8,14 +8,8 @@ internal sealed class AdaptiveControlChart : Control
 {
     private const int MaxSamples = 120;
 
-    private sealed record Sample(
-        DateTimeOffset At,
-        int? IntervalMs,
-        int? AdaptiveConcurrency,
-        int ConfiguredConcurrency);
-
-    private readonly List<Sample> _samples = new();
-    private DateTimeOffset? _lastSampleAt;
+    private readonly AdaptiveControlChartSampler _sampler = new();
+    private IReadOnlyList<AdaptiveControlChartSample> Samples => _sampler.Samples;
 
     public AdaptiveControlChart()
     {
@@ -33,30 +27,13 @@ internal sealed class AdaptiveControlChart : Control
         int? adaptiveConcurrency,
         int configuredConcurrency)
     {
-        // Progress events may arrive several times per message. Keep the same
-        // one-second cadence as the SMTP/IMAP chart so 120 samples span ~2 min.
-        if (_lastSampleAt.HasValue && at - _lastSampleAt.Value < TimeSpan.FromSeconds(1))
-        {
-            return;
-        }
-
-        _lastSampleAt = at;
-        _samples.Add(new Sample(
-            at,
-            effectiveIntervalMs is >= 0 ? effectiveIntervalMs : null,
-            adaptiveConcurrency is >= 1 ? adaptiveConcurrency : null,
-            Math.Max(1, configuredConcurrency)));
-
-        if (_samples.Count > MaxSamples)
-            _samples.RemoveRange(0, _samples.Count - MaxSamples);
-
-        Invalidate();
+        if (_sampler.AddSample(at, effectiveIntervalMs, adaptiveConcurrency, configuredConcurrency))
+            Invalidate();
     }
 
     public void ClearSamples()
     {
-        _samples.Clear();
-        _lastSampleAt = null;
+        _sampler.Clear();
         Invalidate();
     }
 
@@ -74,7 +51,7 @@ internal sealed class AdaptiveControlChart : Control
 
         g.DrawString("Adaptivní řízení – posledních 120 vzorků", Font, textBrush, 6, 4);
 
-        var latest = _samples.LastOrDefault();
+        var latest = Samples.LastOrDefault();
         var intervalText = latest?.IntervalMs is int interval
             ? interval == 0
                 ? "SEND interval: 0 ms (bez pevného intervalu)"
@@ -86,7 +63,7 @@ internal sealed class AdaptiveControlChart : Control
         g.DrawString(intervalText, Font, mutedBrush, 6, 20);
         g.DrawString(concurrencyText, Font, mutedBrush, 6, 34);
 
-        if (_samples.Count == 0)
+        if (Samples.Count == 0)
         {
             g.DrawString("Čekám na průběh testu…", Font, mutedBrush, 12, 58);
             return;
@@ -100,19 +77,19 @@ internal sealed class AdaptiveControlChart : Control
         var intervalPlot = new Rectangle(left, firstTop, width, panelHeight);
         var concurrencyPlot = new Rectangle(left, firstTop + panelHeight + panelGap, width, panelHeight);
 
-        var intervalMax = Math.Max(1_000, _samples
+        var intervalMax = Math.Max(1_000, Samples
             .Where(sample => sample.IntervalMs.HasValue)
             .Select(sample => sample.IntervalMs!.Value)
             .DefaultIfEmpty(1_000)
             .Max());
         intervalMax = RoundAxisMaximum(intervalMax);
 
-        var concurrencyMax = Math.Max(1, _samples.Max(sample => sample.ConfiguredConcurrency));
+        var concurrencyMax = Math.Max(1, Samples.Max(sample => sample.ConfiguredConcurrency));
 
         DrawPanel(g, intervalPlot, "Globální SEND interval (ms)", 0, intervalMax,
             sample => sample.IntervalMs, grid, border, Color.FromArgb(70, 90, 180), mutedBrush);
 
-        if (_samples.Any(sample => sample.AdaptiveConcurrency.HasValue))
+        if (Samples.Any(sample => sample.AdaptiveConcurrency.HasValue))
         {
             DrawPanel(g, concurrencyPlot, "Povolená adaptivní souběžnost (workery)", 0, concurrencyMax,
                 sample => sample.AdaptiveConcurrency, grid, border, Color.FromArgb(25, 135, 145), mutedBrush);
@@ -123,8 +100,8 @@ internal sealed class AdaptiveControlChart : Control
                 "Adaptive concurrency je vypnuté.", grid, border, mutedBrush);
         }
 
-        var first = _samples[0].At.ToLocalTime().ToString("HH:mm:ss");
-        var last = _samples[^1].At.ToLocalTime().ToString("HH:mm:ss");
+        var first = Samples[0].At.ToLocalTime().ToString("HH:mm:ss");
+        var last = Samples[^1].At.ToLocalTime().ToString("HH:mm:ss");
         g.DrawString(first, Font, mutedBrush, concurrencyPlot.Left, concurrencyPlot.Bottom + 3);
         var lastSize = g.MeasureString(last, Font);
         g.DrawString(last, Font, mutedBrush, concurrencyPlot.Right - lastSize.Width, concurrencyPlot.Bottom + 3);
@@ -136,7 +113,7 @@ internal sealed class AdaptiveControlChart : Control
         string title,
         int minimum,
         int maximum,
-        Func<Sample, int?> selector,
+        Func<AdaptiveControlChartSample, int?> selector,
         Pen grid,
         Pen border,
         Color seriesColor,
@@ -161,9 +138,9 @@ internal sealed class AdaptiveControlChart : Control
         }
 
         PointF? previous = null;
-        for (var index = 0; index < _samples.Count; index++)
+        for (var index = 0; index < Samples.Count; index++)
         {
-            var value = selector(_samples[index]);
+            var value = selector(Samples[index]);
             if (!value.HasValue)
             {
                 previous = null;
@@ -173,7 +150,7 @@ internal sealed class AdaptiveControlChart : Control
             var ratio = maximum > minimum
                 ? (value.Value - minimum) / (double)(maximum - minimum)
                 : 0d;
-            var x = plot.Left + plot.Width * index / (float)Math.Max(1, _samples.Count - 1);
+            var x = GetX(plot, index);
             var y = plot.Bottom - (float)(plot.Height * Math.Clamp(ratio, 0d, 1d));
             var current = new PointF(x, y);
             if (previous.HasValue)
@@ -204,6 +181,21 @@ internal sealed class AdaptiveControlChart : Control
         g.DrawString(message, Font, mutedBrush,
             plot.Left + Math.Max(4, (plot.Width - size.Width) / 2),
             plot.Top + Math.Max(2, (plot.Height - size.Height) / 2));
+    }
+
+    private float GetX(Rectangle plot, int index)
+    {
+        if (Samples.Count <= 1)
+            return plot.Left;
+
+        var first = Samples[0].At;
+        var last = Samples[^1].At;
+        var duration = (last - first).TotalMilliseconds;
+        if (duration <= 0)
+            return plot.Left + plot.Width * index / (float)(Samples.Count - 1);
+
+        var ratio = (Samples[index].At - first).TotalMilliseconds / duration;
+        return plot.Left + plot.Width * (float)Math.Clamp(ratio, 0d, 1d);
     }
 
     private static int RoundAxisMaximum(int value)
