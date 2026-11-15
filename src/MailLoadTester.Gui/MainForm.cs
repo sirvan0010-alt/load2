@@ -149,6 +149,8 @@ public sealed partial class MainForm : Form
     private TaskCompletionSource<bool>? _mailboxMonitorCompletion;
     private bool _mailboxRefreshInProgress;
     private bool _mailboxQuotaStopTriggered;
+    private MailboxMonitorSnapshot? _mailboxRunBaseline;
+    private MailboxMonitorSnapshot? _mailboxLastSnapshot;
     private bool _closeApproved;
     private DateTime _logThrottleWindow = DateTime.MinValue;
     private DateTime _observedThrottle = DateTime.MinValue;
