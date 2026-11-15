@@ -28,9 +28,9 @@ jobs:
 
       - name: Restore
         run: |
-          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
-          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
-          dotnet restore src/MailLoadTester.Gui/MailLoadTester.Gui.csproj
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
+          dotnet restore src/MailLoadTester.Gui/MailLoadTester.Gui.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
 
       - name: Build Core and tests
         run: |
@@ -62,6 +62,31 @@ jobs:
           $exe = Get-FileHash publish\MailLoadTester.exe -Algorithm SHA256
           "$($exe.Hash)  MailLoadTester.exe" | Set-Content -Path publish\SHA256SUMS.txt -Encoding ASCII
           Compress-Archive -Path publish\* -DestinationPath MailLoadTester-win-x64.zip -Force
+
+      - name: Verify packaged executable and checksum
+        shell: pwsh
+        run: |
+          $archive = [System.IO.Compression.ZipFile]::OpenRead("MailLoadTester-win-x64.zip")
+          try {
+            $exe = $archive.GetEntry("MailLoadTester.exe")
+            $quickStart = $archive.GetEntry("START-HERE.txt")
+            $checksums = $archive.GetEntry("SHA256SUMS.txt")
+            if ($null -eq $exe -or $exe.Length -lt 1MB) { throw "Packaged executable is missing or unexpectedly small." }
+            if ($null -eq $quickStart -or $null -eq $checksums) { throw "Package is missing quick-start or checksum file." }
+            $stream = $exe.Open()
+            try {
+              $actualHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)).ToLowerInvariant()
+            } finally {
+              $stream.Dispose()
+            }
+            $reader = [System.IO.StreamReader]::new($checksums.Open())
+            try { $checksumLine = $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
+            $expectedHash = ($checksumLine -split '\s+')[0].ToLowerInvariant()
+            if ($actualHash -ne $expectedHash) { throw "Packaged executable SHA-256 does not match SHA256SUMS.txt." }
+            Write-Host "Package contents and executable SHA-256 verified: $actualHash"
+          } finally {
+            $archive.Dispose()
+          }
 
       - name: Upload ready-to-run Windows package
         uses: actions/upload-artifact@v4
