@@ -139,6 +139,7 @@ public sealed partial class MainForm : Form
     private Button btnCapacityEstimate = null!;
     private Label lblCapacityEstimate = null!;
     private RunMetricsChart runMetricsChart = null!;
+    private AdaptiveControlChart adaptiveControlChart = null!;
     private int _lastRunSmtpSendAttempts;
     private int _lastRunSmtp4xx;
     private int _lastRunSmtp5xx;
