@@ -78,5 +78,6 @@
 - **MIME sizing:** Base64 line-wrapping and conservative maximum-attachment estimates are implemented with overflow checks.
 - **Existing diagnostic correction:** MX lookup now targets the first recipient domain instead of incorrectly using the sender domain; TLS certificate subject is captured during certificate validation.
 - **Tests added:** fake local SMTP server verifies SIZE/EHLO parsing and that discovery issues no MAIL or DATA command; MIME sizing tests cover 1 GiB and the 25 MiB message ceiling.
-- **Not yet complete:** SMTP response-classification changes, IMAP folder inventory/Junk discovery, capacity-run controls, integrated adaptive policy, and multi-series live chart.
+- **M2 in progress:** enhanced SMTP status codes now distinguish mailbox full (5.2.2), message too large (5.3.4), and policy refusal (5.7.x). These are non-retryable; temporary 4xx remain bounded-retry candidates. The observed-response guidance now explains the correct capacity/size/policy action.
+- **Not yet complete:** IMAP folder inventory/Junk discovery, capacity-run controls, integration of verified mailbox deltas into adaptive pacing, and multi-series live chart.
 - **Verification state:** CI and Windows package workflows are pending for the current branch head. Do not merge until they pass and a Windows GUI run is performed.
