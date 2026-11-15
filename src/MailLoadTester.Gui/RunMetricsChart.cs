@@ -177,7 +177,7 @@ internal sealed class RunMetricsChart : Control
         g.DrawString(first, Font, mutedBrush, plot.Left, plot.Bottom + 6);
         var lastSize = g.MeasureString(last, Font);
         g.DrawString(last, Font, mutedBrush, plot.Right - lastSize.Width, plot.Bottom + 6);
-        g.DrawString("levá osa: zprávy/min; pravá osa: IMAP kvóta %", Font, mutedBrush, 6, Height - 15);
+        g.DrawString("levá osa: zprávy/min; pravá osa: kvóta %; IMAP Δ = nezávislé pozorování", Font, mutedBrush, 6, Height - 15);
     }
 
     private void DrawLegend(Graphics g)
@@ -198,7 +198,7 @@ internal sealed class RunMetricsChart : Control
             var item = items[index];
             var column = index % 3;
             var row = index / 3;
-            var x = 6f + column * Math.Max(110, (Width - 24) / 3f);
+            var x = 6f + column * Math.Max(82, (Width - 12) / 3f);
             var y = 20f + row * 13f;
             using var brush = new SolidBrush(item.Color);
             g.FillRectangle(brush, x, y + 2, 8, 8);
