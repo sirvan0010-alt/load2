@@ -24,6 +24,7 @@ public sealed partial class MainForm
             u.Sent,
             u.Smtp4xx,
             u.Smtp5xx,
+            _mailboxLastSnapshot?.CheckedAt,
             GetObservedQuotaMessageDelta(_mailboxLastSnapshot),
             _mailboxLastSnapshot?.QuotaUsagePercent);
         adaptiveControlChart?.AddSample(
