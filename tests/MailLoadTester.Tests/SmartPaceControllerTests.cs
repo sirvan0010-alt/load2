@@ -137,6 +137,21 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public void MailboxPressure_OnlyIncreasesGlobalInterval()
+    {
+        var pace = new SmartPaceController(BaseOptions(250));
+
+        pace.ApplyMailboxPressure(1);
+        var moderateInterval = pace.CurrentIntervalMs;
+        pace.ApplyMailboxPressure(2);
+        var criticalInterval = pace.CurrentIntervalMs;
+
+        Assert.True(moderateInterval >= 250);
+        Assert.True(criticalInterval >= moderateInterval);
+        Assert.True(criticalInterval >= 2_000);
+    }
+
+    [Fact]
     public async Task ZeroInterval_DoesNotBlock()
     {
         var pace = new SmartPaceController(BaseOptions(0));
