@@ -130,6 +130,60 @@ public sealed class MailboxMonitorTests
     }
 
     [Fact]
+    public void MailboxFeedback_SlowsAfterRepeatedGrowthNearWarningThreshold()
+    {
+        var controller = new MailboxCapacityFeedbackController();
+        var t0 = DateTimeOffset.UtcNow;
+        controller.SetBaseline(QuotaSnapshot(7_000, 10_000, t0));
+
+        Assert.Null(controller.Observe(QuotaSnapshot(7_100, 10_000, t0.AddSeconds(30)), 80));
+        var moderate = controller.Observe(QuotaSnapshot(7_200, 10_000, t0.AddSeconds(60)), 80);
+
+        Assert.NotNull(moderate);
+        Assert.Equal(1, moderate.Severity);
+        Assert.Equal(72d, moderate.QuotaUsagePercent);
+        Assert.Equal(100L, moderate.StorageGrowthBytes);
+
+        var critical = controller.Observe(QuotaSnapshot(7_600, 10_000, t0.AddSeconds(90)), 80);
+        Assert.NotNull(critical);
+        Assert.Equal(2, critical.Severity);
+        Assert.Equal(76d, critical.QuotaUsagePercent);
+    }
+
+    [Fact]
+    public void MailboxFeedback_UnknownQuotaOrNonGrowthDoesNotTriggerPressure()
+    {
+        var controller = new MailboxCapacityFeedbackController();
+        var t0 = DateTimeOffset.UtcNow;
+        controller.SetBaseline(new MailboxMonitorSnapshot(1, 0, null, null, null, null, null, t0, "quota unavailable"));
+        Assert.Null(controller.Observe(QuotaSnapshot(7_100, 10_000, t0.AddSeconds(30)), 80));
+
+        controller.SetBaseline(QuotaSnapshot(7_000, 10_000, t0));
+        Assert.Null(controller.Observe(QuotaSnapshot(7_100, 10_000, t0.AddSeconds(30)), 80));
+        Assert.Null(controller.Observe(QuotaSnapshot(7_100, 10_000, t0.AddSeconds(60)), 80));
+        Assert.Null(controller.Observe(QuotaSnapshot(7_200, 10_000, t0.AddSeconds(90)), 80));
+    }
+
+    [Fact]
+    public void MailboxFeedback_OnlyEscalatesAndNeverRecommendsSpeedIncrease()
+    {
+        var controller = new MailboxCapacityFeedbackController();
+        var t0 = DateTimeOffset.UtcNow;
+        controller.SetBaseline(QuotaSnapshot(7_000, 10_000, t0));
+
+        var moderate = controller.Observe(QuotaSnapshot(7_100, 10_000, t0.AddSeconds(30)), 80);
+        Assert.Null(moderate);
+        moderate = controller.Observe(QuotaSnapshot(7_200, 10_000, t0.AddSeconds(60)), 80);
+        Assert.Equal(1, moderate!.Severity);
+
+        var noDowngrade = controller.Observe(QuotaSnapshot(7_300, 10_000, t0.AddSeconds(90)), 80);
+        Assert.Null(noDowngrade);
+    }
+
+    private static MailboxMonitorSnapshot QuotaSnapshot(long usedBytes, long limitBytes, DateTimeOffset checkedAt)
+        => new(0, 0, 0, usedBytes, limitBytes, null, null, checkedAt, "quota available");
+
+    [Fact]
     public void Snapshot_AggregatesJunkFoldersWithoutInventingMissingCounts()
     {
         var snapshot = new MailboxMonitorSnapshot(
