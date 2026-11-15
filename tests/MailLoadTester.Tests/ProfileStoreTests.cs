@@ -42,6 +42,33 @@ public sealed class ProfileStoreTests
         }
     }
 
+    [Fact]
+    public async Task SaveAndLoad_PreservesCapacityRunLimits()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"mlt-profile-{Guid.NewGuid():N}.json");
+        var options = CreateOptions() with
+        {
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 321,
+                TargetMimeBytes: 12_345_678,
+                MaxMimeMessageBytes: 1_234_567,
+                MaxMessagesPerMinute: 42)
+        };
+
+        try
+        {
+            await ProfileStore.SaveAsync(path, options);
+            var loaded = await ProfileStore.LoadAsync(path);
+
+            Assert.Equal(options.CapacityRun, loaded.Options.CapacityRun);
+        }
+        finally
+        {
+            try { File.Delete(path); } catch { }
+        }
+    }
+
     private static MailTestOptions CreateOptions() => new(
         From: "tester@example.test",
         Recipients: new[] { "recipient@example.test" },
