@@ -1233,13 +1233,25 @@ public sealed class SmtpTestRunner
                             var done = Volatile.Read(ref sent) + f;
                             var eta = EstimateEta(done, options.MessageCount, startTime, sw);
                             var retryInfo = retryable ? " (po retry)" : "";
+                            var authenticationFailure = lastEx != null
+                                && SmtpOutcomeClassifier.Classify(lastEx) == SmtpOutcome.Authentication;
+                            if (authenticationFailure && !explained.StartsWith("[SMTP-AUTH-001]", StringComparison.Ordinal))
+                                explained = "[SMTP-AUTH-001] " + explained;
+                            Interlocked.Exchange(ref lastError, explained);
                             Report(Volatile.Read(ref sent), f,
                                 $"FAIL #{i}{retryInfo}: {explained}", eta, 3,
-                                $"Zastaveno na zprávě #{i}: {explained}",
-                                done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
+                                $"Zpráva #{i} selhala: {explained}",
+                                authenticationFailure
+                                    ? "STOP: server vyžaduje SMTP autentizaci. Zkontroluj přihlášení a heslo."
+                                    : done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
                                 MessageStep.FailedFinal, i, workerId,
                                 DeliveryStepKind.Error, false,
                                 includeObserved: true);
+                            // Authentication failures are configuration/credential errors,
+                            // not transient delivery failures. Stop the batch immediately;
+                            // do not hammer the provider with identical unauthenticated sends.
+                            if (authenticationFailure)
+                                batchCts.Cancel();
                         }
                     }
                     finally
