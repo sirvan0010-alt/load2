@@ -99,8 +99,12 @@ public sealed class CapacityRunControlsTests
         var size = CapacityRunMimeSizer.MeasurePreparedMimeBytes(client, message, requestedFormat: null);
 
         Assert.True(size > 0);
+        // Match MailKit's SMTP transport format: CRLF line endings and a final newline.
+        var transportFormat = FormatOptions.Default.Clone();
+        transportFormat.NewLineFormat = NewLineFormat.Dos;
+        transportFormat.EnsureNewLine = true;
         using var serialized = new MemoryStream();
-        message.WriteTo(serialized);
+        message.WriteTo(transportFormat, serialized);
         Assert.Equal(size, serialized.Length);
     }
 
