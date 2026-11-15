@@ -222,6 +222,30 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task RetryBudgetExhaustion_StillCountsLastSmtpPressureOutcome()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailTransient);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 1, maxRetries: 1) with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 1,
+            UseAdaptiveConcurrency = true
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        // First run: one retry plus final failure. AutoRestart: the shared retry
+        // budget is exhausted on the next 451, which must still reach telemetry.
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(1, result.AutoRestartAttempts);
+        Assert.Equal(3, result.Smtp4xx);
+        Assert.Equal(3, result.SmtpSendAttempts);
+        Assert.Equal(3, server.DataAttempts);
+    }
+
+    [Fact]
     public async Task AutoRestart_RetriesSingleUnresolvedFailureWithoutResendingAcceptedMessages()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.AcceptFirstThenTransientThenAccept);
