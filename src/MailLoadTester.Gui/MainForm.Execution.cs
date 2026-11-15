@@ -252,6 +252,13 @@ public sealed partial class MainForm
         btnStop.Enabled = true;
         rtbLog.Clear();
         smtpLogTab?.ClearLog();
+        AppendLog("=== START TESTU ===", Color.Cyan);
+        AppendLog($"SMTP cíl: {options.SmtpHost}:{options.Port} · {options.Security}", Color.LightGray);
+        AppendLog(options.DryRun
+            ? "Režim: DRY-RUN — žádné skutečné SMTP spojení ani e-maily se neodesílají."
+            : "Režim: REÁLNÉ SMTP — aplikace se připojí k serveru a pokusí se odesílat zprávy.", 
+            options.DryRun ? Color.DarkOrange : Color.LightGreen);
+        AppendLog($"Plán: {options.MessageCount:N0} zpráv · paralelismus {options.MaxConcurrency} · interval {options.IntervalMs} ms · retry {options.MaxRetries}.", Color.LightGray);
         runMetricsChart?.ClearSamples();
         adaptiveControlChart?.ClearSamples();
         _lastRunSmtpSendAttempts = 0;
