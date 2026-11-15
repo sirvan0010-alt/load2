@@ -77,7 +77,7 @@ public class RunMetricsChartSamplerTests
         Assert.Equal(20, sampler.Samples[^1].QuotaUsagePercent);
 
         Add(sampler, 30, quotaSecond: 30, quotaMessageDelta: 20, quotaPercent: 25);
-        Assert.Equal(20, sampler.Samples[^1].ObservedMailboxMessagesPerMinute, precision: 6);
+        Assert.Equal(20d, sampler.Samples[^1].ObservedMailboxMessagesPerMinute!.Value, 6);
         Assert.Equal(25, sampler.Samples[^1].QuotaUsagePercent);
     }
 
@@ -87,7 +87,7 @@ public class RunMetricsChartSamplerTests
         var sampler = new RunMetricsChartSampler();
         Add(sampler, 0, quotaSecond: 0, quotaMessageDelta: 10, quotaPercent: 20);
         Add(sampler, 30, quotaSecond: 30, quotaMessageDelta: 20, quotaPercent: 30);
-        Assert.Equal(20, sampler.Samples[^1].ObservedMailboxMessagesPerMinute, precision: 6);
+        Assert.Equal(20d, sampler.Samples[^1].ObservedMailboxMessagesPerMinute!.Value, 6);
 
         Add(sampler, 60, quotaSecond: 60, quotaMessageDelta: null, quotaPercent: null);
         Assert.Null(sampler.Samples[^1].ObservedMailboxMessagesPerMinute);
@@ -97,7 +97,7 @@ public class RunMetricsChartSamplerTests
         Assert.Null(sampler.Samples[^1].ObservedMailboxMessagesPerMinute);
 
         Add(sampler, 120, quotaSecond: 120, quotaMessageDelta: 35, quotaPercent: 40);
-        Assert.Equal(20, sampler.Samples[^1].ObservedMailboxMessagesPerMinute, precision: 6);
+        Assert.Equal(20d, sampler.Samples[^1].ObservedMailboxMessagesPerMinute!.Value, 6);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class RunMetricsChartSamplerTests
         Add(sampler, 0, quotaSecond: 0, quotaMessageDelta: 40, quotaPercent: 60);
         Add(sampler, 30, quotaSecond: 30, quotaMessageDelta: 30, quotaPercent: 55);
 
-        Assert.Equal(-20, sampler.Samples[^1].ObservedMailboxMessagesPerMinute, precision: 6);
+        Assert.Equal(-20d, sampler.Samples[^1].ObservedMailboxMessagesPerMinute!.Value, 6);
     }
 
     [Fact]
