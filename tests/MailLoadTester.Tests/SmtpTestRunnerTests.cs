@@ -33,6 +33,48 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task CapacityRun_StopsBeforeTheNextSendWouldExceedMimeBudget()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.Accept);
+        var runner = new SmtpTestRunner();
+
+        var measurement = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 1, maxRetries: 0) with
+            {
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 1,
+                    TargetMimeBytes: 100_000)
+            },
+            new Progress<ProgressUpdate>(),
+            CancellationToken.None);
+
+        Assert.Equal(1, measurement.Sent);
+        Assert.Equal(1, measurement.CapacitySendAttempts);
+        var oneMessageBytes = Assert.IsType<long>(measurement.CapacityMimeBytesReserved);
+        var acceptedBeforeBoundedRun = server.MessagesAccepted;
+        var dataAttemptsBeforeBoundedRun = server.DataAttempts;
+
+        var bounded = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 2, maxRetries: 0, maxConcurrency: 2) with
+            {
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 2,
+                    TargetMimeBytes: oneMessageBytes + 1)
+            },
+            new Progress<ProgressUpdate>(),
+            CancellationToken.None);
+
+        Assert.True(bounded.Cancelled);
+        Assert.Contains("Capacity stop", bounded.CapacityStopReason);
+        Assert.Equal(1, bounded.CapacitySendAttempts);
+        Assert.Equal(oneMessageBytes, bounded.CapacityMimeBytesReserved);
+        Assert.Equal(1, server.MessagesAccepted - acceptedBeforeBoundedRun);
+        Assert.Equal(1, server.DataAttempts - dataAttemptsBeforeBoundedRun);
+    }
+
+    [Fact]
     public async Task Permanent5xx_DoesNotRetry()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.FailPermanent);
