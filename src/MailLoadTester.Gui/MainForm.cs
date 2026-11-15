@@ -46,6 +46,8 @@ public sealed partial class MainForm : Form
 
     // Test tab
     private NumericUpDown numCount = null!, numConcurrency = null!, numInterval = null!, numRetries = null!;
+    private CheckBox chkCapacityRun = null!;
+    private NumericUpDown numCapacityMaxMessages = null!, numCapacityTargetMiB = null!, numCapacityMaxMessageMiB = null!, numCapacityMaxPerMinute = null!;
     private CheckBox chkBatchMode = null!;
     private NumericUpDown numBatchSize = null!, numBatchPause = null!;
     private CheckBox chkDryRun = null!, chkTestMode = null!;
