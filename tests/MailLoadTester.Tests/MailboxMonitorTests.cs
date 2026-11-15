@@ -49,4 +49,24 @@ public sealed class MailboxMonitorTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMonitorMath.ShouldStop(80, threshold));
     }
+    [Fact]
+    public void ValidateOptions_RejectsMissingHost()
+    {
+        var options = new MailboxMonitorOptions(" ", 993, MailboxMonitorSecurity.ImplicitTls, "user@example.com", "app-password");
+        Assert.Throws<ArgumentException>(() => MailboxMonitorService.ValidateOptions(options));
+    }
+
+    [Fact]
+    public void ValidateOptions_RejectsInvalidPort()
+    {
+        var options = new MailboxMonitorOptions("imap.example.com", 70000, MailboxMonitorSecurity.ImplicitTls, "user@example.com", "app-password");
+        Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMonitorService.ValidateOptions(options));
+    }
+
+    [Fact]
+    public void ValidateOptions_RejectsMissingCredentials()
+    {
+        var options = new MailboxMonitorOptions("imap.example.com", 993, MailboxMonitorSecurity.ImplicitTls, "", "");
+        Assert.Throws<ArgumentException>(() => MailboxMonitorService.ValidateOptions(options));
+    }
 }
