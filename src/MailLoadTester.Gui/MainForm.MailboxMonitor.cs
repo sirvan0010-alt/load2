@@ -312,7 +312,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             lblMailboxStatus.Text = "Neplatná konfigurace IMAP: " + ex.Message;
-            return;
+            return null;
         }
 
         _mailboxRefreshInProgress = true;
@@ -326,7 +326,7 @@ public sealed partial class MainForm
             lblMailboxStatus.Text = "Připojuji se k IMAP serveru a načítám stav schránky…";
             var snapshot = await new MailboxMonitorService().ReadAsync(options, cts.Token);
             if (IsDisposed || _closeApproved)
-                return;
+                return null;
 
             RenderMailboxMonitorSnapshot(snapshot);
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked
@@ -338,7 +338,6 @@ public sealed partial class MainForm
                 AppendLog($"Mailbox Monitor: využití kvóty {snapshot.QuotaUsagePercent:F1} % dosáhlo limitu {(int)numMailboxStopPercent.Value} %. Zastavuji SMTP test.", Color.OrangeRed);
                 _cts.Cancel();
             }
-        }
             return snapshot;
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
