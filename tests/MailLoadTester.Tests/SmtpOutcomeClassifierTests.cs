@@ -58,6 +58,14 @@ public class SmtpOutcomeClassifierTests
     }
 
     [Fact]
+    public void AuthenticationRequired_InWrappedOrGenericException_IsClassified()
+    {
+        var ex = new InvalidOperationException("5.7.0 authentication required");
+        Assert.Equal(SmtpOutcome.Authentication, SmtpOutcomeClassifier.Classify(ex));
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(ex));
+    }
+
+    [Fact]
     public void Recipient_550_not_retryable()
     {
         var ex = Smtp(SmtpStatusCode.MailboxUnavailable, "550 user unknown");
