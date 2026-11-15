@@ -197,7 +197,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            ShowErrorWithCopy("Chyba validace:\n" + ex.Message, "Nelze spustit", ex.ToString());
+            ShowErrorWithCopy("Chyba validace:\n" + ex.Message, "Nelze spustit", ex.ToString(), GuiErrorCodes.Validation);
             return;
         }
 
@@ -508,7 +508,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            ShowErrorWithCopy("Testovací e-mail nelze připravit:\n" + ex.Message, "Kontrola nastavení", ex.ToString());
+            ShowErrorWithCopy("Testovací e-mail nelze připravit:\n" + ex.Message, "Kontrola nastavení", ex.ToString(), GuiErrorCodes.TestMessagePreparation);
             return;
         }
 
@@ -575,7 +575,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             AppendLog($"Testovací odeslání skončilo chybou: {Validation.ExplainSmtpError(ex)}", Color.Red);
-            ShowErrorWithCopy(ex.Message, "SMTP odeslání selhalo", ex.ToString());
+            ShowErrorWithCopy(ex.Message, "SMTP odeslání selhalo", ex.ToString(), GuiErrorCodes.SmtpSend);
         }
         finally
         {
@@ -627,7 +627,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString());
+                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
         }
         finally
         {
