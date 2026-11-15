@@ -15,6 +15,7 @@ internal sealed class AdaptiveControlChart : Control
         int ConfiguredConcurrency);
 
     private readonly List<Sample> _samples = new();
+    private DateTimeOffset? _lastSampleAt;
 
     public AdaptiveControlChart()
     {
@@ -32,6 +33,15 @@ internal sealed class AdaptiveControlChart : Control
         int? adaptiveConcurrency,
         int configuredConcurrency)
     {
+        // Progress events may arrive several times per message. Keep the same
+        // one-second cadence as the SMTP/IMAP chart so 120 samples span ~2 min.
+        if (_lastSampleAt.HasValue && at - _lastSampleAt.Value < TimeSpan.FromSeconds(1))
+        {
+            Invalidate();
+            return;
+        }
+
+        _lastSampleAt = at;
         _samples.Add(new Sample(
             at,
             effectiveIntervalMs is >= 0 ? effectiveIntervalMs : null,
@@ -47,6 +57,7 @@ internal sealed class AdaptiveControlChart : Control
     public void ClearSamples()
     {
         _samples.Clear();
+        _lastSampleAt = null;
         Invalidate();
     }
 
