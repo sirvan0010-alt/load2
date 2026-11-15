@@ -77,15 +77,29 @@ public sealed class CapacityRunGuard
     }
 
     public bool TryReserve(long mimeMessageBytes, out string reason)
+        => TryReserve(mimeMessageBytes, serverMaxMessageBytes: null, out reason);
+
+    public bool TryReserve(long mimeMessageBytes, long? serverMaxMessageBytes, out string reason)
     {
         if (mimeMessageBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(mimeMessageBytes));
+        if (serverMaxMessageBytes is < 0)
+            throw new ArgumentOutOfRangeException(nameof(serverMaxMessageBytes));
 
         lock (_gate)
         {
-            if (_limits.MaxMimeMessageBytes > 0 && mimeMessageBytes > _limits.MaxMimeMessageBytes)
+            var effectiveMessageLimit = _limits.MaxMimeMessageBytes > 0
+                ? _limits.MaxMimeMessageBytes
+                : long.MaxValue;
+            if (serverMaxMessageBytes is > 0)
+                effectiveMessageLimit = Math.Min(effectiveMessageLimit, serverMaxMessageBytes.Value);
+
+            if (effectiveMessageLimit != long.MaxValue && mimeMessageBytes > effectiveMessageLimit)
             {
-                reason = $"Capacity stop: MIME message is {mimeMessageBytes:N0} B, above the configured per-message ceiling of {_limits.MaxMimeMessageBytes:N0} B.";
+                var source = serverMaxMessageBytes is > 0 && serverMaxMessageBytes.Value <= _limits.MaxMimeMessageBytes
+                    ? "server-advertised SMTP SIZE limit"
+                    : "configured per-message ceiling";
+                reason = $"Capacity stop: MIME message is {mimeMessageBytes:N0} B, above the {source} of {effectiveMessageLimit:N0} B.";
                 return false;
             }
 
