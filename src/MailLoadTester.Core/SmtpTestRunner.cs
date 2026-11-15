@@ -273,6 +273,7 @@ public sealed class SmtpTestRunner
         var lastReportTicks = 0L;
         var suppressedReports = 0;
         const int MinReportIntervalMs = 125;
+        int smtpSendAttempts = 0, smtp4xx = 0, smtp5xx = 0;
 
         void Report(int s, int f, string status, double? eta, int phase, string current, string next,
             MessageStep? step = null, int? messageIndex = null, int? workerId = null,
@@ -308,7 +309,10 @@ public sealed class SmtpTestRunner
                 capacityGuard?.ReservedMimeBytes,
                 options.CapacityRun is { Enabled: true, TargetMimeBytes: > 0 } capacityLimits
                     ? capacityLimits.TargetMimeBytes
-                    : null));
+                    : null,
+                SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
+                Smtp4xx: Volatile.Read(ref smtp4xx),
+                Smtp5xx: Volatile.Read(ref smtp5xx)));
             UpdateDashboard(s, f, status, eta, fsm.Phase.ToString());
         }
 
@@ -417,7 +421,7 @@ public sealed class SmtpTestRunner
         var sw = Stopwatch.StartNew();
         long activeTicks = 0;
         int sent = 0, failed = 0;
-        int retries = 0, smtpSendAttempts = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
+        int retries = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
         var latencyHistogram = new LatencyHistogram();
