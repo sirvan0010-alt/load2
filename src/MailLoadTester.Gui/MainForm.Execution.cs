@@ -79,7 +79,8 @@ public sealed partial class MainForm
                 MaxMessageCount: (int)numCapacityMaxMessages.Value,
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
-                MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value));
+                MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
