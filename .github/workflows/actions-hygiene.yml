@@ -6,8 +6,6 @@ on:
     paths:
       - ".github/workflows/**"
   pull_request:
-    paths:
-      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -25,11 +23,22 @@ jobs:
         run: |
           set -euo pipefail
           echo "Checking GitHub Actions workflows..."
-          if grep -RInE 'permissions:[[:space:]]*$' .github/workflows >/dev/null; then
-            echo "Workflow permissions declarations found."
-          else
-            echo "WARNING: no explicit permissions declaration found in workflows."
+          for workflow in .github/workflows/*.yml; do
+            if ! grep -qE '^[[:space:]]*permissions:[[:space:]]*
+          if grep -RInE 'pull_request_target|workflow_run' .github/workflows >/dev/null; then
+            echo "Sensitive trigger detected; review trust boundary manually."
           fi
+          if grep -RInE 'curl[[:space:]].*\|[[:space:]]*(bash|sh)|wget[[:space:]].*\|[[:space:]]*(bash|sh)' .github/workflows >/dev/null; then
+            echo "ERROR: remote script execution pattern detected in workflow."
+            exit 1
+          fi
+          echo "Workflow hygiene checks passed."
+ "$workflow"; then
+              echo "ERROR: $workflow has no explicit permissions declaration."
+              exit 1
+            fi
+          done
+          echo "Every workflow declares explicit token permissions."
           if grep -RInE 'pull_request_target|workflow_run' .github/workflows >/dev/null; then
             echo "Sensitive trigger detected; review trust boundary manually."
           fi
