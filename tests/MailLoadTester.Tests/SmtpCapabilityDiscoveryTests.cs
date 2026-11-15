@@ -75,8 +75,10 @@ public sealed class SmtpCapabilityDiscoveryTests
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _loop;
         public int Port { get; }
-        public int MailCommandCount { get; private set; }
-        public int DataCommandCount { get; private set; }
+        private int _mailCommandCount;
+        private int _dataCommandCount;
+        public int MailCommandCount => Volatile.Read(ref _mailCommandCount);
+        public int DataCommandCount => Volatile.Read(ref _dataCommandCount);
 
         public CapabilitySmtpServer()
         {
@@ -134,11 +136,11 @@ public sealed class SmtpCapabilityDiscoveryTests
                                 await writer.WriteLineAsync("221 Bye");
                                 return;
                             case "MAIL":
-                                Interlocked.Increment(ref MailCommandCount);
+                                Interlocked.Increment(ref _mailCommandCount);
                                 await writer.WriteLineAsync("250 OK");
                                 break;
                             case "DATA":
-                                Interlocked.Increment(ref DataCommandCount);
+                                Interlocked.Increment(ref _dataCommandCount);
                                 await writer.WriteLineAsync("354 End data with <CR><LF>.<CR><LF>");
                                 break;
                             default:
