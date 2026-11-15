@@ -333,7 +333,21 @@ public sealed partial class MainForm
         numBatchSize = AddLabeledNumeric(flBatch, "Velikost dávky:", 1, 1000, 10, "Kolik zpráv v jedné dávce.");
         numBatchPause = AddLabeledNumeric(flBatch, "Pauza (s):", 1, 86400, 1, "Kolik sekund počkat mezi dávkami.");
         gbBatch.Controls.Add(flBatch);
-        tblTest.Controls.Add(gbBatch, 1, 0);
+
+        var rightTestPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        rightTestPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 220F));
+        rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        rightTestPanel.Controls.Add(gbBatch, 0, 0);
+        runMetricsChart = new RunMetricsChart { Dock = DockStyle.Fill };
+        rightTestPanel.Controls.Add(runMetricsChart, 0, 1);
+        tblTest.Controls.Add(rightTestPanel, 1, 0);
 
         tabTest.Controls.Add(tblTest);
         tblTest.Dock = DockStyle.Fill;
