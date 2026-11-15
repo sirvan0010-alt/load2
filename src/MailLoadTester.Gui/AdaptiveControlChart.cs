@@ -37,7 +37,6 @@ internal sealed class AdaptiveControlChart : Control
         // one-second cadence as the SMTP/IMAP chart so 120 samples span ~2 min.
         if (_lastSampleAt.HasValue && at - _lastSampleAt.Value < TimeSpan.FromSeconds(1))
         {
-            Invalidate();
             return;
         }
 
