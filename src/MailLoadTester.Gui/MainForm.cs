@@ -274,4 +274,76 @@ public sealed partial class MainForm : Form
         if (!IsDisposed)
             Close();
     }
+
+    /// <summary>Shows an error in a persistent, selectable dialog with one-click copy.</summary>
+    private void ShowErrorWithCopy(string message, string title, string? technicalDetails = null)
+    {
+        var copyText = string.IsNullOrWhiteSpace(technicalDetails)
+            ? message
+            : message + Environment.NewLine + Environment.NewLine + "Technické podrobnosti:" + Environment.NewLine + technicalDetails;
+
+        using var dialog = new Form
+        {
+            Text = title,
+            Width = 720,
+            Height = 360,
+            MinimumSize = new Size(520, 260),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoScaleMode = AutoScaleMode.Font,
+            Font = Font
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+
+        var details = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = true,
+            Text = copyText
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+        var close = new Button { Text = "Zavřít", Width = 100, Height = 30, DialogResult = DialogResult.OK };
+        var copy = new Button { Text = "Kopírovat chybu", Width = 140, Height = 30 };
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(copyText);
+                copy.Text = "Zkopírováno";
+            }
+            catch (Exception clipboardError)
+            {
+                MessageBox.Show("Text se nepodařilo zkopírovat: " + clipboardError.Message,
+                    "Schránka", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+        buttons.Controls.Add(close);
+        buttons.Controls.Add(copy);
+        layout.Controls.Add(details, 0, 0);
+        layout.Controls.Add(buttons, 0, 1);
+        dialog.Controls.Add(layout);
+        dialog.AcceptButton = close;
+        dialog.CancelButton = close;
+        dialog.ShowDialog(this);
+    }
+
 }
