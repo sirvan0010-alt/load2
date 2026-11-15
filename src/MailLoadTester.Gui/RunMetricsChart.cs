@@ -130,7 +130,7 @@ internal sealed class RunMetricsChart : Control
             ("SMTP Accepted", Color.FromArgb(35, 145, 85)),
             ("4xx", Color.FromArgb(220, 145, 35)),
             ("5xx", Color.FromArgb(190, 55, 55)),
-            ("IMAP quota Δ", Color.FromArgb(25, 135, 145))
+            ("IMAP Δ (pozor.)", Color.FromArgb(25, 135, 145))
         };
 
         var x = 6f;
