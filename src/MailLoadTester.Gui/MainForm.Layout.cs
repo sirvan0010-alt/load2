@@ -118,28 +118,12 @@ public sealed partial class MainForm
         numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "25=plain, 587=STARTTLS, 465=Implicit TLS");
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
-        txtSourceIp = AddLabeledText(flConn, "Source IP (volitelné):", "Váže SMTP socket na konkrétní lokální IP. Můžeš vybrat ze seznamu níže.");
-        var lblLocalIp = new Label { Text = "Lokální IPv4 (výběr):", AutoSize = true, Margin = new Padding(0, 6, 0, 2) };
-        flConn.Controls.Add(lblLocalIp);
-        cmbLocalIp = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
-        cmbLocalIp.Items.Add("(automaticky – systém)");
-        try
-        {
-            foreach (var ip in NetworkAdapterInfo.GetLocalIPv4Addresses())
-                cmbLocalIp.Items.Add(ip);
-        }
-        catch { /* ignore */ }
-        cmbLocalIp.SelectedIndex = 0;
-        cmbLocalIp.SelectedIndexChanged += (s, e) =>
-        {
-            if (cmbLocalIp.SelectedIndex > 0)
-                txtSourceIp.Text = cmbLocalIp.SelectedItem?.ToString() ?? "";
-            else if (cmbLocalIp.SelectedIndex == 0)
-                txtSourceIp.Text = "";
-        };
-        toolTip.SetToolTip(lblLocalIp, "Vyber lokální IPv4 adresu počítače, ze které se budou navazovat SMTP spojení.");
-        toolTip.SetToolTip(cmbLocalIp, "Vybere lokální IPv4 adresu pro IP binding (Source IP). Automatická volba ponechá výběr na operačním systému.");
-        flConn.Controls.Add(cmbLocalIp);
+        string[] localIpSuggestions;
+        try { localIpSuggestions = NetworkAdapterInfo.GetLocalIPv4Addresses().ToArray(); }
+        catch { localIpSuggestions = Array.Empty<string>(); }
+        txtSourceIp = AddLabeledEditableCombo(flConn, "Source IP (volitelné):",
+            localIpSuggestions,
+            "Začni psát lokální IPv4 adresu nebo rozbal seznam. Prázdné pole = automatický výběr operačním systémem.");
         txtIpv6Prefix = AddLabeledText(flConn, "IPv6 prefix (rotace):",
             "Např. 2001:db8:85a3:0:: — každé nové SMTP spojení dostane náhodnou adresu z /N. OS musí prefix routovat. Prázdné = vypnuto. Má přednost před Source IP.");
         numIpv6PrefixLen = AddLabeledNumeric(flConn, "IPv6 prefix length:", 1, 128, 64,
@@ -192,31 +176,16 @@ public sealed partial class MainForm
 
         var gbAddr = new GroupBox { Text = "Adresy", Dock = DockStyle.Fill };
         var flAddr = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        var lblFrom = new Label { Text = "Od:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
-        flAddr.Controls.Add(lblFrom);
-        txtFrom = new ComboBox
-        {
-            Width = 360,
-            DropDownStyle = ComboBoxStyle.DropDown,
-            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
-            AutoCompleteSource = AutoCompleteSource.ListItems,
-            Margin = new Padding(0, 0, 0, 4)
-        };
-        flAddr.Controls.Add(txtFrom);
-        SetFieldToolTip(lblFrom, txtFrom, "Adresa odesílatele, nikoli SMTP server. Návrh se převezme z přihlašovacího e-mailu.");
+        txtFrom = AddEditableAddressCombo(flAddr, "Od:", "Adresa odesílatele; návrhy se doplňují z SMTP přihlášení a dříve zadaných adres.");
         flAddr.Controls.Add(new Label
         {
             Text = "Zadej skutečnou adresu schránky (např. jmeno@gmail.com). smtp.gmail.com je pouze adresa serveru.",
             AutoSize = true, MaximumSize = new Size(380, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        txtTo = AddLabeledText(flAddr, "Komu:", "Hlavní příjemce. Více adres odděl čárkou nebo novým řádkem.");
-        txtTo.Multiline = true; txtTo.Height = 50;
-        AddAddressSuggestionButton(flAddr, txtTo, "Vybrat adresu pro Komu  ▾");
-        txtCc = AddLabeledText(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
-        AddAddressSuggestionButton(flAddr, txtCc, "Vybrat adresu pro CC  ▾");
-        txtBcc = AddLabeledText(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
-        AddAddressSuggestionButton(flAddr, txtBcc, "Vybrat adresu pro BCC  ▾");
+        txtTo = AddEditableAddressCombo(flAddr, "Komu:", "PŘÍJEMCE E-MAILU. Začni psát adresu a vyber návrh; více adres odděl čárkou nebo středníkem.");
+        txtCc = AddEditableAddressCombo(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
+        txtBcc = AddEditableAddressCombo(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
         flAddr.Controls.Add(new Label
         {
             Text = "CC = viditelná kopie · BCC = skrytá kopie. Obojí je volitelné; nevyužíváš-li je, nech pole prázdná.",
@@ -791,6 +760,25 @@ public sealed partial class MainForm
         parent.Controls.Add(txt);
         SetFieldToolTip(lbl, txt, tip);
         return txt;
+    }
+
+    private ComboBox AddEditableAddressCombo(Control parent, string label, string tip)
+    {
+        var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        parent.Controls.Add(lbl);
+        var cmb = new ComboBox
+        {
+            Width = 360,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
+            IntegralHeight = false,
+            MaxDropDownItems = 10,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+        parent.Controls.Add(cmb);
+        SetFieldToolTip(lbl, cmb, tip);
+        return cmb;
     }
 
     private void EnsureSmtpHostSuggestionsVisible()
