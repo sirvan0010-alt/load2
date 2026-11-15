@@ -39,8 +39,8 @@ jobs:
 
       - name: Restore Core + Tests
         run: |
-          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
-          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
 
       - name: Build Release
         run: |
