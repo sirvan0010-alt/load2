@@ -15,6 +15,18 @@ public sealed class SmtpTestRunner
     private MailboxCapacityFeedbackDecision? _currentMailboxFeedbackDecision;
     private int _mailboxFeedbackStopThreshold = 80;
 
+    /// <summary>Current global SEND interval while a run is active.</summary>
+    public int? CurrentMailboxPaceIntervalMs
+    {
+        get { lock (_mailboxFeedbackSync) return _activePaceController?.CurrentIntervalMs; }
+    }
+
+    /// <summary>Current adaptive concurrency while a run is active.</summary>
+    public int? CurrentAdaptiveConcurrency
+    {
+        get { lock (_mailboxFeedbackSync) return _activeAdaptiveLimiter?.Current; }
+    }
+
     /// <summary>
     /// Enables mailbox-driven down-only feedback for a Capacity Run and seeds it
     /// with the pre-send IMAP baseline. No baseline means no mailbox feedback.
