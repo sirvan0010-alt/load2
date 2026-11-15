@@ -1,12 +1,24 @@
 # load2 — MailLoadTester
 
-Authorized **SMTP / email load-testing** tool (`sirvan0010-alt/load2`, branch **`main`**).
+Authorized **SMTP / email load-testing** tool. The current release version is maintained in [`VERSION`](VERSION).
 
-## For humans
-- Build: .NET 8 — `dotnet build` / `dotnet test` under `src/` and `tests/`
-- GUI: `MailLoadTester.Gui`
+## For users
 
-## For AI assistants
-**Start here:** [`docs/AI-GUIDE.md`](docs/AI-GUIDE.md)
+- [Build, publish and installer guide](README-BUILD.md)
+- [Documentation index](docs/README.md)
 
-Source code and tests on `main` are authoritative over documentation.
+## For developers
+
+- [Architecture and development guide](docs/DEVELOPMENT.md)
+- [Maintenance contract](README-MAINTENANCE.md)
+- [AI-assisted development guide](docs/AI-GUIDE.md)
+
+## Project
+
+- Core: `src/MailLoadTester.Core`
+- Windows Forms GUI: `src/MailLoadTester.Gui`
+- Tests: `tests/MailLoadTester.Tests`
+
+Build and test with the .NET 8 SDK. The GitHub Actions workflow builds Core/tests on Ubuntu and the WinForms GUI on Windows.
+
+**Source-of-truth rule:** current source code and tests define actual behavior. Historical audit files explain past changes and may not describe the current implementation.
