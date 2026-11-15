@@ -697,17 +697,21 @@ public sealed class SmtpTestRunner
                                     }
 
                                     long serializedMimeBytes = 0;
-                                    if (bandwidth != null || capacityGuard != null)
+                                    if (capacityGuard != null)
+                                    {
+                                        // Measure after MailKit-equivalent SMTP transport preparation so
+                                        // server SIZE and operator MIME budgets use the prepared payload.
+                                        serializedMimeBytes = CapacityRunMimeSizer.MeasurePreparedMimeBytes(client!, message, utf8Format);
+                                    }
+                                    else if (bandwidth != null)
                                     {
                                         var sizeCounter = new CountingStream();
-                                        if (utf8Format != null)
-                                            message.WriteTo(utf8Format, sizeCounter);
-                                        else
-                                            message.WriteTo(sizeCounter);
+                                        message.WriteTo(sizeCounter);
                                         serializedMimeBytes = sizeCounter.BytesWritten;
-                                        if (bandwidth != null)
-                                            await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, serializedMimeBytes), workerCt).ConfigureAwait(false);
                                     }
+
+                                    if (bandwidth != null)
+                                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, serializedMimeBytes), workerCt).ConfigureAwait(false);
 
                                     Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"SEND #{i} · W{workerId}", null, 3,
                                         $"SMTP SEND · zpráva #{i} · W{workerId}", "OK nebo retry",
