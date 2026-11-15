@@ -41,7 +41,8 @@ Při 4xx zpomal a zjisti příčinu. Při 5xx/policy odmítnutí test nezvyšuj 
 - Používej správný port a režim TLS.
 - **Ignorovat chyby certifikátu** nech vypnuté mimo izolovanou diagnostiku.
 - Neposílej hesla, OAuth access tokeny ani hesla certifikátů do issue, screenshotů nebo veřejných logů.
-- SMTP a proxy hesla se neukládají do běžného profilu. IMAP přihlašovací údaje zůstávají v paměti aplikace.
+- Běžné uložení profilu odstraní hlavní SMTP heslo, heslo proxy, heslo klientského certifikátu i hesla všech SMTP účtů. Po načtení je nutné přihlašovací údaje znovu doplnit.
+- IMAP přihlašovací údaje zůstávají v paměti aplikace a do profilu se neukládají.
 - Sdílený profil může přesto obsahovat hosty, adresy, cesty k souborům a další provozní konfiguraci; před sdílením jej zkontroluj.
 
 ## 6. Logy, reporty a webhooky
