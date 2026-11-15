@@ -156,7 +156,14 @@ public sealed partial class MainForm
         btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
         flAuth.Controls.Add(btnTestConnection);
         toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
-        btnSendTest = new Button { Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36, Margin = new Padding(0, 8, 0, 0) };
+        btnSendTest = new Button
+        {
+            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
+            Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
+            Cursor = Cursors.Hand
+        };
+        btnSendTest.FlatAppearance.BorderSize = 0;
         flAuth.Controls.Add(btnSendTest);
         toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu na první adresu v poli Komu. Nepoužívá zátěžový režim.");
         gbAuth.Controls.Add(flAuth);
@@ -533,7 +540,7 @@ public sealed partial class MainForm
         {
             Dock = DockStyle.Fill, ReadOnly = true,
             BackColor = Color.FromArgb(30, 30, 30), ForeColor = Color.LightGray,
-            Font = new Font("Consolas", 9.5f), BorderStyle = BorderStyle.None,
+            Font = new Font("Consolas", 10F), BorderStyle = BorderStyle.None,
             ScrollBars = RichTextBoxScrollBars.Vertical
         };
         toolTip.SetToolTip(rtbLog, "Průběžný aplikační log pouze v paměti. Při novém běhu se vymaže a při delším běhu se automaticky zkracuje na posledních přibližně 800 tisíc znaků; nevytváří samostatný diskový soubor.");
