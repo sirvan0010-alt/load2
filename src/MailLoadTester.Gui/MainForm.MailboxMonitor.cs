@@ -47,7 +47,7 @@ public sealed partial class MainForm
         toolTip.SetToolTip(btnDiscoverRecipientMx, "Pouze naváže spojení na MX server(y) první adresy v poli Komu a přečte SMTP pozdrav a EHLO. Nic neodesílá a neověří kapacitu schránky.");
         toolTip.SetToolTip(btnDiscoverSubmission, "Pouze se připojí k nastavenému SMTP serveru a načte EHLO/TLS parametry. Nepoužije přihlašovací údaje a nic neodesílá.");
 
-        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Volitelně zastaví právě běžící SMTP test, až když IMAP server poskytne skutečnou STORAGE kvótu a její využití dosáhne nastaveného limitu. Bez dostupné kvóty se automatické zastavení neaktivuje. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen.");
+        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Pouze při skutečné IMAP STORAGE kvótě. Během Capacity Run navíc při opakovaném růstu úložiště poblíž limitu zpomalí SEND tempo a při kritickém tlaku sníží adaptivní paralelismus. Bez dostupné kvóty se feedback ani automatické zastavení neaktivují. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen.");
         numMailboxStopPercent = AddLabeledNumeric(connectionFlow, "Limit zaplnění (%):", 1, 100, 80, "Automatické zastavení při dosažení této hodnoty skutečné IMAP STORAGE kvóty. Výchozí hodnota je 80 %.");
         connectionGroup.Controls.Add(connectionFlow);
         layout.Controls.Add(connectionGroup, 0, 0);
