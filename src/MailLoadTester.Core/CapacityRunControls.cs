@@ -35,7 +35,14 @@ public static class CapacityRunPlanner
             intervalMs = Math.Max(intervalMs, minimumInterval);
         }
 
-        return options with { MessageCount = messageCount, IntervalMs = intervalMs };
+        // Jitter can randomly shorten a send interval and violate a hard rate ceiling.
+        // Disable only that speed-up source while the explicit ceiling is active.
+        return options with
+        {
+            MessageCount = messageCount,
+            IntervalMs = intervalMs,
+            EnableJitter = limits.MaxMessagesPerMinute > 0 ? false : options.EnableJitter
+        };
     }
 }
 
