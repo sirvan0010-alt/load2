@@ -65,9 +65,11 @@ public static class MailboxCapacityMath
 
     public static long? EstimateMaxBinaryAttachmentBytes(long? serverMaxMessageBytes, long nonAttachmentOverheadBytes = 16 * 1024)
     {
+        if (nonAttachmentOverheadBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(nonAttachmentOverheadBytes));
         if (!serverMaxMessageBytes.HasValue)
             return null;
-        if (serverMaxMessageBytes.Value <= nonAttachmentOverheadBytes || nonAttachmentOverheadBytes < 0)
+        if (serverMaxMessageBytes.Value <= nonAttachmentOverheadBytes)
             return 0;
 
         var available = serverMaxMessageBytes.Value - nonAttachmentOverheadBytes;
