@@ -33,6 +33,9 @@ public sealed record MailboxMonitorSnapshot(
     string Status,
     IReadOnlyList<MailboxFolderSnapshot>? Folders = null)
 {
+    public double? QuotaUsagePercent => MailboxMonitorMath.GetUsagePercent(QuotaUsedBytes, QuotaLimitBytes);
+    public bool HasStorageQuota => QuotaUsedBytes.HasValue && QuotaLimitBytes is > 0;
+
     public int? JunkMessageCount => Folders?.Where(f => f.IsJunk).Sum(f => f.MessageCount ?? 0);
     public long? JunkSizeBytes => Folders is null || !Folders.Any(f => f.IsJunk && f.SizeBytes.HasValue)
         ? null
@@ -49,13 +52,6 @@ public sealed record MailboxFolderSnapshot(
     int? MessageCount,
     int? UnreadCount,
     long? SizeBytes);
-
-
-{
-    public double? QuotaUsagePercent => MailboxMonitorMath.GetUsagePercent(QuotaUsedBytes, QuotaLimitBytes);
-
-    public bool HasStorageQuota => QuotaUsedBytes.HasValue && QuotaLimitBytes is > 0;
-}
 
 public static class MailboxMonitorMath
 {
