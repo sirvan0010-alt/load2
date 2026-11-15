@@ -44,8 +44,8 @@ public sealed class AutoRestartMetricsTests
     [Fact]
     public void Outcomes_aggregate_each_taxonomy_bucket()
     {
-        var first = new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 2, 0, 1);
-        var second = new SmtpOutcomeCountsSnapshot(5, 2, 3, 4, 1, 2, 1, 0, 1, 2);
+        var first = new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 0, 0, 2, 0, 1);
+        var second = new SmtpOutcomeCountsSnapshot(5, 2, 3, 4, 1, 2, 1, 0, 0, 2, 0, 0);
 
         var result = AutoRestartMetrics.AggregateOutcomes(first, second);
 
@@ -94,7 +94,7 @@ public sealed class AutoRestartMetricsTests
     {
         var queue = new ScenarioQueueMetricsSnapshot(0, 2, 3, 3, 3, 0, 0, 0);
         var retry = new RetryMetricsSnapshot(1, 1, 0, 0, 0, 0, new[] { 0, 1 });
-        var outcomes = new SmtpOutcomeCountsSnapshot(3, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        var outcomes = new SmtpOutcomeCountsSnapshot(3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         Assert.Same(queue, AutoRestartMetrics.AggregateQueue(null, queue));
         Assert.Same(queue, AutoRestartMetrics.AggregateQueue(queue, null));
