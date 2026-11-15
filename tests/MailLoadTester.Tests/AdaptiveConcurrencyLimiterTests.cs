@@ -33,6 +33,19 @@ public sealed class AdaptiveConcurrencyLimiterTests
     }
 
     [Fact]
+    public void MailboxPressure_ReducesConcurrencyButNeverBelowMinimum()
+    {
+        var limiter = new AdaptiveConcurrencyLimiter(4, min: 1, max: 4);
+
+        limiter.ApplyMailboxPressure();
+        Assert.Equal(3, limiter.Current);
+        limiter.ApplyMailboxPressure();
+        limiter.ApplyMailboxPressure();
+        limiter.ApplyMailboxPressure();
+        Assert.Equal(1, limiter.Current);
+    }
+
+    [Fact]
     public async Task CancellationWhileWaitingDoesNotLeakPermit()
     {
         var limiter = new AdaptiveConcurrencyLimiter(1, 1, 1);
