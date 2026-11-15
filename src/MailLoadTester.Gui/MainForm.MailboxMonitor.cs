@@ -267,7 +267,6 @@ public sealed partial class MainForm
         }
 
         EnsureMailboxMonitorTimerStarted();
-        _ = RefreshMailboxMonitorAsync();
     }
 
     private void EnsureMailboxMonitorTimerStarted()
@@ -285,15 +284,15 @@ public sealed partial class MainForm
     private void StopMailboxMonitorPolling()
         => _mailboxMonitorTimer?.Stop();
 
-    private async Task RefreshMailboxMonitorAsync()
+    private async Task<MailboxMonitorSnapshot?> RefreshMailboxMonitorAsync(bool enforceQuotaStop = true)
     {
         if (_mailboxRefreshInProgress || IsDisposed || _closeApproved)
-            return;
+            return null;
 
         if (!IsMailboxMonitorConfigured())
         {
             lblMailboxStatus.Text = "Doplň IMAP host, uživatelské jméno a heslo. Bez nich SMTP test funguje dál, ale zaplnění schránky nelze ověřit.";
-            return;
+            return null;
         }
 
         MailboxMonitorOptions options;
@@ -330,7 +329,7 @@ public sealed partial class MainForm
                 return;
 
             RenderMailboxMonitorSnapshot(snapshot);
-            if (_isRunning && chkMailboxStopAtQuota.Checked
+            if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked
                 && MailboxMonitorMath.ShouldStop(snapshot.QuotaUsagePercent, (int)numMailboxStopPercent.Value)
                 && _cts is { IsCancellationRequested: false })
             {
@@ -340,9 +339,12 @@ public sealed partial class MainForm
                 _cts.Cancel();
             }
         }
+            return snapshot;
+        }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             // Expected when the form is closing.
+            return null;
         }
         catch (Exception ex)
         {
@@ -352,6 +354,7 @@ public sealed partial class MainForm
                 lblMailboxStatus.ForeColor = Color.DarkRed;
                 _mailboxUsageChart.AddSample(DateTimeOffset.UtcNow, null);
             }
+            return null;
         }
         finally
         {
@@ -364,8 +367,18 @@ public sealed partial class MainForm
         }
     }
 
+    private async Task<MailboxMonitorSnapshot?> CaptureFinalMailboxSnapshotAsync()
+    {
+        var pending = _mailboxMonitorCompletion;
+        if (_mailboxRefreshInProgress && pending is not null)
+            await pending.Task.ConfigureAwait(true);
+
+        return await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
+    }
+
     private void RenderMailboxMonitorSnapshot(MailboxMonitorSnapshot snapshot)
     {
+        _mailboxLastSnapshot = snapshot;
         var percent = snapshot.QuotaUsagePercent;
         _mailboxUsageChart.AddSample(snapshot.CheckedAt, percent);
         if (percent.HasValue)
