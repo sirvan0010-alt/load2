@@ -4,6 +4,7 @@ namespace MailLoadTester.Gui;
 
 public sealed partial class MainForm
 {
+    private MailboxUsageChart _mailboxUsageChart = null!;
     private void InitializeMailboxMonitorTab()
     {
         var tab = new TabPage("Mailbox Monitor") { Padding = new Padding(12) };
@@ -65,6 +66,9 @@ public sealed partial class MainForm
             Style = ProgressBarStyle.Continuous
         };
         summaryFlow.Controls.Add(progressMailboxQuota);
+
+        _mailboxUsageChart = new MailboxUsageChart { Width = 500, Margin = new Padding(0, 10, 0, 6), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
+        summaryFlow.Controls.Add(_mailboxUsageChart);
 
         lblMailboxMessages = CreateMailboxMetricLabel("Uložené zprávy: —");
         lblMailboxUnread = CreateMailboxMetricLabel("Nepřečtené v INBOX: —");
@@ -131,6 +135,7 @@ public sealed partial class MainForm
         lblMailboxStatus.Text = "IMAP údaje byly vymazány. SMTP test může běžet dál, ale stav schránky nebude ověřován.";
         lblMailboxPercent.Text = "—";
         progressMailboxQuota.Value = 0;
+        _mailboxUsageChart.ClearSamples();
         lblMailboxMessages.Text = "Uložené zprávy: —";
         lblMailboxUnread.Text = "Nepřečtené v INBOX: —";
         lblMailboxUsage.Text = "Obsazeno (kvóta): —";
@@ -253,6 +258,7 @@ public sealed partial class MainForm
     private void RenderMailboxMonitorSnapshot(MailboxMonitorSnapshot snapshot)
     {
         var percent = snapshot.QuotaUsagePercent;
+        _mailboxUsageChart.AddSample(snapshot.CheckedAt, percent);
         if (percent.HasValue)
         {
             lblMailboxPercent.Text = $"{percent.Value:F1} %";
