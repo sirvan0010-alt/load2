@@ -159,7 +159,15 @@ public sealed record MailTestResult(
     /// <summary>A5: unified SMTP outcome counts for this run.</summary>
     SmtpOutcomeCountsSnapshot? OutcomeCounts = null,
     /// <summary>Fixed-bucket distribution of successful-message latency samples.</summary>
-    LatencyHistogramSnapshot? LatencyHistogram = null);
+    LatencyHistogramSnapshot? LatencyHistogram = null,
+    /// <summary>SMTP SEND attempts admitted by the capacity guard, including retries; null when capacity mode is disabled.</summary>
+    int? CapacitySendAttempts = null,
+    /// <summary>Conservatively reserved SMTP-prepared MIME bytes; null when capacity mode is disabled.</summary>
+    long? CapacityMimeBytesReserved = null,
+    /// <summary>Reason the capacity guard stopped the run, if it did.</summary>
+    string? CapacityStopReason = null,
+    /// <summary>Independent IMAP before/after observations; not causal proof of messages stored by this run.</summary>
+    MailboxRunDelta? MailboxRunDelta = null);
 
 public static class Validation
 {
