@@ -27,6 +27,8 @@ public sealed class SmtpTestRunnerTests
         Assert.False(result.Cancelled);
         Assert.Equal(0, result.Retries);
         Assert.True(result.AvgLatencyMs >= 0);
+        Assert.NotNull(result.LatencyHistogram);
+        Assert.Equal(1, result.LatencyHistogram!.TotalCount);
         Assert.Equal(1, server.MessagesAccepted);
     }
 
@@ -83,6 +85,12 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Smtp4xx >= 1);
         Assert.Equal(2, server.MessagesAccepted);
         Assert.Equal(3, server.DataAttempts);
+        Assert.NotNull(result.LatencyHistogram);
+        Assert.Equal(2, result.LatencyHistogram!.TotalCount);
+        var endpoint = Assert.Single(result.EndpointHealth!);
+        Assert.Equal(2, endpoint.TotalSuccesses);
+        Assert.Equal(1, endpoint.TotalFailures);
+        Assert.Equal(EndpointHealthState.Healthy, endpoint.State);
     }
 
     [Theory]
@@ -107,6 +115,10 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(0, result.Failed);
         Assert.Equal(messageCount, server.MessagesAccepted);
         Assert.Equal(messageCount, server.DataAttempts);
+        Assert.NotNull(result.QueueMetrics);
+        Assert.Equal(0, result.QueueMetrics!.QueueDepth);
+        Assert.Equal(messageCount, result.QueueMetrics.Enqueued);
+        Assert.Equal(messageCount, result.QueueMetrics.Dequeued);
         var minimumExpectedConcurrency = maxConcurrency == 1 ? 1 : 2;
         Assert.InRange(server.MaxConcurrentData, minimumExpectedConcurrency, maxConcurrency);
         _output.WriteLine(
@@ -184,6 +196,8 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Cancelled);
         Assert.True(result.Sent + result.Failed < result.Requested,
             $"Expected partial results, got Sent={result.Sent}, Failed={result.Failed}, Requested={result.Requested}.");
+        Assert.NotNull(result.QueueMetrics);
+        Assert.Equal(0, result.QueueMetrics!.QueueDepth);
     }
 
     private static MailTestOptions CreateOptions(int port, int messageCount, int maxRetries, int maxConcurrency = 1) => new(

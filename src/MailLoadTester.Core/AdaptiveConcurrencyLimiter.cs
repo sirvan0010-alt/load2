@@ -1,9 +1,10 @@
 namespace MailLoadTester;
 
 /// <summary>
-/// Adaptive concurrency gate: adjusts limit from recent error rate and grants
-/// permits without busy-waiting (waiters are woken on Release / limit increase).
-/// Thread-safe.
+/// Adaptive concurrency gate. It reacts to SMTP-side pressure (temporary 4xx,
+/// timeouts and transport failures) and sustained send-latency growth. Permanent
+/// SMTP 5xx failures are counted as failures but do not by themselves imply
+/// server overload. Thread-safe.
 /// </summary>
 public sealed class AdaptiveConcurrencyLimiter
 {
@@ -14,17 +15,23 @@ public sealed class AdaptiveConcurrencyLimiter
     private int _current;
     private int _active;
     private int _windowAttempts;
-    private int _windowErrors;
+    private int _windowFailures;
+    private int _windowPressureAttempts;
+    private int _windowLatencySamples;
+    private double _windowLatencyTotalMs;
+    private double _baselineLatencyMs;
     private DateTime _windowStart = DateTime.UtcNow;
-    private readonly TimeSpan _window = TimeSpan.FromSeconds(10);
+    private readonly TimeSpan _window;
     private readonly Queue<TaskCompletionSource<bool>> _waiters = new();
 
     public int Current => Volatile.Read(ref _current);
     public int Active => Volatile.Read(ref _active);
 
-    public AdaptiveConcurrencyLimiter(int initial, int min = 1, int max = 20)
+    public AdaptiveConcurrencyLimiter(int initial, int min = 1, int max = 20, TimeSpan? evaluationWindow = null)
     {
         if (min < 1 || max < min) throw new ArgumentOutOfRangeException();
+        _window = evaluationWindow ?? TimeSpan.FromSeconds(10);
+        if (_window < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(evaluationWindow));
         _initial = Math.Clamp(initial, min, max);
         _min = min;
         _max = max;
@@ -56,28 +63,19 @@ public sealed class AdaptiveConcurrencyLimiter
 
     private async Task WaitWithCancellationAsync(TaskCompletionSource<bool> tcs, CancellationToken ct)
     {
-        await using var reg = ct.Register(static state =>
+        using var reg = ct.Register(static state =>
         {
             var (limiter, waiter) = ((AdaptiveConcurrencyLimiter, TaskCompletionSource<bool>))state!;
             limiter.TryCancelWaiter(waiter);
         }, (this, tcs));
 
-        try
-        {
-            await tcs.Task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Permit was not granted.
-            throw;
-        }
+        await tcs.Task.ConfigureAwait(false);
     }
 
     private void TryCancelWaiter(TaskCompletionSource<bool> waiter)
     {
         lock (_lock)
         {
-            // If already completed with a permit, leave _active alone — caller must Release().
             if (waiter.Task.IsCompleted) return;
 
             if (_waiters.Count > 0)
@@ -93,8 +91,6 @@ public sealed class AdaptiveConcurrencyLimiter
                     _waiters.Enqueue(kept.Dequeue());
             }
 
-            // Complete under the lock so Release cannot race TrySetResult vs cancel
-            // on a dequeued-but-still-pending waiter.
             waiter.TrySetCanceled();
         }
     }
@@ -106,15 +102,6 @@ public sealed class AdaptiveConcurrencyLimiter
             if (_active > 0)
                 _active--;
 
-            // Hand permit directly to a waiter if under the current limit.
-            // TrySetResult is called *inside* the lock — safe because the TCS was
-            // created with RunContinuationsAsynchronously, so this can't block or
-            // reenter. Doing it here (not after unlocking) closes a race where
-            // TryCancelWaiter (fired from ct.Register on another thread) could see
-            // the waiter already dequeued-but-not-yet-completed and race
-            // TrySetCanceled() against this TrySetResult(true) — whichever lost
-            // left the limiter's _active count permanently off by one, since the
-            // caller only calls Release() back if AcquireAsync returned normally.
             while (_waiters.Count > 0 && _active < _current)
             {
                 var next = _waiters.Dequeue();
@@ -126,42 +113,94 @@ public sealed class AdaptiveConcurrencyLimiter
         }
     }
 
-    public void RecordAttempt(bool success)
+    /// <summary>
+    /// Compatibility overload: legacy callers treat every failed attempt as
+    /// pressure. New SMTP call sites should pass measured latency and classify
+    /// whether the failure indicates temporary server/transport pressure.
+    /// </summary>
+    public void RecordAttempt(bool success) =>
+        RecordAttempt(success, smtpLatencyMs: 0, serverPressure: !success);
+
+    /// <param name="success">Whether SMTP accepted the message.</param>
+    /// <param name="smtpLatencyMs">Duration of the actual SMTP SendAsync call, in milliseconds.</param>
+    /// <param name="serverPressure">
+    /// True for temporary 4xx responses, timeouts and transport failures. False
+    /// for permanent 5xx/policy failures that should not lower concurrency.
+    /// </param>
+    public void RecordAttempt(bool success, double smtpLatencyMs, bool serverPressure)
     {
         lock (_lock)
         {
             var now = DateTime.UtcNow;
-            if (now - _windowStart > _window)
+            if (now - _windowStart >= _window)
             {
                 EvaluateWindow();
                 _windowStart = now;
                 _windowAttempts = 0;
-                _windowErrors = 0;
+                _windowFailures = 0;
+                _windowPressureAttempts = 0;
+                _windowLatencySamples = 0;
+                _windowLatencyTotalMs = 0;
             }
-            _windowAttempts++;
-            if (!success) _windowErrors++;
 
-            // If limit increased, wake one waiter. See Release() for why
-            // TrySetResult must happen inside the lock.
-            while (_waiters.Count > 0 && _active < _current)
+            _windowAttempts++;
+            if (!success)
             {
-                var woken = _waiters.Dequeue();
-                if (woken.Task.IsCompleted) continue;
-                _active++;
-                woken.TrySetResult(true);
-                break;
+                _windowFailures++;
+                if (serverPressure) _windowPressureAttempts++;
             }
+
+            if (double.IsFinite(smtpLatencyMs) && smtpLatencyMs > 0)
+            {
+                _windowLatencySamples++;
+                _windowLatencyTotalMs += smtpLatencyMs;
+            }
+
+            WakeWaiterIfCapacityAvailable();
         }
     }
 
     private void EvaluateWindow()
     {
         if (_windowAttempts < 5) return;
-        var errorRate = (double)_windowErrors / _windowAttempts;
-        if (errorRate > 0.3)
+
+        var failureRate = (double)_windowFailures / _windowAttempts;
+        var pressureRate = (double)_windowPressureAttempts / _windowAttempts;
+        var averageLatency = _windowLatencySamples > 0
+            ? _windowLatencyTotalMs / _windowLatencySamples
+            : 0;
+
+        // Latency is compared with a per-run baseline to avoid treating a
+        // consistently slow server or large message as overload. Require both
+        // a 2x increase and at least 1 second before reducing concurrency.
+        var latencyPressure = averageLatency > 0 &&
+            _baselineLatencyMs > 0 &&
+            averageLatency >= Math.Max(1_000, _baselineLatencyMs * 2.0);
+
+        if (pressureRate > 0.30)
             _current = Math.Max(_min, _current / 2);
-        else if (errorRate < 0.05 && _current < _max)
+        else if (latencyPressure)
+            _current = Math.Max(_min, _current - 1);
+        else if (failureRate < 0.05 && _current < _max)
             _current = Math.Min(_max, _current + 1);
+
+        // Update baseline only when the window did not indicate congestion.
+        if (averageLatency > 0 && !latencyPressure && pressureRate <= 0.30)
+            _baselineLatencyMs = _baselineLatencyMs <= 0
+                ? averageLatency
+                : (_baselineLatencyMs * 0.8) + (averageLatency * 0.2);
+    }
+
+    private void WakeWaiterIfCapacityAvailable()
+    {
+        while (_waiters.Count > 0 && _active < _current)
+        {
+            var woken = _waiters.Dequeue();
+            if (woken.Task.IsCompleted) continue;
+            _active++;
+            woken.TrySetResult(true);
+            break;
+        }
     }
 
     public void Reset()
@@ -170,20 +209,12 @@ public sealed class AdaptiveConcurrencyLimiter
         lock (_lock)
         {
             _current = _initial;
-            // _active must NOT be zeroed here — it tracks permits genuinely held by
-            // workers that are still running (RentAsync succeeded, Release() not yet
-            // called). Zeroing it while workers hold permits would let the gate
-            // (`_active < _current`) admit far more concurrent workers than the
-            // configured limit, and every subsequent Release() from an already-held
-            // permit would then push _active negative-relative-to-reality (Release()
-            // only decrements when > 0, so it silently stops decrementing once it
-            // hits 0, permanently under-counting real concurrency from then on).
-            // If _current ends up temporarily below _active after a reset, that's
-            // fine and matches how the class already behaves after RecordAttempt()
-            // shrinks _current below the live worker count — new admissions just
-            // wait until enough Release() calls drain it back down.
             _windowAttempts = 0;
-            _windowErrors = 0;
+            _windowFailures = 0;
+            _windowPressureAttempts = 0;
+            _windowLatencySamples = 0;
+            _windowLatencyTotalMs = 0;
+            _baselineLatencyMs = 0;
             _windowStart = DateTime.UtcNow;
             cancel = new Queue<TaskCompletionSource<bool>>(_waiters);
             _waiters.Clear();

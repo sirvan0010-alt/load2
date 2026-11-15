@@ -29,7 +29,8 @@ public class RunObservabilityTests
         RunId: "abc",
         QueueMetrics: new ScenarioQueueMetricsSnapshot(0, 8, 100, 100, 90, 0, 0, 2),
         RetryMetrics: new RetryMetricsSnapshot(3, 5, 1, 1, 2, 0, new[] { 0, 3, 2 }),
-        OutcomeCounts: new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 2, 0, 1));
+        OutcomeCounts: new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 2, 0, 1),
+        LatencyHistogram: LatencyHistogram.FromSamples(new[] { 10d, 40d, 100d }));
 
     [Fact]
     public void FromResult_projects_A3_A4_A5_and_success_rate()
@@ -44,6 +45,8 @@ public class RunObservabilityTests
         Assert.NotNull(s.Outcomes);
         Assert.Equal(90, s.Outcomes!.Success);
         Assert.Equal(5, s.AvgSmtpSendMs);
+        Assert.NotNull(s.LatencyHistogram);
+        Assert.Equal(3, s.LatencyHistogram!.TotalCount);
     }
 
     [Fact]
@@ -83,6 +86,12 @@ public class RunObservabilityTests
         var line = RunObservability.FormatSummaryLine(RunObservability.FromResult(SampleResult()));
         Assert.Contains("sent=90/100", line);
         Assert.Contains("retries=5", line);
+        Assert.Contains("latency avg/p50/p95/p99=", line);
+        Assert.Contains("wait prep/adaptive/pool/pace=", line);
+        Assert.Contains("queue depth=", line);
+        Assert.Contains("activeTput=", line);
+        Assert.Contains("poolConn=", line);
+        Assert.Contains("circuit=", line);
     }
 
     static MailTestOptions MinimalOptions() => new(

@@ -231,7 +231,7 @@ public sealed partial class MainForm : Form
             Text = "GETTING STARTED",
             Width = 150,
             Height = 36,
-            Left = 560,
+            Left = 710,
             Top = 6,
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand
@@ -242,7 +242,7 @@ public sealed partial class MainForm : Form
         {
             Text = "Dark mode",
             AutoSize = true,
-            Left = 730,
+            Left = 880,
             Top = 16
         };
 
@@ -274,12 +274,19 @@ public sealed partial class MainForm : Form
             Text = "📂 Načíst profil", Width = 130, Height = 36, Left = 420, Top = 6,
             FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand
         };
+        btnExportReport = new Button
+        {
+            Text = "Export report JSON", Width = 140, Height = 36, Left = 560, Top = 6,
+            FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Enabled = false
+        };
         toolTip.SetToolTip(btnSaveProfile, "Uloží aktuální nastavení testu do JSON (bez hesel).");
         toolTip.SetToolTip(btnLoadProfile, "Načte profil testu z JSON souboru.");
+        toolTip.SetToolTip(btnExportReport, "Exportuje poslední běh jako JSON report bez hesel a známých tajných hodnot.");
         toolTip.SetToolTip(btnWizard, "Zobrazí stručného průvodce prvním bezpečným testem.");
         toolTip.SetToolTip(chkDarkMode, "Přepne vzhled aplikace mezi světlým a tmavým režimem.");
         topPanel.Controls.Add(btnSaveProfile);
         topPanel.Controls.Add(btnLoadProfile);
+        topPanel.Controls.Add(btnExportReport);
         topPanel.Controls.Add(btnWizard);
         topPanel.Controls.Add(chkDarkMode);
         Controls.Add(topPanel);
@@ -743,6 +750,7 @@ public sealed partial class MainForm : Form
         btnStop.Click += (s, e) => OnStop();
         btnSaveProfile.Click += async (s, e) => await OnSaveProfileAsync();
         btnLoadProfile.Click += async (s, e) => await OnLoadProfileAsync();
+        btnExportReport.Click += async (s, e) => await OnExportReportAsync();
         btnWizard.Click += (s, e) => ShowGettingStartedWizard();
         chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
         chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
@@ -858,9 +866,10 @@ public sealed partial class MainForm : Form
     private async Task OnStartAsync()
     {
         if (_isRunning) return;
+        MailTestOptions options;
         try
         {
-            var options = BuildOptions();
+            options = BuildOptions();
             Validation.Validate(options);
         }
         catch (Exception ex)
@@ -934,6 +943,8 @@ public sealed partial class MainForm : Form
         }
 
         _isRunning = true;
+        _lastRunReport = null;
+        btnExportReport.Enabled = false;
         btnStart.Enabled = false;
         btnStop.Enabled = true;
         rtbLog.Clear();
@@ -967,8 +978,19 @@ public sealed partial class MainForm : Form
 
         try
         {
+            var runStartedUtc = DateTimeOffset.UtcNow;
             var result = await Task.Run(async () =>
-                await _runner.RunAsync(BuildOptions(), progress, _cts.Token), _cts.Token);
+                await _runner.RunAsync(options, progress, _cts.Token), _cts.Token);
+
+            var runReport = RunReportBuilder.Create(
+                result.RunId ?? Guid.NewGuid().ToString("N"),
+                runStartedUtc,
+                DateTimeOffset.UtcNow,
+                options,
+                result,
+                result.EndpointHealth);
+            _lastRunReport = runReport;
+            btnExportReport.Enabled = true;
 
             progressBar.Value = 100;
             lblStatus.Text = result.Cancelled ? "Zastaveno uživatelem" : "Dokončeno";
@@ -978,7 +1000,17 @@ public sealed partial class MainForm : Form
             AppendLog($"\n=== VÝSLEDEK ===", Color.Cyan);
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
-            AppendLog($"Latence avg/p95/p99: {result.AvgLatencyMs:F1} / {result.P95LatencyMs:F1} / {result.P99LatencyMs:F1} ms", Color.LightGray);
+            AppendLog(RunObservability.FormatSummaryLine(RunObservability.FromReport(runReport)), Color.LightBlue);
+            if (result.LatencyHistogram is { TotalCount: > 0 } histogram)
+            {
+                var buckets = string.Join(", ", histogram.Buckets.Where(b => b.Count > 0).Select(b => $"{b.Label}:{b.Count}"));
+                AppendLog($"Rozložení latence: {buckets}", Color.LightGray);
+            }
+            if (result.EndpointHealth is { Count: > 0 } endpointSnapshots)
+            {
+                foreach (var endpoint in endpointSnapshots)
+                    AppendLog($"Endpoint {endpoint.Key}: {endpoint.State}; success={endpoint.TotalSuccesses}; failures={endpoint.TotalFailures}; last={endpoint.LastFailureCategory ?? "—"}", endpoint.State == EndpointHealthState.Healthy ? Color.LightGreen : Color.Orange);
+            }
             if (result.AdaptiveConcurrency > 0)
                 AppendLog($"Adaptive concurrency: {result.AdaptiveConcurrency}", Color.LightBlue);
             if (result.CircuitBreakerOpen)

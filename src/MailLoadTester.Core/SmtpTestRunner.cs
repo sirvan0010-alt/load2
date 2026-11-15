@@ -39,6 +39,8 @@ public sealed class SmtpTestRunner
         ScenarioQueueMetricsSnapshot? aggregatedQueueMetrics = null;
         RetryMetricsSnapshot? aggregatedRetryMetrics = null;
         SmtpOutcomeCountsSnapshot? aggregatedOutcomeCounts = null;
+        LatencyHistogramSnapshot? aggregatedLatencyHistogram = null;
+        IReadOnlyList<EndpointHealthSnapshot>? aggregatedEndpointHealth = null;
 
         while (true)
         {
@@ -59,6 +61,10 @@ public sealed class SmtpTestRunner
                 AutoRestartMetrics.AggregateRetry(aggregatedRetryMetrics, result.RetryMetrics);
             aggregatedOutcomeCounts =
                 AutoRestartMetrics.AggregateOutcomes(aggregatedOutcomeCounts, result.OutcomeCounts);
+            aggregatedLatencyHistogram =
+                AutoRestartMetrics.AggregateLatencyHistogram(aggregatedLatencyHistogram, result.LatencyHistogram);
+            aggregatedEndpointHealth =
+                AutoRestartMetrics.AggregateEndpointHealth(aggregatedEndpointHealth, result.EndpointHealth);
 
             if (result.Cancelled) break;
 
@@ -104,8 +110,24 @@ public sealed class SmtpTestRunner
             AutoRestartAttempts = Math.Max(0, attempt - 1),
             QueueMetrics = aggregatedQueueMetrics,
             RetryMetrics = aggregatedRetryMetrics,
-            OutcomeCounts = aggregatedOutcomeCounts
+            OutcomeCounts = aggregatedOutcomeCounts,
+            LatencyHistogram = aggregatedLatencyHistogram,
+            EndpointHealth = aggregatedEndpointHealth
         };
+    }
+
+    private static bool IsAdaptiveServerPressure(Exception ex)
+    {
+        if (ex is SmtpCommandException smtp)
+        {
+            var code = (int)smtp.StatusCode;
+            return code >= 400 && code < 500;
+        }
+
+        return ex is TimeoutException
+            or System.Net.Sockets.SocketException
+            or IOException
+            or SmtpProtocolException;
     }
 
     async Task<MailTestResult> RunSingleAsync(
@@ -155,7 +177,10 @@ public sealed class SmtpTestRunner
             var pct = requested > 0 ? Math.Round(100.0 * done / requested, 1) : 0.0;
             var elapsedSeconds = dashboardSw.Elapsed.TotalSeconds;
             var tput = elapsedSeconds > 0 ? s / elapsedSeconds : 0.0;
-            dashboard.Update(new DashboardState(s, f, requested, pct, tput, eta, phase, status));
+            var queue = queueMetrics.Snapshot();
+            dashboard.Update(new DashboardState(
+                s, f, requested, pct, tput, eta, phase, status,
+                queue.QueueDepth, queue.PeakQueueDepth, options.MaxConcurrency));
         }
 
         // Throttle progress: UI/IProgress is a major bottleneck at high concurrency.
@@ -308,6 +333,7 @@ public sealed class SmtpTestRunner
         int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
+        var latencyHistogram = new LatencyHistogram();
         // FEAT-HEALTH: per SMTP endpoint health (host:port). Independent of circuit breaker / proxy ban.
         var endpointHealth = new TransportHealthRegistry();
         var endpointKey = $"{options.SmtpHost}:{options.Port}";
@@ -569,6 +595,7 @@ public sealed class SmtpTestRunner
 
                         for (int attempt = 0; attempt <= options.MaxRetries; attempt++)
                         {
+                            sampleSmtpMs = 0; // Do not carry a previous retry's latency into a later connect failure.
                             workerCt.ThrowIfCancellationRequested();
 
                             // Fail-fast i pro ÚPLNĚ NOVÉ zprávy (ne jen retry téže zprávy) —
@@ -684,11 +711,18 @@ public sealed class SmtpTestRunner
                                     {
                                         samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
                                         var smtpT0 = Stopwatch.GetTimestamp();
-                                        if (utf8Format != null)
-                                            await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
-                                        else
-                                            await client.SendAsync(message, workerCt).ConfigureAwait(false);
-                                        sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
+                                        try
+                                        {
+                                            if (utf8Format != null)
+                                                await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
+                                            else
+                                                await client.SendAsync(message, workerCt).ConfigureAwait(false);
+                                        }
+                                        finally
+                                        {
+                                            // Preserve duration even when SMTP rejects or times out during DATA.
+                                            sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
+                                        }
                                     }
 
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
@@ -708,7 +742,7 @@ public sealed class SmtpTestRunner
                                 if (attempt > 0)
                                     retryMetrics.RecordSuccessAfterRetry();
                                 circuit?.RecordSuccess();
-                                adaptive?.RecordAttempt(true);
+                                adaptive?.RecordAttempt(true, sampleSmtpMs, serverPressure: false);
                                 pace.CommitRecipient(recipient);
                                 recipientCommitted = true;
                                 pace.RecordSuccess(recipient);
@@ -758,7 +792,7 @@ public sealed class SmtpTestRunner
                                 }
                                 retryMetrics.RecordRetryAttempt(attempt + 1);
                                 circuit?.RecordFailure(ex);
-                                adaptive?.RecordAttempt(false);
+                                adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
@@ -798,7 +832,7 @@ public sealed class SmtpTestRunner
                                 }
                                 lastEx = ex;
                                 circuit?.RecordFailure(ex);
-                                adaptive?.RecordAttempt(false);
+                                adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
@@ -828,7 +862,9 @@ public sealed class SmtpTestRunner
                             {
                                 ledgerAccepted = true;
                                 var s = Interlocked.Increment(ref sent);
-                                latencies.Add(msgSw.Elapsed.TotalMilliseconds);
+                                var messageLatencyMs = msgSw.Elapsed.TotalMilliseconds;
+                                latencies.Add(messageLatencyMs);
+                                latencyHistogram.Add(messageLatencyMs);
                                 if (!multiAccount)
                                     endpointHealth.RecordSuccess(endpointKey);
                                 prepWaits.Add(samplePrepMs);
@@ -934,12 +970,20 @@ public sealed class SmtpTestRunner
                 {
                     for (var i = batchStart; i <= batchEnd; i++)
                     {
+                        queueMetrics.RecordEnqueued();
                         if (!workChannel.Writer.TryWrite(i))
                         {
                             queueMetrics.RecordFullWait();
-                            await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                            try
+                            {
+                                await workChannel.Writer.WriteAsync(i, workerCt).ConfigureAwait(false);
+                            }
+                            catch
+                            {
+                                queueMetrics.RecordEnqueueAborted();
+                                throw;
+                            }
                         }
-                        queueMetrics.RecordEnqueued();
                     }
                     workChannel.Writer.TryComplete();
                     await Task.WhenAll(workers).ConfigureAwait(false);
@@ -1047,7 +1091,8 @@ public sealed class SmtpTestRunner
             EndpointHealth: endpointHealth.SnapshotAll(),
             QueueMetrics: queueMetrics.Snapshot(),
             RetryMetrics: retryMetrics.Snapshot(),
-            OutcomeCounts: outcomeCounters.Snapshot());
+            OutcomeCounts: outcomeCounters.Snapshot(),
+            LatencyHistogram: latencyHistogram.Snapshot());
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;

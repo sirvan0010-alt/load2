@@ -63,6 +63,33 @@ public sealed class AutoRestartMetricsTests
     }
 
     [Fact]
+    public void EndpointHealth_sums_totals_but_keeps_latest_state()
+    {
+        var first = new[]
+        {
+            new EndpointHealthSnapshot("smtp.example:587", EndpointHealthState.Degraded, 2, 3, 2, null, "timeout")
+        };
+        var second = new[]
+        {
+            new EndpointHealthSnapshot("SMTP.EXAMPLE:587", EndpointHealthState.Healthy, 0, 4, 0, null, null),
+            new EndpointHealthSnapshot("backup.example:25", EndpointHealthState.Quarantined, 5, 0, 5,
+                DateTimeOffset.UtcNow.AddMinutes(1), "connect")
+        };
+
+        var result = AutoRestartMetrics.AggregateEndpointHealth(first, second);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.Count);
+        var primary = Assert.Single(result, x => x.Key.Equals("SMTP.EXAMPLE:587", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(EndpointHealthState.Healthy, primary.State);
+        Assert.Equal(7, primary.TotalSuccesses);
+        Assert.Equal(2, primary.TotalFailures);
+        Assert.Equal(0, primary.ConsecutiveFailures);
+        Assert.Null(primary.LastFailureCategory);
+        Assert.Contains(result, x => x.Key == "backup.example:25" && x.State == EndpointHealthState.Quarantined);
+    }
+
+    [Fact]
     public void Null_aggregate_preserves_first_snapshot_and_null_next_does_not_erase_it()
     {
         var queue = new ScenarioQueueMetricsSnapshot(0, 2, 3, 3, 3, 0, 0, 0);

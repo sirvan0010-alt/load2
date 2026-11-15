@@ -155,7 +155,9 @@ public sealed record MailTestResult(
     /// <summary>A4: retry/requeue observability for this run (null if unavailable).</summary>
     RetryMetricsSnapshot? RetryMetrics = null,
     /// <summary>A5: unified SMTP outcome counts for this run.</summary>
-    SmtpOutcomeCountsSnapshot? OutcomeCounts = null);
+    SmtpOutcomeCountsSnapshot? OutcomeCounts = null,
+    /// <summary>Fixed-bucket distribution of successful-message latency samples.</summary>
+    LatencyHistogramSnapshot? LatencyHistogram = null);
 
 public static class Validation
 {

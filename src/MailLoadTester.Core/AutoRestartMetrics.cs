@@ -80,6 +80,35 @@ public static class AutoRestartMetrics
         return LatencyHistogram.Merge(aggregate, next);
     }
 
+    public static IReadOnlyList<EndpointHealthSnapshot>? AggregateEndpointHealth(
+        IReadOnlyList<EndpointHealthSnapshot>? aggregate,
+        IReadOnlyList<EndpointHealthSnapshot>? next)
+    {
+        if (next is null) return aggregate;
+        if (aggregate is null) return next;
+
+        var merged = aggregate.ToDictionary(x => x.Key, StringComparer.OrdinalIgnoreCase);
+        foreach (var current in next)
+        {
+            if (merged.TryGetValue(current.Key, out var previous))
+            {
+                merged[current.Key] = current with
+                {
+                    TotalSuccesses = SaturatingAdd(previous.TotalSuccesses, current.TotalSuccesses),
+                    TotalFailures = SaturatingAdd(previous.TotalFailures, current.TotalFailures)
+                };
+            }
+            else
+            {
+                merged[current.Key] = current;
+            }
+        }
+
+        return merged.Values
+            .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     static int SaturatingAdd(int left, int right)
         => left > int.MaxValue - right ? int.MaxValue : left + right;
 

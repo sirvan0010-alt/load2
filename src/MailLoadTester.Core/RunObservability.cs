@@ -17,6 +17,7 @@ public sealed record RunObservabilitySnapshot(
     double P50LatencyMs,
     double P95LatencyMs,
     double P99LatencyMs,
+    LatencyHistogramSnapshot? LatencyHistogram,
     double AvgPrepWaitMs,
     double AvgAdaptiveWaitMs,
     double AvgPoolWaitMs,
@@ -56,6 +57,7 @@ public static class RunObservability
             P50LatencyMs: r.P50LatencyMs,
             P95LatencyMs: r.P95LatencyMs,
             P99LatencyMs: r.P99LatencyMs,
+            LatencyHistogram: r.LatencyHistogram,
             AvgPrepWaitMs: r.AvgPrepWaitMs,
             AvgAdaptiveWaitMs: r.AvgAdaptiveWaitMs,
             AvgPoolWaitMs: r.AvgPoolWaitMs,
@@ -96,16 +98,25 @@ public static class RunObservability
     public static string FormatSummaryLine(RunObservabilitySnapshot s)
     {
         var q = s.Queue is { } qm
-            ? $" queue peak={qm.PeakQueueDepth} fullWaits={qm.FullWaits}"
+            ? $" queue depth={qm.QueueDepth} peak={qm.PeakQueueDepth} fullWaits={qm.FullWaits} completed={qm.Completed}"
             : "";
         var o = s.Outcomes is { } oc
             ? $" outcomes T/R/P={oc.Transient}/{oc.Throttled}/{oc.Permanent}"
             : "";
+        var h = s.EndpointHealth is { Count: > 0 } endpoints
+            ? $" endpoints H/D/Q={endpoints.Count(x => x.State == EndpointHealthState.Healthy)}/" +
+              $"{endpoints.Count(x => x.State == EndpointHealthState.Degraded)}/" +
+              $"{endpoints.Count(x => x.State == EndpointHealthState.Quarantined)}"
+            : "";
         return
             $"run={s.RunId ?? "-"} sent={s.Sent}/{s.Requested} fail={s.Failed} " +
             $"ok={s.SuccessRatePct:0.0}% tput={s.ThroughputPerSec:0.00}/s " +
+            $"latency avg/p50/p95/p99={s.AvgLatencyMs:0.0}/{s.P50LatencyMs:0.0}/{s.P95LatencyMs:0.0}/{s.P99LatencyMs:0.0}ms " +
+            $"wait prep/adaptive/pool/pace={s.AvgPrepWaitMs:0.0}/{s.AvgAdaptiveWaitMs:0.0}/{s.AvgPoolWaitMs:0.0}/{s.AvgPaceWaitMs:0.0}ms " +
+            $"smtp={s.AvgSmtpSendMs:0.0}ms activeTput={s.ActiveThroughputPerSec:0.00}/s " +
+            $"poolConn={s.PoolConnections} adaptive={s.AdaptiveConcurrency} circuit={(s.CircuitBreakerOpen ? "OPEN" : "closed")} restarts={s.AutoRestartAttempts} " +
             $"retries={s.Retries} 4xx={s.Smtp4xx} 5xx={s.Smtp5xx} to={s.Timeouts}" +
-            q + o +
+            q + o + h +
             (s.Cancelled ? " CANCELLED" : "");
     }
 }

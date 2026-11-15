@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -80,7 +81,22 @@ public static class RunReportBuilder
         if (string.IsNullOrWhiteSpace(runId))
             runId = Guid.NewGuid().ToString("N");
         health ??= result.EndpointHealth ?? Array.Empty<EndpointHealthSnapshot>();
-        var resultWithId = result.RunId == runId ? result : result with { RunId = runId };
+        var sensitiveValues = new List<string?>
+        {
+            options.Password,
+            options.ProxyPassword,
+            options.ClientCertificatePassword
+        };
+        AddCredentialVariants(sensitiveValues, options.Username, options.Password);
+        AddCredentialVariants(sensitiveValues, options.ProxyUsername, options.ProxyPassword);
+        foreach (var account in options.Accounts ?? Array.Empty<SmtpAccount>())
+            AddCredentialVariants(sensitiveValues, account.Username, account.Password);
+
+        var resultWithId = result with
+        {
+            RunId = runId,
+            LastError = RedactKnownSecrets(result.LastError, sensitiveValues.ToArray())
+        };
         return new RunReport(
             RunId: runId,
             StartedUtc: startedUtc,
@@ -97,8 +113,40 @@ public static class RunReportBuilder
         var health = report.EndpointHealth
             .OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var normalized = report with { EndpointHealth = health };
+        var resultHealth = report.Result.EndpointHealth?.OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+        var normalizedResult = report.Result with { EndpointHealth = resultHealth };
+        var normalized = report with
+        {
+            EndpointHealth = health,
+            Result = normalizedResult
+        };
         return JsonSerializer.Serialize(normalized, JsonOpts);
+    }
+
+    private static void AddCredentialVariants(List<string?> secrets, string? username, string? password)
+    {
+        if (string.IsNullOrEmpty(password)) return;
+        secrets.Add(password);
+        if (!string.IsNullOrEmpty(username))
+        {
+            secrets.Add($"{username}:{password}");
+            secrets.Add($"\0{username}\0{password}");
+        }
+    }
+
+    private static string RedactKnownSecrets(string? text, params string?[] secrets)
+    {
+        if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+        foreach (var secret in secrets.Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal))
+        {
+            text = text.Replace(secret!, "[REDACTED]", StringComparison.Ordinal);
+            var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(secret!));
+            if (!string.IsNullOrEmpty(base64))
+                text = text.Replace(base64, "[REDACTED]", StringComparison.Ordinal);
+        }
+
+        return text;
     }
 
     public static bool JsonContainsSecretMaterial(string json) =>
