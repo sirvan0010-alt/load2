@@ -156,7 +156,7 @@ public sealed partial class MainForm
     private async Task DiscoverRecipientMxAsync()
     {
         var recipient = txtTo.Text
-            .Split(new[] { ',', ';', '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(Validation.IsValidEmail);
         if (recipient is null)
         {
