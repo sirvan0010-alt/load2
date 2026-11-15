@@ -31,7 +31,15 @@ public static class ProfileStore
         PathSecurity.EnsureNoReparsePoints(path);
         var safe = includeSecrets
             ? options
-            : options with { Password = "", ProxyPassword = "", ClientCertificatePassword = "" };
+            : options with
+            {
+                Password = "",
+                ProxyPassword = "",
+                ClientCertificatePassword = "",
+                Accounts = options.Accounts?
+                    .Select(account => account with { Password = "" })
+                    .ToArray()
+            };
 
         var file = new ProfileFile(AppVersion.Current, DateTimeOffset.UtcNow, profileName, safe);
         var json = JsonSerializer.Serialize(file, JsonOptions);
