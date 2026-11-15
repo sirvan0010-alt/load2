@@ -237,9 +237,15 @@ public sealed partial class MainForm
             _lastRunReport = runReport;
             btnExportReport.Enabled = true;
 
-            progressBar.Value = 100;
+            progressBar.Value = result.Requested > 0
+                ? Math.Clamp((int)Math.Round((result.Sent + result.Failed) * 100d / result.Requested), 0, 100)
+                : 0;
             lblStatus.Text = result.Cancelled
-                ? (_mailboxQuotaStopTriggered ? "Zastaveno: limit kvóty" : "Zastaveno uživatelem")
+                ? (_mailboxQuotaStopTriggered
+                    ? "Zastaveno: limit kvóty"
+                    : !string.IsNullOrWhiteSpace(result.CapacityStopReason)
+                        ? "Zastaveno: kapacitní limit"
+                        : "Zastaveno uživatelem")
                 : "Dokončeno";
             lblEta.Text = "";
             lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed} Retry:{result.Retries}";
