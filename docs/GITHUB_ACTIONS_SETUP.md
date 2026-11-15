@@ -85,7 +85,7 @@ V repozitáři je soubor [github-main-ruleset.json](github-main-ruleset.json). J
 - zákaz force-push;
 - povinný pull request;
 - vyřešení všech konverzací v PR;
-- povinné úspěšné CI, Windows package, CodeQL, Dependency Review a Architecture checks;
+- povinné úspěšné CI, Windows package, oba ověřené CodeQL analyzační joby, Dependency Review a Architecture checks;
 - požadavek, aby kontroly odpovídaly aktuálnímu HEAD commitu;
 - nulový počet povinných schválení, aby se samostatný vlastník repozitáře nezablokoval tím, že nemá kdo schválit jeho vlastní PR.
 
@@ -110,7 +110,6 @@ Oficiální návod: [Creating rulesets for a repository](https://docs.github.com
 | `build-test` | Core build, kompletní testovací sadu, kontrolu odkazů dokumentace a workflow hygiene |
 | `build-gui` | Release build Windows Forms GUI |
 | `package` | Windows ZIP, testy a SHA-256 balíčku |
-| `CodeQL` | Výsledek code scanning |
 | `Analyze (csharp)` | CodeQL analýzu C# |
 | `Analyze (actions)` | CodeQL analýzu workflow |
 | `Dependency Review` | Změny závislostí v PR |
@@ -122,11 +121,12 @@ Tyto názvy byly ověřeny v úspěšném check-run výpisu aktuálního PR.
 
 Na záložce **Actions** ověř, že pro aktuální PR proběhly:
 
-1. CI;
-2. Windows package;
-3. CodeQL Advanced;
+1. CI (`build-test` a `build-gui`);
+2. Windows package (`package`);
+3. CodeQL Advanced (`Analyze (csharp)` a `Analyze (actions)`);
 4. Dependency Review;
-5. Architecture Consistency. Kontrola workflow oprávnění a nebezpečných vzorů je součástí jobu `build-test` v CI.
+5. Architecture Consistency (`Repository Architecture`);
+6. Actions Hygiene (`Workflow Hygiene`). Kontrola workflow oprávnění a nebezpečných vzorů je navíc součástí jobu `build-test` v CI.
 
 Na záložce **Security** sleduj Code scanning, Dependabot a Secret scanning alerts. Dependabot version updates podle přidaného `.github/dependabot.yml` kontroluje NuGet a GitHub Actions každý týden.
 
