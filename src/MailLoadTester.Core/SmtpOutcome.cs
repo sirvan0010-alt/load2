@@ -34,6 +34,11 @@ public static class SmtpOutcomeClassifier
         if (ex is OperationCanceledException) return SmtpOutcome.Cancelled;
         if (ex is TimeoutException) return SmtpOutcome.Timeout;
         if (ex is AuthenticationException) return SmtpOutcome.Authentication;
+        var message = ex.Message.ToLowerInvariant();
+        if (message.Contains("authentication required") || message.Contains("auth required")
+            || message.Contains("not authenticated") || message.Contains("authentication failed")
+            || message.Contains("authentication credentials"))
+            return SmtpOutcome.Authentication;
         if (ex is SmtpCommandException sce)
             return ClassifySmtp((int)sce.StatusCode, sce.Message);
         if (ex is SmtpProtocolException or IOException)
