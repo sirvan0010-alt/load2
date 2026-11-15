@@ -160,8 +160,10 @@ public sealed record MailTestResult(
     SmtpOutcomeCountsSnapshot? OutcomeCounts = null,
     /// <summary>Fixed-bucket distribution of successful-message latency samples.</summary>
     LatencyHistogramSnapshot? LatencyHistogram = null,
-    /// <summary>SMTP SEND attempts admitted by the capacity guard, including retries; null when capacity mode is disabled.</summary>
-    int? CapacitySendAttempts = null,
+    /// <summary>Actual SmtpClient.SendAsync calls started, including retries and AutoRestart attempts.</summary>
+    int SmtpSendAttempts = 0,
+    /// <summary>Pre-send capacity reservations; may exceed actual network attempts if cancellation occurs after reservation.</summary>
+    int? CapacitySendReservations = null,
     /// <summary>Conservatively reserved SMTP-prepared MIME bytes; null when capacity mode is disabled.</summary>
     long? CapacityMimeBytesReserved = null,
     /// <summary>Reason the capacity guard stopped the run, if it did.</summary>
