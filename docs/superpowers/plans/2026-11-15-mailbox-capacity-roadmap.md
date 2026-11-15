@@ -70,3 +70,13 @@
 8. Quota stop uses only a real server-reported quota.
 9. Graph history is bounded and telemetry failures cannot break SMTP sending.
 10. Required CI, CodeQL/dependency checks, Windows publish, and manual GUI verification pass before merge.
+
+## Current implementation status (2026-11-15)
+
+- **M1 in progress:** read-only SMTP capability discovery service is implemented for a configured submission endpoint and up to three recipient MX hosts. It reads greeting/EHLO capabilities, advertised SIZE, TLS protocol and certificate subject. It never authenticates or sends MAIL/RCPT/DATA.
+- **M1 UI slice:** Mailbox Monitor has separate buttons to inspect recipient MX and the configured SMTP submission endpoint. The recipient lookup uses the first valid address in the Komu field.
+- **MIME sizing:** Base64 line-wrapping and conservative maximum-attachment estimates are implemented with overflow checks.
+- **Existing diagnostic correction:** MX lookup now targets the first recipient domain instead of incorrectly using the sender domain; TLS certificate subject is captured during certificate validation.
+- **Tests added:** fake local SMTP server verifies SIZE/EHLO parsing and that discovery issues no MAIL or DATA command; MIME sizing tests cover 1 GiB and the 25 MiB message ceiling.
+- **Not yet complete:** SMTP response-classification changes, IMAP folder inventory/Junk discovery, capacity-run controls, integrated adaptive policy, and multi-series live chart.
+- **Verification state:** CI and Windows package workflows are pending for the current branch head. Do not merge until they pass and a Windows GUI run is performed.
