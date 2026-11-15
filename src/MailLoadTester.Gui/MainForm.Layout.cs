@@ -350,7 +350,7 @@ public sealed partial class MainForm
         var chartTabs = new TabControl { Dock = DockStyle.Fill };
         var smtpMetricsPage = new TabPage("SMTP / IMAP") { Padding = new Padding(3) };
         runMetricsChart = new RunMetricsChart { Dock = DockStyle.Fill };
-        toolTip.SetToolTip(runMetricsChart, "Živý graf posledních SMTP pokusů, přijetí a chyb. IMAP křivky jsou nezávislá pozorování schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
+        toolTip.SetToolTip(runMetricsChart, "Živý graf rychlosti SMTP SEND pokusů, SMTP Accepted a chyb za minutu, počítané z klouzavého přibližně desetisekundového okna. IMAP Δ/min je nezávislé pozorování změny schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
         smtpMetricsPage.Controls.Add(runMetricsChart);
         var adaptiveMetricsPage = new TabPage("Adaptivní řízení") { Padding = new Padding(3) };
         adaptiveControlChart = new AdaptiveControlChart { Dock = DockStyle.Fill };
