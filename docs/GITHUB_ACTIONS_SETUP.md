@@ -114,7 +114,6 @@ Oficiální návod: [Creating rulesets for a repository](https://docs.github.com
 | `Analyze (csharp)` | CodeQL analýzu C# |
 | `Analyze (actions)` | CodeQL analýzu workflow |
 | `Dependency Review` | Změny závislostí v PR |
-
 | `Repository Architecture` | Architektonické invarianty repozitáře |
 
 Tyto názvy byly ověřeny v úspěšném check-run výpisu aktuálního PR.
@@ -127,8 +126,7 @@ Na záložce **Actions** ověř, že pro aktuální PR proběhly:
 2. Windows package;
 3. CodeQL Advanced;
 4. Dependency Review;
-5. Actions Hygiene;
-6. Architecture Consistency.
+5. Architecture Consistency. Kontrola workflow oprávnění a nebezpečných vzorů je součástí jobu `build-test` v CI.
 
 Na záložce **Security** sleduj Code scanning, Dependabot a Secret scanning alerts. Dependabot version updates podle přidaného `.github/dependabot.yml` kontroluje NuGet a GitHub Actions každý týden.
 
