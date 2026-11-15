@@ -22,4 +22,8 @@ public readonly record struct ProgressUpdate(
     /// <summary>Efektivní interval ms po jitter/backoff.</summary>
     int? EffectiveIntervalMs = null,
     /// <summary>Agregované pozorované SMTP odpovědi (pro živou tabulku v GUI).</summary>
-    IReadOnlyList<ObservedResponseRow>? ObservedSnapshot = null);
+    IReadOnlyList<ObservedResponseRow>? ObservedSnapshot = null,
+    /// <summary>Conservatively reserved SMTP-prepared MIME bytes for a capacity run.</summary>
+    long? CapacityMimeBytesReserved = null,
+    /// <summary>Configured cumulative MIME-byte budget; null means no total byte ceiling.</summary>
+    long? CapacityMimeBytesTarget = null);
