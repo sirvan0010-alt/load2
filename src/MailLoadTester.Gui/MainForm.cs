@@ -24,7 +24,7 @@ public sealed partial class MainForm : Form
     private ComboBox cmbAuthMethod = null!;
     private TextBox txtUser = null!, txtPass = null!;
     private Button btnTestConnection = null!, btnSendTest = null!;
-    private TextBox txtSourceIp = null!;
+    private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
     private NumericUpDown numIpv6PrefixLen = null!;
@@ -35,9 +35,8 @@ public sealed partial class MainForm : Form
 
     // Message tab
     private ComboBox txtFrom = null!;
-    private TextBox txtTo = null!, txtCc = null!, txtBcc = null!;
+    private ComboBox txtTo = null!, txtCc = null!, txtBcc = null!;
     private readonly List<string> _knownEmailAddresses = new();
-    private Button btnToAddressSuggestions = null!, btnCcAddressSuggestions = null!, btnBccAddressSuggestions = null!;
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
@@ -246,74 +245,13 @@ public sealed partial class MainForm : Form
                     AddKnownEmailAddress(token);
         }
 
-        foreach (var address in _knownEmailAddresses)
-            if (!txtFrom.Items.Contains(address))
-                txtFrom.Items.Add(address);
-
-        UpdateAddressSuggestionButton(btnToAddressSuggestions);
-        UpdateAddressSuggestionButton(btnCcAddressSuggestions);
-        UpdateAddressSuggestionButton(btnBccAddressSuggestions);
-    }
-
-    private void AddAddressSuggestionButton(FlowLayoutPanel parent, TextBox target, string caption)
-    {
-        var button = new Button
+        foreach (var combo in new[] { txtFrom, txtTo, txtCc, txtBcc })
         {
-            Text = caption,
-            Width = 220,
-            Height = 28,
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 0, 6),
-            Tag = target
-        };
-        button.Click += (_, _) => ShowAddressSuggestionMenu(button, target);
-        parent.Controls.Add(button);
-
-        if (ReferenceEquals(target, txtTo)) btnToAddressSuggestions = button;
-        else if (ReferenceEquals(target, txtCc)) btnCcAddressSuggestions = button;
-        else if (ReferenceEquals(target, txtBcc)) btnBccAddressSuggestions = button;
-        UpdateAddressSuggestionButton(button);
-    }
-
-    private void UpdateAddressSuggestionButton(Button? button)
-    {
-        if (button is null || button.IsDisposed) return;
-        button.Enabled = true;
-        toolTip.SetToolTip(button, "Otevře rozbalovací seznam známých e-mailových adres z přihlášení, SMTP účtů a již vyplněných adres.");
-    }
-
-    private void ShowAddressSuggestionMenu(Button button, TextBox target)
-    {
-        RefreshEmailAddressSuggestions();
-
-        var menu = new ContextMenuStrip();
-        if (_knownEmailAddresses.Count == 0)
-        {
-            menu.Items.Add(new ToolStripMenuItem("Zatím nejsou uložené žádné e-mailové adresy") { Enabled = false });
-            menu.Show(button, new Point(0, button.Height));
-            return;
+            if (combo is null) continue;
+            foreach (var address in _knownEmailAddresses)
+                if (!combo.Items.Contains(address))
+                    combo.Items.Add(address);
         }
-
-        foreach (var address in _knownEmailAddresses)
-        {
-            var item = new ToolStripMenuItem(address);
-            item.Click += (_, _) =>
-            {
-                var existing = target.Text.Split(new[] { ',', ';', '\\r', '\\n' },
-                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (existing.Contains(address, StringComparer.OrdinalIgnoreCase)) return;
-                if (string.IsNullOrWhiteSpace(target.Text))
-                    target.Text = address;
-                else
-                    target.Text = target.Text.TrimEnd(' ', ',', ';', '\\r', '\\n')
-                        + (target.Multiline ? Environment.NewLine : ", ")
-                        + address;
-                target.Focus();
-            };
-            menu.Items.Add(item);
-        }
-        menu.Show(button, new Point(0, button.Height));
     }
 
     /// <summary>
