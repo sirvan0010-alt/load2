@@ -182,7 +182,8 @@ internal sealed class AdaptiveControlChart : Control
         Pen border,
         Brush mutedBrush)
     {
-        g.DrawString(title, Font, ForeColor, 6, plot.Top - 15);
+        using var textBrush = new SolidBrush(ForeColor);
+        g.DrawString(title, Font, textBrush, 6, plot.Top - 15);
         g.DrawRectangle(border, plot);
         for (var tick = 0; tick <= 2; tick++)
         {
