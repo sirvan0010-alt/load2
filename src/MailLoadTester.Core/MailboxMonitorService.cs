@@ -41,7 +41,19 @@ public sealed class MailboxMonitorService
             await client.ConnectAsync(options.Host.Trim(), options.Port, socketOptions, cancellationToken).ConfigureAwait(false);
             await client.AuthenticateAsync(options.Username.Trim(), options.Password, cancellationToken).ConfigureAwait(false);
 
-            var folderSnapshots = await ReadFolderInventoryAsync(client, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<MailboxFolderSnapshot> folderSnapshots;
+            try
+            {
+                folderSnapshots = await ReadFolderInventoryAsync(client, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (ex is NotSupportedException or ImapCommandException)
+            {
+                // Folder listing is an optional enhancement; do not lose quota/INBOX metrics
+                // merely because a provider restricts LIST or special-use discovery.
+                folderSnapshots = Array.Empty<MailboxFolderSnapshot>();
+            }
+
             var inbox = client.Inbox;
             long? inboxSizeBytes = null;
             try
