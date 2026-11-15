@@ -347,9 +347,18 @@ public sealed partial class MainForm
         rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 220F));
         rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         rightTestPanel.Controls.Add(gbBatch, 0, 0);
+        var chartTabs = new TabControl { Dock = DockStyle.Fill };
+        var smtpMetricsPage = new TabPage("SMTP / IMAP") { Padding = new Padding(3) };
         runMetricsChart = new RunMetricsChart { Dock = DockStyle.Fill };
-        toolTip.SetToolTip(runMetricsChart, "Živý graf posledních vzorků SMTP pokusů, přijetí a chyb. IMAP křivky jsou nezávislá pozorování schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
-        rightTestPanel.Controls.Add(runMetricsChart, 0, 1);
+        toolTip.SetToolTip(runMetricsChart, "Živý graf posledních SMTP pokusů, přijetí a chyb. IMAP křivky jsou nezávislá pozorování schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
+        smtpMetricsPage.Controls.Add(runMetricsChart);
+        var adaptiveMetricsPage = new TabPage("Adaptivní řízení") { Padding = new Padding(3) };
+        adaptiveControlChart = new AdaptiveControlChart { Dock = DockStyle.Fill };
+        toolTip.SetToolTip(adaptiveControlChart, "Historie efektivního globálního SEND intervalu a aktuálního limitu adaptivní souběžnosti. Interval 0 ms znamená, že není nastaven pevný časový strop; skutečnou rychlost dále omezuje souběžnost a odezva SMTP.");
+        adaptiveMetricsPage.Controls.Add(adaptiveControlChart);
+        chartTabs.TabPages.Add(smtpMetricsPage);
+        chartTabs.TabPages.Add(adaptiveMetricsPage);
+        rightTestPanel.Controls.Add(chartTabs, 0, 1);
         tblTest.Controls.Add(rightTestPanel, 1, 0);
 
         tabTest.Controls.Add(tblTest);
