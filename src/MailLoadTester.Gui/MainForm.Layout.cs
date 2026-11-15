@@ -103,7 +103,11 @@ public sealed partial class MainForm
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        txtHost = AddLabeledText(flConn, "SMTP Host:", "Adresa SMTP serveru poskytovatele, nikoli e-mailová adresa. Např. smtp.seznam.cz nebo smtp.gmail.com.");
+        txtHost = AddLabeledEditableCombo(flConn, "SMTP Host:",
+            ["smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com", "smtp.office365.com",
+             "smtp.mail.yahoo.com", "smtp.mail.me.com", "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"],
+            "Začni psát adresu SMTP serveru nebo vyber poskytovatele z nabídky. Výběr automaticky nastaví běžný port, TLS a zapne SMTP autentizaci. Vše lze ručně změnit.");
+        txtHost.SelectionChangeCommitted += (_, _) => ApplySmtpHostPreset();
         flConn.Controls.Add(new Label
         {
             Text = "Zadej skutečný SMTP server svého poskytovatele. Příklad smtp.example.com je pouze ukázková hodnota.",
@@ -783,6 +787,43 @@ public sealed partial class MainForm
         parent.Controls.Add(txt);
         SetFieldToolTip(lbl, txt, tip);
         return txt;
+    }
+
+    private ComboBox AddLabeledEditableCombo(Control parent, string label, string[] suggestions, string tip)
+    {
+        var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        parent.Controls.Add(lbl);
+        var cmb = new ComboBox
+        {
+            Width = 360,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+        cmb.Items.AddRange(suggestions);
+        parent.Controls.Add(cmb);
+        SetFieldToolTip(lbl, cmb, tip);
+        return cmb;
+    }
+
+    private void ApplySmtpHostPreset()
+    {
+        var host = txtHost.Text.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(host)) return;
+
+        // Submission defaults for common providers. The operator can still edit
+        // port/security/authentication after selecting a suggestion.
+        if (host is "smtp.seznam.cz" or "smtp.gmail.com" or "smtp-mail.outlook.com"
+            or "smtp.office365.com" or "smtp.mail.yahoo.com" or "smtp.mail.me.com"
+            or "smtp.zoho.com" or "smtp.zoho.eu" or "smtp.fastmail.com")
+        {
+            numPort.Value = 587;
+            cmbSecurity.SelectedItem = "StartTls";
+            chkAuth.Checked = true;
+            if (cmbAuthMethod.SelectedItem is null)
+                cmbAuthMethod.SelectedItem = "Auto";
+        }
     }
 
     private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip, int decimalPlaces = 0)
