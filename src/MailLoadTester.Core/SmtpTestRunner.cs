@@ -339,7 +339,10 @@ public sealed class SmtpTestRunner
                 progress.Report(new ProgressUpdate(s, f,
                     detail, null, 3, detail, "",
                     fsm.Phase, null, i, workerId, options.MaxConcurrency,
-                    step, ok, pace.StatusText, pace.CurrentIntervalMs, null));
+                    step, ok, pace.StatusText, pace.CurrentIntervalMs, null,
+                    SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
+                    Smtp4xx: Volatile.Read(ref smtp4xx),
+                    Smtp5xx: Volatile.Read(ref smtp5xx)));
             }
         }
 
