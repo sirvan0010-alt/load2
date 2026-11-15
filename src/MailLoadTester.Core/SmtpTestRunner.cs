@@ -36,7 +36,7 @@ public sealed class SmtpTestRunner
     /// Supplies a fresh IMAP observation. Only positive STORAGE growth near the
     /// configured quota-stop threshold can slow a running Capacity Run.
     /// </summary>
-    public void ObserveMailboxSnapshot(MailboxMonitorSnapshot snapshot)
+    public MailboxCapacityFeedbackDecision? ObserveMailboxSnapshot(MailboxMonitorSnapshot snapshot)
     {
         SmartPaceController? pace;
         AdaptiveConcurrencyLimiter? adaptive;
@@ -44,7 +44,7 @@ public sealed class SmtpTestRunner
         lock (_mailboxFeedbackSync)
         {
             decision = _mailboxFeedbackController?.Observe(snapshot, _mailboxFeedbackStopThreshold);
-            if (decision is null) return;
+            if (decision is null) return null;
             _currentMailboxFeedbackDecision = decision;
             pace = _activePaceController;
             adaptive = _activeAdaptiveLimiter;
@@ -53,6 +53,7 @@ public sealed class SmtpTestRunner
         pace?.ApplyMailboxPressure(decision.Severity);
         if (decision.Severity >= 2)
             adaptive?.ApplyMailboxPressure();
+        return decision;
     }
 
     private void RegisterMailboxFeedbackTargets(SmartPaceController pace, AdaptiveConcurrencyLimiter? adaptive)
