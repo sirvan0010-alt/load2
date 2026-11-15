@@ -443,6 +443,7 @@ public sealed partial class MainForm
         smtpLogTab = new SmtpLogTab();
         tabSmtpLog.Controls.Add(smtpLogTab);
         tabs.TabPages.Add(tabSmtpLog);
+        InitializeMailboxMonitorTab();
 
         Controls.Add(tabs);
 
