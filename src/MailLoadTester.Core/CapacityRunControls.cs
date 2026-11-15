@@ -14,7 +14,8 @@ public sealed record CapacityRunLimits(
     int MaxMessageCount = 1000,
     long TargetMimeBytes = 0,
     long MaxMimeMessageBytes = 0,
-    int MaxMessagesPerMinute = 0);
+    int MaxMessagesPerMinute = 0,
+    bool ValidateBeforeRun = false);
 
 /// <summary>
 /// Applies deterministic count and global-rate ceilings before a run starts.
