@@ -36,6 +36,24 @@ public sealed partial class MainForm
             cmbAuthMethod.SelectedItem = o.AuthMethod.ToString();
             txtUser.Text = o.Username;
             txtPass.Text = o.Password ?? string.Empty;
+            _accountDrafts.Clear();
+            if (o.Accounts is { Count: > 0 })
+            {
+                foreach (var account in o.Accounts)
+                {
+                    _accountDrafts.Add(new SmtpAccountDraft(
+                        account.Id,
+                        account.SmtpHost,
+                        account.Port,
+                        account.Security,
+                        account.UseAuthentication,
+                        account.Username,
+                        account.Password,
+                        Enabled: true,
+                        AuthMethod: account.AuthMethod));
+                }
+            }
+            RefreshAccountsListView();
             txtSourceIp.Text = o.SourceIp;
             txtIpv6Prefix.Text = o.Ipv6Prefix;
             numIpv6PrefixLen.Value = Math.Clamp(o.Ipv6PrefixLength, numIpv6PrefixLen.Minimum, numIpv6PrefixLen.Maximum);
