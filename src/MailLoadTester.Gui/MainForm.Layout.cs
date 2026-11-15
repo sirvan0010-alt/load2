@@ -284,7 +284,7 @@ public sealed partial class MainForm
         var flParams = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         numCount = AddLabeledNumeric(flParams, "Počet zpráv:", 1, 10000, 10, "Kolik zpráv celkem odeslat (1–10000).");
         numConcurrency = AddLabeledNumeric(flParams, "Paralelismus:", 1, 20, 1, "Kolik zpráv se odesílá současně (1–20).");
-        numInterval = AddLabeledNumeric(flParams, "Interval (ms):", 0, 3600000, 0, "GLOBÁLNÍ rozestup mezi odesláními (ne per-worker). 1000 ms ≈ max 1 msg/s i při 20 workerech.");
+        numInterval = AddLabeledNumeric(flParams, "Interval (ms):", 0, 3600000, 0, "Minimální GLOBÁLNÍ rozestup mezi začátky SMTP SEND (ne per-worker). 0 = bez pevného časového stropu; rychlost pak omezuje paralelismus, příprava zprávy a odezva serveru. 1000 ms = nejvýše přibližně 1 nový SEND/s i při 20 workerech.");
         numRetries = AddLabeledNumeric(flParams, "Retry:", 0, 5, 0, "Kolikrát zkusit znovu při dočasné chybě (0–5).");
         chkCapacityRun = AddCheckBox(flParams, "Zapnout Capacity Run – bezpečnostní limity", false,
             "Zapne pevné limity běhu. MIME bajty se měří až po sestavení zprávy a pluginech, těsně před SMTP SEND. Souhrnný rozpočet započítává i opakované pokusy. Nejde o velikost uloženou ve schránce.");
@@ -346,6 +346,7 @@ public sealed partial class MainForm
         rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         rightTestPanel.Controls.Add(gbBatch, 0, 0);
         runMetricsChart = new RunMetricsChart { Dock = DockStyle.Fill };
+        toolTip.SetToolTip(runMetricsChart, "Živý graf posledních vzorků SMTP pokusů, přijetí a chyb. IMAP křivky jsou nezávislá pozorování schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
         rightTestPanel.Controls.Add(runMetricsChart, 0, 1);
         tblTest.Controls.Add(rightTestPanel, 1, 0);
 
@@ -380,15 +381,15 @@ public sealed partial class MainForm
         var flAdv = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         chkDirectMx = AddCheckBox(flAdv, "Direct MX delivery", false, "Místo relay SMTP se zeptá DNS na MX záznam a mluví přímo s cílovým serverem.");
         chkPreWarm = AddCheckBox(flAdv, "Pre-warm spojení", false, "Před testem vytvoří a ověří všechna spojení v poolu — první dávka nečeká na handshake.");
-        chkAdaptive = AddCheckBox(flAdv, "Adaptive concurrency", false, "Při návalu 4xx/timeout automaticky snižuje paralelismus, po chvíli zase zvedne.");
+        chkAdaptive = AddCheckBox(flAdv, "Adaptive concurrency", false, "Začíná na nastaveném max. paralelismu. V přibližně 10s oknech při tlaku serveru (4xx/timeout/transport) paralelismus sníží; po zdravých oknech ho postupně obnoví nejvýše na nastavený počet workerů. Samo o sobě nezvyšuje rychlost nad globální interval a nikdy nepřekročí MaxConcurrency.");
         chkCircuit = AddCheckBox(flAdv, "Circuit breaker", false, "Po N po sobě jdoucích selháních stejného typu přestane zkoušet a vrátí výsledek.");
         numCircuitThreshold = AddLabeledNumeric(flAdv, "Circuit breaker threshold:", 1, 50, 5, "Kolik po sobě jdoucích selhání otevře jistič.");
         chkDashboard = AddCheckBox(flAdv, "HTTP Dashboard", false, "Spustí mini webový server na localhost — otevři prohlížeč a sleduj live grafy.");
         numDashboardPort = AddLabeledNumeric(flAdv, "Dashboard port:", 1, 65535, 5000, "Port pro live dashboard (výchozí 5000).");
         chkAutoRestart = AddCheckBox(flAdv, "Auto-restart při selhání", false, "POZOR: znovu odešle CELÝ test (může doručit zprávy vícekrát). Defaultně vypnuto. Snižuje paralelismus po většinovém selhání.");
         numAutoRestartAttempts = AddLabeledNumeric(flAdv, "Max auto-restartů:", 1, 10, 3, "Kolikrát zkusit restart při selhání.");
-        chkSessionLog = AddCheckBox(flAdv, "SMTP session log", false, "Uloží kompletní SMTP konverzaci (C:/S:) do .txt pro debug.");
-        txtSessionLogPath = AddLabeledText(flAdv, "Session log soubor:", "Cesta k .txt souboru pro SMTP log.");
+        chkSessionLog = AddCheckBox(flAdv, "SMTP session log", false, "Volitelné podrobné SMTP C:/S: logování, ve výchozím stavu vypnuté. Pozor: může obsahovat adresy, hlavičky a obsah zpráv; autentizační tajemství se redigují. Aktivní soubor má limit 8 MiB a uchovávají se nejvýše 3 zálohy (celkem přibližně 32 MiB).");
+        txtSessionLogPath = AddLabeledText(flAdv, "Session log soubor:", "Cílová cesta SMTP session logu. Při novém běhu se předchozí soubor přesune do .1 až .3; během běhu se soubor automaticky rotuje při 8 MiB. Starší zálohy nad limit se odstraní.");
         tabAdv.Controls.Add(flAdv);
         tabs.TabPages.Add(tabAdv);
 
@@ -493,6 +494,7 @@ public sealed partial class MainForm
         // Záložka rychlého SMTP logu (DataGrid, max 1000 řádků, thread-safe)
         var tabSmtpLog = new TabPage("SMTP log") { Padding = new Padding(4) };
         smtpLogTab = new SmtpLogTab();
+        toolTip.SetToolTip(smtpLogTab, "Živý přehled SMTP výsledků. Zobrazuje nejvýše 1 000 posledních řádků; čekající fronta je také omezená. Nejde o trvalý diskový log.");
         tabSmtpLog.Controls.Add(smtpLogTab);
         tabs.TabPages.Add(tabSmtpLog);
         InitializeMailboxMonitorTab();
