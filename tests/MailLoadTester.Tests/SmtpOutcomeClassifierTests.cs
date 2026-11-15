@@ -47,6 +47,16 @@ public class SmtpOutcomeClassifierTests
         Assert.False(SmtpOutcomeClassifier.IsRetryable(ex));
     }
 
+    [Theory]
+    [InlineData(530, "5.7.0 authentication required")]
+    [InlineData(535, "5.7.8 authentication credentials invalid")]
+    public void AuthenticationRequired_EnhancedStatus_IsNotRetryable(int code, string response)
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(code, response);
+        Assert.Equal(SmtpOutcome.Authentication, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
     [Fact]
     public void Recipient_550_not_retryable()
     {
