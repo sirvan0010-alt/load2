@@ -95,6 +95,15 @@ Interval 0 ms znamená, že není nastaven pevný časový strop. Při kladném 
 
 Adaptivní souběžnost je povolený limit souběžných workerů, nikoli počet právě aktivních SMTP přenosů. Nikdy nepřekročí nastavené maximum.
 
+Vyhodnocení adaptivní souběžnosti probíhá v časových oknech (standardně 10 sekund) a vyžaduje alespoň 5 zaznamenaných pokusů:
+- pokud dočasné SMTP 4xx, timeouty nebo transportní chyby tvoří více než 30 % pokusů, limit se sníží na polovinu (nejméně na 1);
+- pokud průměrná doba SMTP SEND vzroste alespoň na dvojnásobek běhového základu a současně dosáhne nejméně 1 sekundy, limit se sníží o jednoho workera;
+- při méně než 5 % všech neúspěšných pokusů a bez zjištěného přetížení se limit opatrně zvýší o jednoho workera;
+- trvalé SMTP 5xx se evidují jako neúspěchy, ale samy o sobě se nepovažují za důkaz přetížení serveru;
+- kritický tlak podle skutečně pozorované IMAP STORAGE kvóty může limit snížit nezávisle na SMTP telemetrii.
+
+Při snížení limitu se již běžící operace násilně neruší. Nové workery čekají, dokud počet aktivních operací neklesne pod nový limit. Pokud je adaptivní řízení vypnuté nebo zatím nemá platný vzorek, graf zobrazuje mezeru místo nulové hodnoty.
+
 ## 8. Jak výsledky interpretovat
 
 Pro odhad kapacity schránky je vhodné kombinovat:
