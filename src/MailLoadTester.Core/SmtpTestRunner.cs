@@ -700,7 +700,10 @@ public sealed class SmtpTestRunner
                                     if (bandwidth != null || capacityGuard != null)
                                     {
                                         var sizeCounter = new CountingStream();
-                                        message.WriteTo(sizeCounter);
+                                        if (utf8Format != null)
+                                            message.WriteTo(utf8Format, sizeCounter);
+                                        else
+                                            message.WriteTo(sizeCounter);
                                         serializedMimeBytes = sizeCounter.BytesWritten;
                                         if (bandwidth != null)
                                             await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, serializedMimeBytes), workerCt).ConfigureAwait(false);
