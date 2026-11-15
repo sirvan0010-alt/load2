@@ -44,8 +44,8 @@ public sealed class AutoRestartMetricsTests
     [Fact]
     public void Outcomes_aggregate_each_taxonomy_bucket()
     {
-        var first = new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 0, 0, 2, 0, 1);
-        var second = new SmtpOutcomeCountsSnapshot(5, 2, 3, 4, 1, 2, 1, 0, 0, 2, 0, 0);
+        var first = new SmtpOutcomeCountsSnapshot(90, 3, 1, 1, 0, 0, 2, 0, 0, 2, 1, 2);
+        var second = new SmtpOutcomeCountsSnapshot(5, 2, 3, 4, 1, 2, 1, 0, 0, 2, 0, 1);
 
         var result = AutoRestartMetrics.AggregateOutcomes(first, second);
 
