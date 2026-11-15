@@ -124,7 +124,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
         limiter.RecordAttempt(true, 160, serverPressure: false);
         limiter.RecordAttempt(true, 170, serverPressure: false);
         limiter.RecordAttempt(true, 165, serverPressure: false);
-        Thread.Sleep(3); // allow the configured sample window to expire
+        Thread.Sleep(60); // allow the configured sample window to expire
         limiter.RecordAttempt(true, 160, serverPressure: false); // evaluates previous window
 
         Assert.Equal(4, limiter.Current);
@@ -149,7 +149,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
     [Fact]
     public void SustainedSmtpLatencyIncrease_ReducesConcurrencyGradually()
     {
-        var limiter = new AdaptiveConcurrencyLimiter(6, 1, 10, TimeSpan.FromMilliseconds(1));
+        var limiter = new AdaptiveConcurrencyLimiter(6, 1, 10, TimeSpan.FromMilliseconds(50));
 
         // Establish a baseline for normal SMTP DATA transfer latency.
         for (var i = 0; i < 5; i++)
