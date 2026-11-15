@@ -57,6 +57,37 @@ public sealed partial class MainForm
 
         if (u.MessageStep.HasValue)
         {
+            // The SMTP log tab used to be cleared at run start but never received
+            // entries. Publish the meaningful per-message lifecycle events here.
+            // Progress<T> is created on the UI thread, so this callback is marshalled
+            // back to the WinForms synchronization context before touching controls.
+            var (logStatus, logColor) = u.MessageStep.Value switch
+            {
+                MessageStep.SmtpSend => ("ODESÍLÁNÍ", Color.SteelBlue),
+                MessageStep.Succeeded => ("OK", Color.ForestGreen),
+                MessageStep.FailedTransient => ("RETRY", Color.DarkOrange),
+                MessageStep.FailedFinal => ("CHYBA", Color.Firebrick),
+                MessageStep.Cancelled => ("ZRUŠENO", Color.Gray),
+                _ => (string.Empty, Color.Gray)
+            };
+            if (!string.IsNullOrEmpty(logStatus))
+            {
+                var message = string.IsNullOrWhiteSpace(u.Status) ? u.CurrentStep : u.Status;
+                var recipient = string.Empty;
+                var arrow = message.IndexOf("→", StringComparison.Ordinal);
+                if (arrow >= 0)
+                {
+                    var tail = message[(arrow + 1)..].Trim();
+                    var end = tail.IndexOfAny([' ', '(']);
+                    recipient = end >= 0 ? tail[..end] : tail;
+                }
+                smtpLogTab?.AddLogEntry(
+                    recipient,
+                    logStatus,
+                    $"#{u.MessageIndex?.ToString() ?? "?"} · W{u.WorkerId?.ToString() ?? "—"} · {message}",
+                    logColor);
+            }
+
             int stepIdx = u.MessageStep.Value switch
             {
                 MessageStep.Queued => 0,
