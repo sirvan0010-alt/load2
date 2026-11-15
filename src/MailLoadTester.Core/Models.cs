@@ -238,6 +238,8 @@ public static class Validation
             throw new ArgumentException("Počet zpráv musí být 1–10000.");
         if (o.DurationSeconds is < 0 or > 86_400)
             throw new ArgumentException("DurationSeconds musí být 0–86400.");
+        if (o.CapacityRun is { ValidateBeforeRun: true, Enabled: false })
+            throw new ArgumentException("Startup validation vyžaduje zapnutý Capacity Run, aby se zpráva započítala do limitů.");
         if (o.CapacityRun is { Enabled: true } capacity)
         {
             if (capacity.MaxMessageCount is < 1 or > 10_000)
