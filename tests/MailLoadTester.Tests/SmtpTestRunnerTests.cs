@@ -1,4 +1,5 @@
 using MailLoadTester;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -143,6 +144,7 @@ public sealed class SmtpTestRunnerTests
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(500));
         var runner = new SmtpTestRunner();
+        var progress = new RecordingProgress<ProgressUpdate>();
         var start = DateTimeOffset.UtcNow;
         static MailboxMonitorSnapshot Quota(long used, DateTimeOffset at)
             => new(0, 0, 0, used, 10_000, null, null, at, "quota available");
@@ -159,7 +161,7 @@ public sealed class SmtpTestRunnerTests
                     TargetMimeBytes: 10_000_000,
                     MaxMessagesPerMinute: 30)
             },
-            new Progress<ProgressUpdate>(),
+            progress,
             cts.Token);
 
         for (var i = 0; i < 100 && runner.CurrentAdaptiveConcurrency is null; i++)
@@ -182,6 +184,8 @@ public sealed class SmtpTestRunnerTests
         cts.Cancel();
         var result = await run;
         Assert.True(result.Cancelled);
+        Assert.Contains(progress.Updates, update => update.AdaptiveConcurrency == 4);
+        Assert.Contains(progress.Updates, update => update.EffectiveIntervalMs is >= 2_000);
     }
 
     [Fact]
@@ -350,6 +354,13 @@ public sealed class SmtpTestRunnerTests
             $"Expected partial results, got Sent={result.Sent}, Failed={result.Failed}, Requested={result.Requested}.");
         Assert.NotNull(result.QueueMetrics);
         Assert.Equal(0, result.QueueMetrics!.QueueDepth);
+    }
+
+    private sealed class RecordingProgress<T> : IProgress<T>
+    {
+        private readonly ConcurrentQueue<T> _updates = new();
+        public IReadOnlyCollection<T> Updates => _updates.ToArray();
+        public void Report(T value) => _updates.Enqueue(value);
     }
 
     private static MailTestOptions CreateOptions(int port, int messageCount, int maxRetries, int maxConcurrency = 1) => new(
