@@ -21,7 +21,7 @@ public sealed partial class MainForm
              || options.SmtpHost.EndsWith(".example", StringComparison.OrdinalIgnoreCase)
              || options.SmtpHost.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException(
-                "Je nastaven ukázkový SMTP server. Nahraď smtp.example.com skutečným serverem svého poskytovatele (např. smtp.seznam.cz, smtp.gmail.com nebo server hostingu).");
+                $"Aplikace stále používá ukázkový SMTP server ('{options.SmtpHost}'). Zadej skutečný server poskytovatele do pole SMTP Host na kartě SMTP, například smtp.seznam.cz nebo smtp.gmail.com. Pokud už jsi ho změnil, zkontroluj načtený profil a nastavení účtů.");
 
         if (IsExampleDomain(options.From) || options.Recipients.Any(IsExampleDomain))
             throw new InvalidOperationException(
@@ -197,7 +197,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Chyba validace:\n{ex.Message}", "Nelze spustit", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowErrorWithCopy("Chyba validace:\n" + ex.Message, "Nelze spustit", ex.ToString());
             return;
         }
 
@@ -508,8 +508,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Testovací e-mail nelze připravit:\n{ex.Message}", "Kontrola nastavení",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowErrorWithCopy("Testovací e-mail nelze připravit:\n" + ex.Message, "Kontrola nastavení", ex.ToString());
             return;
         }
 
@@ -576,7 +575,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             AppendLog($"Testovací odeslání skončilo chybou: {Validation.ExplainSmtpError(ex)}", Color.Red);
-            MessageBox.Show(ex.Message, "SMTP odeslání selhalo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ShowErrorWithCopy(ex.Message, "SMTP odeslání selhalo", ex.ToString());
         }
         finally
         {
@@ -628,7 +627,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                MessageBox.Show($"Chyba při testu:\n{ex.Message}", "SMTP Test selhal", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString());
         }
         finally
         {
