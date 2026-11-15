@@ -115,7 +115,15 @@ public sealed partial class MainForm
             AutoSize = true, MaximumSize = new Size(420, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "25=plain, 587=STARTTLS, 465=Implicit TLS");
+        numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "SMTP port. 587=STARTTLS, 465=Implicit TLS, 25/2525=závisí na poskytovateli.");
+        var cmbPortPreset = AddLabeledEditableCombo(flConn, "Běžné porty (rychlý výběr):",
+            ["587", "465", "25", "2525"],
+            "Vyber běžný SMTP port. Hodnota se přenese do číselného pole Port; vlastní port lze zadat přímo tam.");
+        cmbPortPreset.SelectionChangeCommitted += (_, _) =>
+        {
+            if (int.TryParse(cmbPortPreset.Text, out var selectedPort) && selectedPort >= 1 && selectedPort <= 65535)
+                numPort.Value = selectedPort;
+        };
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
         string[] localIpSuggestions;
@@ -140,7 +148,7 @@ public sealed partial class MainForm
         var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
-        txtUser = AddLabeledText(flAuth, "Uživatel:", "SMTP username (často celý e-mail).");
+        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
         txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
         txtPass.PasswordChar = '●';
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
