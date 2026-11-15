@@ -54,11 +54,14 @@
 - [x] Auto-stop only on a real server-reported IMAP STORAGE quota. The 30-second polling interval and possible overshoot between checks are disclosed in the GUI tooltip.
 
 ### M5 — Adaptive pacing and bounded calibration
-- Begin with one small validation message only when the operator explicitly starts the run.
-- Use actual response codes, latency and verified mailbox deltas to adjust rate/concurrency.
+- [x] Keep SMTP response/latency pressure handling in SmartPaceController and AdaptiveConcurrencyLimiter; add IMAP STORAGE feedback as a down-only pressure input.
+- [x] Require repeated positive STORAGE growth near the operator's quota-stop threshold before moderate slowdown; apply stronger slowdown near the critical threshold.
+- [x] Increase SEND interval only; never automatically speed back up. Reduce adaptive concurrency by one at critical mailbox pressure while allowing in-flight sends to finish.
+- [x] Apply mailbox feedback only when Capacity Run and the explicit quota-monitor/stop option are enabled and a real IMAP STORAGE quota is available.
+- [x] Keep unknown quota as Unknown; missing/unsupported measurements never imply zero or negative capacity.
+- [ ] Add end-to-end runner tests with timed IMAP snapshots and verify that feedback cannot bypass SIZE, MIME-byte budgets, or rate ceilings.
+- [ ] Add bounded startup calibration for one small validation message only when the operator explicitly starts the run.
 - Do not infer quota or sustained throughput from a single message.
-- Never exceed discovered SIZE, configured per-message cap, or operator rate ceiling.
-- Distinguish unknown capability from a negative capability.
 
 ### M6 — Live observability, reports and release
 - Extend the live chart with SMTP accepted/minute, 4xx/minute, 5xx/minute, verified stored/minute, quota used/percent, adaptive rate and concurrency.
@@ -90,5 +93,6 @@
 - **M3 in progress:** IMAP monitor now enumerates a bounded set of folders (up to 100), reads supported STATUS count/unread/size values without fetching message bodies, uses SPECIAL-USE Junk/Sent/Trash/Inbox flags with localized-name fallback for Junk, and keeps unknown folder metrics null. Restricted folder listing does not block the existing quota/INBOX check. GUI separates quota message count, INBOX count and Junk/Spam count.
 - **M4 implementation:** optional CapacityRunLimits are persisted in profiles; count/rate ceilings are applied at startup; serialized MIME message sizes are guarded per-message and cumulatively across concurrent workers and AutoRestart attempts; the stricter positive per-message ceiling from authenticated SMTP SIZE is applied automatically. Capacity byte budgets count retries and are MIME-byte budgets, not SMTP wire bytes or mailbox growth. The UI exposes all four controls, a live MIME-budget counter/stop reason, and a conservative Base64/MIME preflight estimate. Results separate actual SMTP SEND calls, capacity reservations, unique logical SMTP outcomes, and observed IMAP before/after quota/folder deltas. Automated tests cover planner, exact budget boundaries, retry accounting, validation, profile persistence, SMTP-prepared MIME sizing, mailbox-delta math, and concurrent capacity-stop behavior.
 - **M4 remaining:** perform manual Windows GUI verification on a real Windows workstation and compare MIME-size accounting against representative production SMTP providers. The cloud Windows build/package verifies compilation and publication, not interactive GUI behavior.
-- **M5/M6 not yet implemented:** verified mailbox deltas into adaptive pacing and the multi-series live chart.
+- **M5 implementation started:** IMAP STORAGE deltas now provide cautious down-only feedback during opted-in Capacity Runs. Repeated positive storage growth near the configured quota threshold increases global SEND spacing; critical pressure also reduces adaptive concurrency by one. Unknown quota produces no feedback, and the GUI logs each escalation. End-to-end timed-snapshot tests and startup calibration remain.
+- **M6 not yet implemented:** multi-series live chart and bounded chart history.
 - **Verification state:** commit `cd5715d4ed72fd93e517dd876e0674bcbbcc9541` passed CI with 435/435 tests, Windows Forms GUI Release build, and the self-contained Windows x64 package. Artifact SHA-256: `552b488d7a2e014cf3129095ed422a65ebd2cf0ef9d442cbabb2b33812e25abb`. Manual GUI/provider validation remains outstanding. Keep PR #38 Draft; do not merge until all release acceptance criteria pass.
