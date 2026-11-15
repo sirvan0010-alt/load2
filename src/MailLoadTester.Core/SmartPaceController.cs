@@ -24,6 +24,7 @@ public sealed class SmartPaceController
     private readonly LinkedList<long> _schedule = new();
     private readonly long _freq = Stopwatch.Frequency;
     private long _lastActualSendTicks;
+    private int? _lastEffectiveIntervalMs;
 
     private sealed class RecipientWindow
     {
@@ -58,6 +59,12 @@ public sealed class SmartPaceController
     public int CurrentIntervalMs
     {
         get { lock (_lock) return _currentIntervalMs; }
+    }
+
+    /// <summary>Last interval actually selected for a global SEND slot, including warm-up, jitter and mailbox floor.</summary>
+    public int? LastEffectiveIntervalMs
+    {
+        get { lock (_lock) return _lastEffectiveIntervalMs; }
     }
 
     public string StatusText
@@ -154,6 +161,7 @@ public sealed class SmartPaceController
                     }
                     // Jitter may never undercut a mailbox-pressure slowdown.
                     intervalMs = Math.Max(intervalMs, _mailboxMinimumIntervalMs);
+                    _lastEffectiveIntervalMs = intervalMs;
 
                     var now = Stopwatch.GetTimestamp();
                     if (intervalMs <= 0 || _lastActualSendTicks == 0)
