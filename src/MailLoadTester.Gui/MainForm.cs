@@ -169,6 +169,8 @@ public sealed partial class MainForm : Form
         Size = new Size(1280, 920);
         MinimumSize = new Size(1000, 750);
         StartPosition = FormStartPosition.CenterScreen;
+        AutoScaleMode = AutoScaleMode.Font;
+        Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
         WireEvents();
         SetDefaults();
