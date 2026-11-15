@@ -99,7 +99,9 @@ public sealed class CapacityRunControlsTests
         var size = CapacityRunMimeSizer.MeasurePreparedMimeBytes(client, message, requestedFormat: null);
 
         Assert.True(size > 0);
-        Assert.Equal(size, message.WriteTo(new CountingStream()));
+        using var serialized = new MemoryStream();
+        message.WriteTo(serialized);
+        Assert.Equal(size, serialized.Length);
     }
 
     [Fact]
