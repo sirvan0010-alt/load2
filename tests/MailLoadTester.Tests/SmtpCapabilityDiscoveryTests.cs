@@ -42,8 +42,9 @@ public sealed class SmtpCapabilityDiscoveryTests
     {
         var attachment = 1024L * 1024 * 1024;
         var estimate = MailboxCapacityMath.EstimateMimeMessageBytes(attachment);
-        Assert.True(estimate > 1_430_000_000);
-        Assert.True(estimate < 1_440_000_000);
+        // Includes Base64 expansion, MIME's 76-character line wrapping, and headers/body overhead.
+        Assert.True(estimate > 1_469_000_000);
+        Assert.True(estimate < 1_470_000_000);
     }
 
     [Fact]
