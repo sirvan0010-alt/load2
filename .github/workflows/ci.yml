@@ -25,6 +25,9 @@ jobs:
       - name: Validate user documentation links
         run: python3 scripts/check-user-doc-links.py
 
+      - name: Check workflow hygiene
+        run: python3 scripts/check-workflow-hygiene.py
+
       - name: Check release version synchronization
         shell: bash
         run: |
