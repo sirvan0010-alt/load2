@@ -6,8 +6,6 @@ namespace MailLoadTester.Gui;
 /// </summary>
 internal sealed class AdaptiveControlChart : Control
 {
-    private const int MaxSamples = 120;
-
     private readonly AdaptiveControlChartSampler _sampler = new();
     private IReadOnlyList<AdaptiveControlChartSample> Samples => _sampler.Samples;
 
@@ -23,11 +21,11 @@ internal sealed class AdaptiveControlChart : Control
 
     public void AddSample(
         DateTimeOffset at,
-        int? effectiveIntervalMs,
+        int? effectiveEffectiveIntervalMs,
         int? adaptiveConcurrency,
         int configuredConcurrency)
     {
-        if (_sampler.AddSample(at, effectiveIntervalMs, adaptiveConcurrency, configuredConcurrency))
+        if (_sampler.AddSample(at, effectiveEffectiveIntervalMs, adaptiveConcurrency, configuredConcurrency))
             Invalidate();
     }
 
@@ -52,7 +50,7 @@ internal sealed class AdaptiveControlChart : Control
         g.DrawString("Adaptivní řízení – posledních 120 vzorků", Font, textBrush, 6, 4);
 
         var latest = Samples.LastOrDefault();
-        var intervalText = latest?.IntervalMs is int interval
+        var intervalText = latest?.EffectiveIntervalMs is int interval
             ? interval == 0
                 ? "SEND interval: 0 ms (bez pevného intervalu)"
                 : $"SEND interval: {interval:N0} ms (strop přibližně {60_000d / interval:F1} SEND/min)"
@@ -78,8 +76,8 @@ internal sealed class AdaptiveControlChart : Control
         var concurrencyPlot = new Rectangle(left, firstTop + panelHeight + panelGap, width, panelHeight);
 
         var intervalMax = Math.Max(1_000, Samples
-            .Where(sample => sample.IntervalMs.HasValue)
-            .Select(sample => sample.IntervalMs!.Value)
+            .Where(sample => sample.EffectiveIntervalMs.HasValue)
+            .Select(sample => sample.EffectiveIntervalMs!.Value)
             .DefaultIfEmpty(1_000)
             .Max());
         intervalMax = RoundAxisMaximum(intervalMax);
@@ -87,7 +85,7 @@ internal sealed class AdaptiveControlChart : Control
         var concurrencyMax = Math.Max(1, Samples.Max(sample => sample.ConfiguredConcurrency));
 
         DrawPanel(g, intervalPlot, "Globální SEND interval (ms)", 0, intervalMax,
-            sample => sample.IntervalMs, grid, border, Color.FromArgb(70, 90, 180), mutedBrush);
+            sample => sample.EffectiveIntervalMs, grid, border, Color.FromArgb(70, 90, 180), mutedBrush);
 
         if (Samples.Any(sample => sample.AdaptiveConcurrency.HasValue))
         {
