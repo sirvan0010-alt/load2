@@ -1,4 +1,6 @@
 using Xunit;
+using MailKit.Net.Smtp;
+using MimeKit;
 
 namespace MailLoadTester.Tests;
 
@@ -80,6 +82,24 @@ public sealed class CapacityRunControlsTests
         Assert.Equal(0L, guard.ReservedMimeBytes);
         Assert.Equal(0, guard.ReservedAttempts);
         Assert.True(guard.TryReserve(75, out _));
+    }
+
+    [Fact]
+    public void MimeSizer_MeasuresMessageAfterSmtpTransportPreparation()
+    {
+        using var client = new SmtpClient();
+        var message = new MimeMessage
+        {
+            Subject = "capacity sizing",
+            Body = new TextPart("plain") { Text = "Prepared MIME sizing test." }
+        };
+        message.From.Add(new MailboxAddress("Sender", "sender@example.test"));
+        message.To.Add(new MailboxAddress("Recipient", "recipient@example.test"));
+
+        var size = CapacityRunMimeSizer.MeasurePreparedMimeBytes(client, message, requestedFormat: null);
+
+        Assert.True(size > 0);
+        Assert.Equal(size, message.WriteTo(new CountingStream()));
     }
 
     [Fact]
