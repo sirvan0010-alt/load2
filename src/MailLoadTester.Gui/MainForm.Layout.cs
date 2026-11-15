@@ -291,9 +291,9 @@ public sealed partial class MainForm
         numCapacityMaxMessages = AddLabeledNumeric(flParams, "Capacity: max. zpráv:", 1, 10000, 1000,
             "Horní limit logických zpráv pro tento běh. Skutečný počet je nejvýše také hodnota Počet zpráv.");
         numCapacityTargetMiB = AddLabeledNumeric(flParams, "Capacity: celkový MIME limit (MiB):", 0, 1048576, 0,
-            "Maximální součet serializovaných MIME bajtů napříč všemi SEND pokusy včetně retry. 0 = bez limitu.");
+            "Maximální součet serializovaných MIME bajtů napříč všemi SEND pokusy včetně retry. 0 = bez limitu.", decimalPlaces: 2);
         numCapacityMaxMessageMiB = AddLabeledNumeric(flParams, "Capacity: max. MIME zpráva (MiB):", 0, 1048576, 0,
-            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Později lze doplnit automatické převzetí limitu SMTP SIZE.");
+            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Později lze doplnit automatické převzetí limitu SMTP SIZE.", decimalPlaces: 2);
         numCapacityMaxPerMinute = AddLabeledNumeric(flParams, "Capacity: max. zpráv/min:", 0, 60000, 0,
             "Pevný strop globálního tempa včetně retry. 0 = bez dodatečného stropu; nikdy nezrychlí již pomalejší interval.");
         gbParams.Controls.Add(flParams);
@@ -543,11 +543,11 @@ public sealed partial class MainForm
         return txt;
     }
 
-    private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip)
+    private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip, int decimalPlaces = 0)
     {
         var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
         parent.Controls.Add(lbl);
-        var num = new NumericUpDown { Minimum = min, Maximum = max, Value = value, Width = 120, Margin = new Padding(0, 0, 0, 4) };
+        var num = new NumericUpDown { Minimum = min, Maximum = max, Value = value, DecimalPlaces = decimalPlaces, Increment = decimalPlaces > 0 ? 0.1m : 1m, Width = 120, Margin = new Padding(0, 0, 0, 4) };
         parent.Controls.Add(num);
         var rangeTip = $"{tip}{(string.IsNullOrWhiteSpace(tip) ? string.Empty : Environment.NewLine)}Rozsah: {min} až {max}. Výchozí hodnota: {value}.";
         SetFieldToolTip(lbl, num, rangeTip);
