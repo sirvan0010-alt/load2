@@ -1,6 +1,6 @@
 # Nastavení GitHub Actions a ochrany větve main
 
-Tento návod popisuje nastavení repozitáře `sirvan0010-alt/load2`. Workflow soubory už jsou v repozitáři; tato stránka se týká nastavení, která nelze uložit běžným commitem do zdrojového kódu.
+Tento návod popisuje nastavení repozitáře `sirvan0010-alt/load2`. Workflow soubory už jsou v repozitáři; tato stránka se týká nastavení, která nelze uložit běžným commitem do zdrojového kódu. Importovaný ruleset navíc váže každý povinný check na konkrétní GitHub App, která jej skutečně vydává.
 
 ## 1. Co už je nastavené v repozitáři
 
