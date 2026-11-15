@@ -93,13 +93,17 @@ public sealed partial class MainForm
         };
         summaryFlow.Controls.Add(lblSmtpDiscovery);
 
-        lblMailboxMessages = CreateMailboxMetricLabel("Uložené zprávy: —");
+        lblMailboxMessages = CreateMailboxMetricLabel("Zprávy podle IMAP kvóty: —");
+        lblMailboxInboxCount = CreateMailboxMetricLabel("Zprávy v INBOX: —");
+        lblMailboxJunk = CreateMailboxMetricLabel("Zprávy v Junk/Spam: —");
         lblMailboxUnread = CreateMailboxMetricLabel("Nepřečtené v INBOX: —");
         lblMailboxUsage = CreateMailboxMetricLabel("Obsazeno (kvóta): —");
         lblMailboxQuota = CreateMailboxMetricLabel("Kvóta: —");
         lblMailboxInboxSize = CreateMailboxMetricLabel("Velikost INBOX: —");
         lblMailboxLastRefresh = CreateMailboxMetricLabel("Poslední kontrola: —");
         summaryFlow.Controls.Add(lblMailboxMessages);
+        summaryFlow.Controls.Add(lblMailboxInboxCount);
+        summaryFlow.Controls.Add(lblMailboxJunk);
         summaryFlow.Controls.Add(lblMailboxUnread);
         summaryFlow.Controls.Add(lblMailboxUsage);
         summaryFlow.Controls.Add(lblMailboxQuota);
@@ -238,7 +242,9 @@ public sealed partial class MainForm
         lblMailboxPercent.Text = "—";
         progressMailboxQuota.Value = 0;
         _mailboxUsageChart.ClearSamples();
-        lblMailboxMessages.Text = "Uložené zprávy: —";
+        lblMailboxMessages.Text = "Zprávy podle IMAP kvóty: nedostupné";
+        lblMailboxInboxCount.Text = "Zprávy v INBOX: —";
+        lblMailboxJunk.Text = "Zprávy v Junk/Spam: —";
         lblMailboxUnread.Text = "Nepřečtené v INBOX: —";
         lblMailboxUsage.Text = "Obsazeno (kvóta): —";
         lblMailboxQuota.Text = "Kvóta: —";
@@ -379,12 +385,16 @@ public sealed partial class MainForm
             lblMailboxQuota.Text = "Kvóta: server ji neposkytuje nebo nemá kladný limit";
         }
 
-        var messageCount = snapshot.QuotaMessageCount.HasValue
-            ? $"Zprávy v kvótě: {snapshot.QuotaMessageCount.Value:N0}"
-            : snapshot.InboxMessageCount.HasValue
-                ? $"Zprávy v INBOX: {snapshot.InboxMessageCount.Value:N0}"
-                : "Zprávy: nedostupné";
-        lblMailboxMessages.Text = messageCount;
+        lblMailboxMessages.Text = snapshot.QuotaMessageCount.HasValue
+            ? $"Zprávy podle IMAP kvóty: {snapshot.QuotaMessageCount.Value:N0}" +
+              (snapshot.QuotaMessageLimit.HasValue ? $" / {snapshot.QuotaMessageLimit.Value:N0}" : "")
+            : "Zprávy podle IMAP kvóty: server neposkytuje";
+        lblMailboxInboxCount.Text = snapshot.InboxMessageCount.HasValue
+            ? $"Zprávy v INBOX: {snapshot.InboxMessageCount.Value:N0}"
+            : "Zprávy v INBOX: nedostupné";
+        lblMailboxJunk.Text = snapshot.JunkMessageCount.HasValue
+            ? $"Zprávy v Junk/Spam: {snapshot.JunkMessageCount.Value:N0}"
+            : "Zprávy v Junk/Spam: složka nebo počet nedostupný";
         lblMailboxUnread.Text = snapshot.InboxUnreadCount.HasValue
             ? $"Nepřečtené v INBOX: {snapshot.InboxUnreadCount.Value:N0}"
             : "Nepřečtené v INBOX: nedostupné";
