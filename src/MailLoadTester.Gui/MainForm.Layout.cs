@@ -196,10 +196,10 @@ public sealed partial class MainForm
             "Skutečná e-mailová adresa odesílatele, např. vase.adresa@gmail.com — nikoli SMTP server smtp.gmail.com. " +
             "Pokud se přihlašuješ SMTP e-mailovou adresou, aplikace ji nabídne v seznamu a při prázdném poli ji předvyplní. " +
             "Můžeš vybrat návrh nebo napsat jinou adresu ručně.");
-        txtTo = AddLabeledText(flAddr, "Komu:", "Příjemci oddělení čárkou nebo novým řádkem.");
+        txtTo = AddLabeledText(flAddr, "Komu:", "Hlavní příjemce e-mailu. Více adres odděl čárkou nebo každou napiš na nový řádek.");
         txtTo.Multiline = true; txtTo.Height = 50;
-        txtCc = AddLabeledText(flAddr, "CC:", "Kopie — oddělené čárkou.");
-        txtBcc = AddLabeledText(flAddr, "BCC:", "Skryté kopie — oddělené čárkou.");
+        txtCc = AddLabeledText(flAddr, "Kopie (CC):", "Kopie e-mailu pro další příjemce. Jejich adresy uvidí všichni ostatní příjemci. Více adres odděl čárkou. Pokud kopii nikomu posílat nechceš, nech pole prázdné.");
+        txtBcc = AddLabeledText(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie e-mailu. Ostatní příjemci neuvidí adresy v tomto poli. Více adres odděl čárkou. Volitelné.");
         txtDisplayName = AddLabeledText(flAddr, "Zobrazované jméno:", "Jméno, které se zobrazí v mail klientu.");
         gbAddr.Controls.Add(flAddr);
         tblMsg.Controls.Add(gbAddr, 0, 0);
@@ -820,8 +820,8 @@ public sealed partial class MainForm
     private void SetDefaults()
     {
         txtHost.Text = "smtp.example.com";
-        txtFrom.Text = "test@example.com";
-        txtTo.Text = "user@example.com";
+        txtFrom.Text = "";
+        txtTo.Text = "";
         txtSubject.Text = "MailLoadTester test";
         txtBody.Text = "Toto je testovací zpráva generovaná aplikací MailLoadTester.";
         txtDisplayName.Text = "MailLoadTester";
