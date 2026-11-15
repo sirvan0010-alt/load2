@@ -110,6 +110,7 @@ Oficiální návod: [Creating rulesets for a repository](https://docs.github.com
 | `build-test` | Core build, kompletní testovací sadu, kontrolu odkazů dokumentace a workflow hygiene |
 | `build-gui` | Release build Windows Forms GUI |
 | `package` | Windows ZIP, testy a SHA-256 balíčku |
+| `CodeQL` | Souhrnný výsledek code scanning |
 | `Analyze (csharp)` | CodeQL analýzu C# |
 | `Analyze (actions)` | CodeQL analýzu workflow |
 | `Dependency Review` | Změny závislostí v PR |
