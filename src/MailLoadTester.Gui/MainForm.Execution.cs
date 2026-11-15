@@ -166,6 +166,7 @@ public sealed partial class MainForm
         {
             options = BuildOptions();
             Validation.Validate(options);
+            _activeRunMessageCount = options.MessageCount;
             UpdateCapacityEstimate(options);
         }
         catch (Exception ex)
@@ -498,6 +499,8 @@ public sealed partial class MainForm
         btnStart.Enabled = false;
         btnStop.Enabled = true;
         btnSendTest.Enabled = false;
+        btnTestConnection.Enabled = false;
+        _activeRunMessageCount = 1;
         _lastRunReport = null;
         btnExportReport.Enabled = false;
         rtbLog.Clear();
@@ -551,6 +554,7 @@ public sealed partial class MainForm
             btnStart.Enabled = true;
             btnStop.Enabled = false;
             btnSendTest.Enabled = true;
+            btnTestConnection.Enabled = true;
             _cts?.Dispose();
             _cts = null;
             _runCompletion?.TrySetResult(true);
@@ -559,7 +563,7 @@ public sealed partial class MainForm
 
     private async Task OnTestConnectionAsync()
     {
-        if (_testConnectionCts != null) return;
+        if (_testConnectionCts != null || _isRunning) return;
 
         using var cts = new CancellationTokenSource();
         _testConnectionCts = cts;
