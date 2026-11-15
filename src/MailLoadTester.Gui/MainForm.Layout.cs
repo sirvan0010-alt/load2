@@ -174,7 +174,7 @@ public sealed partial class MainForm
         InitAccountsTab(tabs);
 
         // --- Tab: Zpráva ---
-        var tabMsg = new TabPage("Zpráva") { Padding = new Padding(12) };
+        var tabMsg = new TabPage("E-mail (Od / Komu)") { Padding = new Padding(12) };
         var tblMsg = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -624,6 +624,14 @@ public sealed partial class MainForm
         statusStrip.Items.Add(lblSentFailed);
         statusStrip.Items.Add(lblCapacityRun);
         Controls.Add(statusStrip);
+
+        // WinForms docks controls in z-order. Keep the bottom status strip first,
+        // then both top bars, and the Fill workspace last; otherwise the Fill
+        // SplitContainer can consume the entire client area and hide the top bars.
+        Controls.SetChildIndex(statusStrip, 0);
+        Controls.SetChildIndex(topPanel, 1);
+        Controls.SetChildIndex(pnlSafetyBanner, 2);
+        Controls.SetChildIndex(workspaceSplit, 3);
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
         ApplyFallbackToolTips(this);
