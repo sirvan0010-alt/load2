@@ -14,6 +14,9 @@ public sealed partial class MainForm
         progressBar.Value = Math.Min(100, (int)(done * 100.0 / total));
         lblSentFailed.Text = $"OK:{u.Sent} FAIL:{u.Failed}";
         lblStatus.Text = u.CurrentStep;
+        UpdateQueueFlow(u.MessageStep);
+        if (u.MessageStep is MessageStep.RentingConnection or MessageStep.BuildingMime or MessageStep.SmtpSend)
+            UpdateProxyStatus(smtpProxyWasUsed: true);
         _lastRunSmtpSendAttempts = u.SmtpSendAttempts;
         _lastRunSmtp4xx = u.Smtp4xx;
         _lastRunSmtp5xx = u.Smtp5xx;
