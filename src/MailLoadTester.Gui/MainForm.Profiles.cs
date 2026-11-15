@@ -65,6 +65,11 @@ public sealed partial class MainForm
             numBatchSize.Value = Math.Clamp(o.BatchSize, numBatchSize.Minimum, numBatchSize.Maximum);
             numBatchPause.Value = Math.Clamp(o.BatchPauseSeconds, numBatchPause.Minimum, numBatchPause.Maximum);
             numRetries.Value = Math.Clamp(o.MaxRetries, numRetries.Minimum, numRetries.Maximum);
+            chkCapacityRun.Checked = o.CapacityRun?.Enabled ?? false;
+            numCapacityMaxMessages.Value = Math.Clamp(o.CapacityRun?.MaxMessageCount ?? 1000, numCapacityMaxMessages.Minimum, numCapacityMaxMessages.Maximum);
+            numCapacityTargetMiB.Value = Math.Clamp((decimal)((o.CapacityRun?.TargetMimeBytes ?? 0) / (1024L * 1024L)), numCapacityTargetMiB.Minimum, numCapacityTargetMiB.Maximum);
+            numCapacityMaxMessageMiB.Value = Math.Clamp((decimal)((o.CapacityRun?.MaxMimeMessageBytes ?? 0) / (1024L * 1024L)), numCapacityMaxMessageMiB.Minimum, numCapacityMaxMessageMiB.Maximum);
+            numCapacityMaxPerMinute.Value = Math.Clamp(o.CapacityRun?.MaxMessagesPerMinute ?? 0, numCapacityMaxPerMinute.Minimum, numCapacityMaxPerMinute.Maximum);
             chkDryRun.Checked = o.DryRun;
             chkTestMode.Checked = o.TestMode;
             txtAllowedDomains.Text = o.AllowedDomains;
