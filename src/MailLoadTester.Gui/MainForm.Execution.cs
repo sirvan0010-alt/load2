@@ -3,6 +3,31 @@ namespace MailLoadTester.Gui;
 public sealed partial class MainForm
 {
 
+    private static void EnsureRealSmtpConfiguration(MailTestOptions options)
+    {
+        static bool IsExampleDomain(string value)
+        {
+            var at = value.LastIndexOf('@');
+            var domain = at >= 0 ? value[(at + 1)..] : value;
+            return domain.Equals("example.com", StringComparison.OrdinalIgnoreCase)
+                || domain.Equals("example.net", StringComparison.OrdinalIgnoreCase)
+                || domain.Equals("example.org", StringComparison.OrdinalIgnoreCase)
+                || domain.EndsWith(".example", StringComparison.OrdinalIgnoreCase)
+                || domain.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!options.DirectMxDelivery &&
+            (options.SmtpHost.Equals("smtp.example.com", StringComparison.OrdinalIgnoreCase)
+             || options.SmtpHost.EndsWith(".example", StringComparison.OrdinalIgnoreCase)
+             || options.SmtpHost.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                "Je nastaven ukázkový SMTP server. Nahraď smtp.example.com skutečným serverem svého poskytovatele (např. smtp.seznam.cz, smtp.gmail.com nebo server hostingu).");
+
+        if (IsExampleDomain(options.From) || options.Recipients.Any(IsExampleDomain))
+            throw new InvalidOperationException(
+                "Odesílatel nebo příjemce stále používá ukázkovou doménu example.com / example.net / example.org. Zadej skutečné e-mailové adresy.");
+    }
+
     private MailTestOptions BuildOptions()
     {
         var recipients = txtTo.Text.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -166,6 +191,7 @@ public sealed partial class MainForm
         {
             options = BuildOptions();
             Validation.Validate(options);
+            EnsureRealSmtpConfiguration(options);
             _activeRunMessageCount = options.MessageCount;
             UpdateCapacityEstimate(options);
         }
@@ -435,10 +461,7 @@ public sealed partial class MainForm
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
                 throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
-            if (configured.SmtpHost.Equals("smtp.example.com", StringComparison.OrdinalIgnoreCase)
-                || configured.From.EndsWith("@example.com", StringComparison.OrdinalIgnoreCase)
-                || configured.Recipients[0].EndsWith("@example.com", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("V nastavení jsou stále ukázkové adresy example.com. Nejdříve zadej skutečný SMTP server, odesílatele a testovací schránku.");
+            EnsureRealSmtpConfiguration(configured);
 
             // This is a single-message diagnostic, not a load test. Keep the selected
             // SMTP transport/auth/proxy settings, but remove batch, retry, attachment,
@@ -583,6 +606,7 @@ public sealed partial class MainForm
         {
             var options = BuildOptions();
             Validation.Validate(options);
+            EnsureRealSmtpConfiguration(options);
             var report = await TransportDiagnostics.RunAsync(
                 options,
                 new TransportDiagnosticOptions(
