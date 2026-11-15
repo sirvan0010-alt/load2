@@ -633,20 +633,19 @@ public sealed class SmtpTestRunner
                     if (bandwidth != null)
                         await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, validationMimeBytes), ct).ConfigureAwait(false);
 
-                    await using (await pace.AcquireSendSlotAsync(ct).ConfigureAwait(false))
+                    await using (var validationSendLease =
+                        await pace.AcquireSendSlotAsync(ct).ConfigureAwait(false))
                     {
                         long? serverMaxMessageBytes = validationClient.Capabilities.HasFlag(SmtpCapabilities.Size)
                             && validationClient.MaxSize > 0
                                 ? validationClient.MaxSize
                                 : null;
-                        if (capacityGuard == null || !capacityGuard.TryReserve(
-                            validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
+                        if (capacityGuard == null)
+                            throw new InvalidOperationException("Startup validation requires enabled Capacity Run accounting.");
+                        if (!capacityGuard.TryReserve(validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
                         {
-                            var reason = capacityGuard == null
-                                ? "Startup validation requires enabled Capacity Run accounting."
-                                : validationCapacityReason;
-                            Interlocked.CompareExchange(ref capacityStopReason, "Capacity stop: " + reason, null);
-                            throw new InvalidOperationException("Capacity stop: " + reason);
+                            Interlocked.CompareExchange(ref capacityStopReason, validationCapacityReason, null);
+                            throw new InvalidOperationException(validationCapacityReason);
                         }
 
                         Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
