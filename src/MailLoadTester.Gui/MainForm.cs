@@ -34,7 +34,8 @@ public sealed partial class MainForm : Form
     private NumericUpDown numConnectTimeout = null!, numReadTimeout = null!;
 
     // Message tab
-    private TextBox txtFrom = null!, txtTo = null!, txtCc = null!, txtBcc = null!;
+    private ComboBox txtFrom = null!;
+    private TextBox txtTo = null!, txtCc = null!, txtBcc = null!;
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
@@ -174,13 +175,37 @@ public sealed partial class MainForm : Form
         AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
+        txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
+        txtFrom.TextChanged += (_, _) => SyncFromAddressSuggestions(addCurrentAddress: true, copyLoginWhenEmpty: false);
         WireEvents();
         SetDefaults();
+        SyncFromAddressSuggestions();
         UpdateSafetyBanner();
         ApplyTheme(false);
         FormClosing += MainForm_FormClosing;
         Shown += (_, _) => LoadLayoutPreferences();
         FormClosed += (_, _) => SaveLayoutPreferences();
+    }
+
+    private void SyncFromAddressSuggestions(bool addCurrentAddress = false, bool copyLoginWhenEmpty = true)
+    {
+        static bool IsEmail(string value) =>
+            !string.IsNullOrWhiteSpace(value)
+            && System.Net.Mail.MailAddress.TryCreate(value.Trim(), out var parsed)
+            && parsed.Address.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        var login = txtUser.Text.Trim();
+        if (IsEmail(login) && !txtFrom.Items.Contains(login))
+            txtFrom.Items.Add(login);
+
+        var current = txtFrom.Text.Trim();
+        if (addCurrentAddress && IsEmail(current) && !txtFrom.Items.Contains(current))
+            txtFrom.Items.Add(current);
+
+        // Most SMTP providers expect the authenticated mailbox to be the sender.
+        // Use it as a convenience default, but never overwrite a manually entered From address.
+        if (copyLoginWhenEmpty && string.IsNullOrWhiteSpace(txtFrom.Text) && IsEmail(login))
+            txtFrom.Text = login;
     }
 
     /// <summary>
