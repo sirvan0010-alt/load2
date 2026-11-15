@@ -252,51 +252,93 @@ public sealed partial class MainForm
         gbContent.Controls.Add(flContent);
         tblMsg.Controls.Add(gbContent, 1, 0);
 
-        var gbAttach = new GroupBox { Text = "Přílohy", Dock = DockStyle.Bottom, Height = 160 };
-        var flAttach = new FlowLayoutPanel { Dock = DockStyle.Fill };
-        lstAttachments = new ListBox { Width = 280, Height = 90 };
-        flAttach.Controls.Add(lstAttachments);
-        var btnAdd = new Button { Text = "Přidat…", Width = 80, Height = 26 };
-        var btnRem = new Button { Text = "Odebrat", Width = 80, Height = 26 };
-        flAttach.Controls.Add(btnAdd);
-        flAttach.Controls.Add(btnRem);
+        // Keep message composition and optional MIME extras in a deterministic layout.
+        // A single root TableLayoutPanel avoids several Dock=Bottom group boxes competing
+        // for the same client area (which caused controls to overlap or disappear while resizing).
+        var msgLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+        msgLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        msgLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        msgLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));
+
+        var msgOptionsTabs = new TabControl { Dock = DockStyle.Fill };
+        var attachmentsPage = new TabPage("Přílohy") { Padding = new Padding(6) };
+        var attachmentsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0)
+        };
+        attachmentsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        attachmentsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        attachmentsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+        lstAttachments = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+        var attachmentButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 4, 0, 0)
+        };
+        var btnAdd = new Button { Text = "Přidat…", Width = 90, Height = 28 };
+        var btnRem = new Button { Text = "Odebrat", Width = 90, Height = 28 };
+        attachmentButtons.Controls.Add(btnAdd);
+        attachmentButtons.Controls.Add(btnRem);
         btnAdd.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true }; if (dlg.ShowDialog() == DialogResult.OK) lstAttachments.Items.AddRange(dlg.FileNames); };
         btnRem.Click += (s, e) => { if (lstAttachments.SelectedIndex >= 0) lstAttachments.Items.RemoveAt(lstAttachments.SelectedIndex); };
+        attachmentsLayout.Controls.Add(lstAttachments, 0, 0);
+        attachmentsLayout.Controls.Add(attachmentButtons, 0, 1);
+        attachmentsPage.Controls.Add(attachmentsLayout);
         toolTip.SetToolTip(btnAdd, "Vybere jeden nebo více souborů, které se připojí ke každé testovací zprávě.");
         toolTip.SetToolTip(btnRem, "Odebere právě vybranou přílohu ze seznamu. Soubor na disku nesmaže.");
-        toolTip.SetToolTip(lstAttachments, "Seznam souborů připojených ke každé zprávě.");
-        gbAttach.Controls.Add(flAttach);
-        tabMsg.Controls.Add(gbAttach);
-        gbAttach.Dock = DockStyle.Bottom;
+        toolTip.SetToolTip(lstAttachments, "Seznam souborů připojených ke každé testovací zprávě.");
 
-        var gbInline = new GroupBox { Text = "Inline přílohy (HTML CID)", Dock = DockStyle.Bottom, Height = 100 };
-        var flInline = new FlowLayoutPanel { Dock = DockStyle.Fill };
-        lstInlineAttachments = new ListBox { Width = 280, Height = 60 };
-        flInline.Controls.Add(lstInlineAttachments);
-        var btnAddInline = new Button { Text = "Přidat…", Width = 80, Height = 26 };
-        var btnRemInline = new Button { Text = "Odebrat", Width = 80, Height = 26 };
-        flInline.Controls.Add(btnAddInline);
-        flInline.Controls.Add(btnRemInline);
+        var inlinePage = new TabPage("Inline obrázky") { Padding = new Padding(6) };
+        var inlineLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0)
+        };
+        inlineLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        inlineLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        inlineLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+        lstInlineAttachments = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+        var inlineButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 4, 0, 0)
+        };
+        var btnAddInline = new Button { Text = "Přidat obrázky…", Width = 130, Height = 28 };
+        var btnRemInline = new Button { Text = "Odebrat", Width = 90, Height = 28 };
+        inlineButtons.Controls.Add(btnAddInline);
+        inlineButtons.Controls.Add(btnRemInline);
         btnAddInline.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true, Filter = "Images|*.png;*.jpg;*.jpeg;*.gif;*.bmp" }; if (dlg.ShowDialog() == DialogResult.OK) lstInlineAttachments.Items.AddRange(dlg.FileNames); };
         btnRemInline.Click += (s, e) => { if (lstInlineAttachments.SelectedIndex >= 0) lstInlineAttachments.Items.RemoveAt(lstInlineAttachments.SelectedIndex); };
+        inlineLayout.Controls.Add(lstInlineAttachments, 0, 0);
+        inlineLayout.Controls.Add(inlineButtons, 0, 1);
+        inlinePage.Controls.Add(inlineLayout);
         toolTip.SetToolTip(btnAddInline, "Vybere obrázky, které se vloží přímo do HTML zprávy jako inline obsah.");
         toolTip.SetToolTip(btnRemInline, "Odebere vybraný inline obrázek ze seznamu. Soubor na disku nesmaže.");
         toolTip.SetToolTip(lstInlineAttachments, "Obrázky vložené do HTML těla. V HTML použij {{cid:nazev_souboru_bez_pripony}}.");
-        gbInline.Controls.Add(flInline);
-        tabMsg.Controls.Add(gbInline);
-        gbInline.Dock = DockStyle.Bottom;
 
-        var gbHeaders = new GroupBox { Text = "Vlastní hlavičky (X-…)", Dock = DockStyle.Bottom, Height = 100 };
-        txtHeaders = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 10) };
+        var headersPage = new TabPage("Vlastní hlavičky") { Padding = new Padding(6) };
+        txtHeaders = new TextBox
+        {
+            Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical,
+            Font = new Font("Consolas", 10)
+        };
         txtHeaders.Text = "X-Test-ID: 123";
+        headersPage.Controls.Add(txtHeaders);
         toolTip.SetToolTip(txtHeaders, "Jedna hlavička na řádek. Formát: X-Něco: hodnota");
-        gbHeaders.Controls.Add(txtHeaders);
-        tabMsg.Controls.Add(gbHeaders);
-        gbHeaders.Dock = DockStyle.Bottom;
 
-        tabMsg.Controls.Add(tblMsg);
-        tblMsg.Dock = DockStyle.Fill;
-        tabs.TabPages.Add(tabMsg);
+        msgOptionsTabs.TabPages.Add(attachmentsPage);
+        msgOptionsTabs.TabPages.Add(inlinePage);
+        msgOptionsTabs.TabPages.Add(headersPage);
+        msgLayout.Controls.Add(tblMsg, 0, 0);
+        msgLayout.Controls.Add(msgOptionsTabs, 0, 1);
+        tabMsg.Controls.Add(msgLayout);
+
 
         // --- Tab: Test ---
         var tabTest = new TabPage("Test") { Padding = new Padding(12) };
