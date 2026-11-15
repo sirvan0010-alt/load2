@@ -17,6 +17,7 @@ public sealed class CapacityRunControlsTests
 
         Assert.Equal(40, planned.MessageCount);
         Assert.Equal(2_000, planned.IntervalMs);
+        Assert.False(planned.EnableJitter);
     }
 
     [Fact]
@@ -50,6 +51,20 @@ public sealed class CapacityRunControlsTests
 
         Assert.Equal(100, guard.ReservedMimeBytes);
         Assert.Equal(2, guard.ReservedAttempts);
+    }
+
+    [Fact]
+    public void Guard_ConcurrentReservationsCannotOvershootBudget()
+    {
+        var guard = new CapacityRunGuard(new CapacityRunLimits(
+            Enabled: true,
+            MaxMessageCount: 100,
+            TargetMimeBytes: 100));
+
+        Parallel.For(0, 100, _ => guard.TryReserve(10, out _));
+
+        Assert.Equal(100, guard.ReservedMimeBytes);
+        Assert.Equal(10, guard.ReservedAttempts);
     }
 
     [Fact]
