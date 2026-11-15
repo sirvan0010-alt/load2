@@ -33,6 +33,19 @@ public sealed class AdaptiveConcurrencyLimiterTests
     }
 
     [Fact]
+    public void MailboxPressure_ReducesConcurrencyButNeverBelowMinimum()
+    {
+        var limiter = new AdaptiveConcurrencyLimiter(4, min: 1, max: 4);
+
+        limiter.ApplyMailboxPressure();
+        Assert.Equal(3, limiter.Current);
+        limiter.ApplyMailboxPressure();
+        limiter.ApplyMailboxPressure();
+        limiter.ApplyMailboxPressure();
+        Assert.Equal(1, limiter.Current);
+    }
+
+    [Fact]
     public async Task CancellationWhileWaitingDoesNotLeakPermit()
     {
         var limiter = new AdaptiveConcurrencyLimiter(1, 1, 1);
@@ -149,12 +162,12 @@ public sealed class AdaptiveConcurrencyLimiterTests
     [Fact]
     public void SustainedSmtpLatencyIncrease_ReducesConcurrencyGradually()
     {
-        var limiter = new AdaptiveConcurrencyLimiter(6, 1, 10, TimeSpan.FromMilliseconds(1));
+        var limiter = new AdaptiveConcurrencyLimiter(6, 1, 10, TimeSpan.FromMilliseconds(50));
 
         // Establish a baseline for normal SMTP DATA transfer latency.
         for (var i = 0; i < 5; i++)
             limiter.RecordAttempt(true, 200, serverPressure: false);
-        Thread.Sleep(3);
+        Thread.Sleep(60);
         limiter.RecordAttempt(true, 200, serverPressure: false); // evaluate baseline window
         Assert.Equal(7, limiter.Current); // healthy window permits a cautious +1
 
@@ -162,7 +175,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
         // The first sample in this window is the final baseline sample above.
         for (var i = 0; i < 4; i++)
             limiter.RecordAttempt(true, 2_500, serverPressure: false);
-        Thread.Sleep(3);
+        Thread.Sleep(60);
         limiter.RecordAttempt(true, 2_500, serverPressure: false); // evaluate slow window
 
         Assert.Equal(6, limiter.Current); // latency pressure reduces concurrency by one

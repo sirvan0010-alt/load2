@@ -16,6 +16,8 @@ public sealed class ProfileStoreTests
             Assert.Equal(string.Empty, loaded.Options.Password);
             Assert.Equal(string.Empty, loaded.Options.ProxyPassword);
             Assert.Equal(string.Empty, loaded.Options.ClientCertificatePassword);
+            var account = Assert.Single(loaded.Options.Accounts!);
+            Assert.Equal(string.Empty, account.Password);
         }
         finally
         {
@@ -35,6 +37,36 @@ public sealed class ProfileStoreTests
             Assert.Equal("smtp-secret", loaded.Options.Password);
             Assert.Equal("proxy-secret", loaded.Options.ProxyPassword);
             Assert.Equal("certificate-secret", loaded.Options.ClientCertificatePassword);
+            var account = Assert.Single(loaded.Options.Accounts!);
+            Assert.Equal("account-secret", account.Password);
+        }
+        finally
+        {
+            try { File.Delete(path); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task SaveAndLoad_PreservesCapacityRunLimits()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"mlt-profile-{Guid.NewGuid():N}.json");
+        var options = CreateOptions() with
+        {
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 321,
+                TargetMimeBytes: 12_345_678,
+                MaxMimeMessageBytes: 1_234_567,
+                MaxMessagesPerMinute: 42,
+                ValidateBeforeRun: true)
+        };
+
+        try
+        {
+            await ProfileStore.SaveAsync(path, options);
+            var loaded = await ProfileStore.LoadAsync(path);
+
+            Assert.Equal(options.CapacityRun, loaded.Options.CapacityRun);
         }
         finally
         {
@@ -70,5 +102,16 @@ public sealed class ProfileStoreTests
         MaxRetries: 0,
         DryRun: false,
         ProxyPassword: "proxy-secret",
-        ClientCertificatePassword: "certificate-secret");
+        ClientCertificatePassword: "certificate-secret",
+        Accounts: new[]
+        {
+            new SmtpAccount(
+                Id: "secondary",
+                SmtpHost: "smtp-secondary.example.test",
+                Port: 587,
+                Security: SmtpSecurity.StartTls,
+                UseAuthentication: true,
+                Username: "secondary-user",
+                Password: "account-secret")
+        });
 }

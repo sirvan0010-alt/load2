@@ -8,6 +8,81 @@ namespace MailLoadTester;
 
 public sealed class SmtpTestRunner
 {
+    private readonly object _mailboxFeedbackSync = new();
+    private MailboxCapacityFeedbackController? _mailboxFeedbackController;
+    private SmartPaceController? _activePaceController;
+    private AdaptiveConcurrencyLimiter? _activeAdaptiveLimiter;
+    private MailboxCapacityFeedbackDecision? _currentMailboxFeedbackDecision;
+    private int _mailboxFeedbackStopThreshold = 80;
+
+    /// <summary>Current global SEND interval while a run is active.</summary>
+    public int? CurrentMailboxPaceIntervalMs
+    {
+        get { lock (_mailboxFeedbackSync) return _activePaceController?.CurrentIntervalMs; }
+    }
+
+    /// <summary>Current adaptive concurrency while a run is active.</summary>
+    public int? CurrentAdaptiveConcurrency
+    {
+        get { lock (_mailboxFeedbackSync) return _activeAdaptiveLimiter?.Current; }
+    }
+
+    /// <summary>
+    /// Enables mailbox-driven down-only feedback for a Capacity Run and seeds it
+    /// with the pre-send IMAP baseline. No baseline means no mailbox feedback.
+    /// </summary>
+    public void SetMailboxFeedbackBaseline(MailboxMonitorSnapshot? baseline, int stopThresholdPercent, bool enabled)
+    {
+        lock (_mailboxFeedbackSync)
+        {
+            _mailboxFeedbackController = enabled ? new MailboxCapacityFeedbackController() : null;
+            _mailboxFeedbackController?.SetBaseline(baseline);
+            _mailboxFeedbackStopThreshold = Math.Clamp(stopThresholdPercent, 1, 100);
+            _currentMailboxFeedbackDecision = null;
+            _activePaceController = null;
+            _activeAdaptiveLimiter = null;
+        }
+    }
+
+    /// <summary>
+    /// Supplies a fresh IMAP observation. Only positive STORAGE growth near the
+    /// configured quota-stop threshold can slow a running Capacity Run.
+    /// </summary>
+    public MailboxCapacityFeedbackDecision? ObserveMailboxSnapshot(MailboxMonitorSnapshot snapshot)
+    {
+        SmartPaceController? pace;
+        AdaptiveConcurrencyLimiter? adaptive;
+        MailboxCapacityFeedbackDecision? decision;
+        lock (_mailboxFeedbackSync)
+        {
+            decision = _mailboxFeedbackController?.Observe(snapshot, _mailboxFeedbackStopThreshold);
+            if (decision is null) return null;
+            _currentMailboxFeedbackDecision = decision;
+            pace = _activePaceController;
+            adaptive = _activeAdaptiveLimiter;
+        }
+
+        pace?.ApplyMailboxPressure(decision.Severity);
+        if (decision.Severity >= 2)
+            adaptive?.ApplyMailboxPressure();
+        return decision;
+    }
+
+    private void RegisterMailboxFeedbackTargets(SmartPaceController pace, AdaptiveConcurrencyLimiter? adaptive)
+    {
+        MailboxCapacityFeedbackDecision? decision;
+        lock (_mailboxFeedbackSync)
+        {
+            _activePaceController = pace;
+            _activeAdaptiveLimiter = adaptive;
+            decision = _currentMailboxFeedbackDecision;
+        }
+
+        if (decision is null) return;
+        pace.ApplyMailboxPressure(decision.Severity);
+        if (decision.Severity >= 2)
+            adaptive?.ApplyMailboxPressure();
+    }
     /// <summary>
     /// Spustí test. Pokud je zapnutý AutoRestartOnFailure, test se automaticky
     /// zopakuje, pokud aktuální pokus skončí alespoň jednou nevyřešenou chybou
@@ -21,16 +96,21 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
+        options = CapacityRunPlanner.Apply(options);
         var ledger = new DeliveryLedger(options.MessageCount);
+        var capacityGuard = options.CapacityRun is { Enabled: true } limits
+            ? new CapacityRunGuard(limits)
+            : null;
 
         if (!options.AutoRestartOnFailure)
-            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger).ConfigureAwait(false);
+            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger, capacityGuard).ConfigureAwait(false);
 
         var current = options;
         MailTestResult result;
         int attempt = 0;
 
         var sumRetries = 0;
+        var sumSmtpSendAttempts = 0;
         var sumSmtp4xx = 0;
         var sumSmtp5xx = 0;
         var sumTimeouts = 0;
@@ -44,10 +124,11 @@ public sealed class SmtpTestRunner
 
         while (true)
         {
-            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger).ConfigureAwait(false);
+            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger, capacityGuard).ConfigureAwait(false);
             attempt++;
 
             sumRetries += result.Retries;
+            sumSmtpSendAttempts += result.SmtpSendAttempts;
             sumSmtp4xx += result.Smtp4xx;
             sumSmtp5xx += result.Smtp5xx;
             sumTimeouts += result.Timeouts;
@@ -66,7 +147,7 @@ public sealed class SmtpTestRunner
             aggregatedEndpointHealth =
                 AutoRestartMetrics.AggregateEndpointHealth(aggregatedEndpointHealth, result.EndpointHealth);
 
-            if (result.Cancelled) break;
+            if (result.Cancelled || result.StartupValidationFailed) break;
 
             // Restart only from the current attempt's unresolved failures. The ledger
             // keeps previously accepted logical messages out of the retry population.
@@ -101,6 +182,7 @@ public sealed class SmtpTestRunner
             Sent = ledger.CountAccepted(),
             Failed = ledger.CountFailed(),
             Retries = sumRetries,
+            SmtpSendAttempts = sumSmtpSendAttempts,
             Smtp4xx = sumSmtp4xx,
             Smtp5xx = sumSmtp5xx,
             Timeouts = sumTimeouts,
@@ -135,7 +217,8 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct,
         int attemptIndex,
-        DeliveryLedger ledger)
+        DeliveryLedger ledger,
+        CapacityRunGuard? capacityGuard)
     {
         CancellationTokenSource? durationCts = null;
         var queueMetrics = new ScenarioQueueMetrics();
@@ -190,6 +273,8 @@ public sealed class SmtpTestRunner
         var lastReportTicks = 0L;
         var suppressedReports = 0;
         const int MinReportIntervalMs = 125;
+        int smtpSendAttempts = 0, smtp4xx = 0, smtp5xx = 0;
+        AdaptiveConcurrencyLimiter? adaptive = null;
 
         void Report(int s, int f, string status, double? eta, int phase, string current, string next,
             MessageStep? step = null, int? messageIndex = null, int? workerId = null,
@@ -220,8 +305,16 @@ public sealed class SmtpTestRunner
 
             progress.Report(new ProgressUpdate(s, f, status, eta, phase, current, next,
                 fsm.Phase, step, messageIndex, workerId, options.MaxConcurrency,
-                pathStep, pathOk, pace.StatusText, pace.CurrentIntervalMs,
-                includeObserved ? observed?.Snapshot() : null));
+                pathStep, pathOk, pace.StatusText, pace.LastEffectiveIntervalMs ?? pace.CurrentIntervalMs,
+                includeObserved ? observed?.Snapshot() : null,
+                capacityGuard?.ReservedMimeBytes,
+                options.CapacityRun is { Enabled: true, TargetMimeBytes: > 0 } capacityLimits
+                    ? capacityLimits.TargetMimeBytes
+                    : null,
+                SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
+                Smtp4xx: Volatile.Read(ref smtp4xx),
+                Smtp5xx: Volatile.Read(ref smtp5xx),
+                AdaptiveConcurrency: adaptive?.Current));
             UpdateDashboard(s, f, status, eta, fsm.Phase.ToString());
         }
 
@@ -248,7 +341,11 @@ public sealed class SmtpTestRunner
                 progress.Report(new ProgressUpdate(s, f,
                     detail, null, 3, detail, "",
                     fsm.Phase, null, i, workerId, options.MaxConcurrency,
-                    step, ok, pace.StatusText, pace.CurrentIntervalMs, null));
+                    step, ok, pace.StatusText, pace.LastEffectiveIntervalMs ?? pace.CurrentIntervalMs, null,
+                    SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
+                    Smtp4xx: Volatile.Read(ref smtp4xx),
+                    Smtp5xx: Volatile.Read(ref smtp5xx),
+                    AdaptiveConcurrency: adaptive?.Current));
             }
         }
 
@@ -330,7 +427,7 @@ public sealed class SmtpTestRunner
         var sw = Stopwatch.StartNew();
         long activeTicks = 0;
         int sent = 0, failed = 0;
-        int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
+        int retries = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
         var latencyHistogram = new LatencyHistogram();
@@ -351,7 +448,9 @@ public sealed class SmtpTestRunner
         // RateLimiter zde nepřidává druhé čekání.
         var rateLimiter = new RateLimiter(0);
         bool cancelled = false;
-        var adaptive = options.UseAdaptiveConcurrency
+        bool startupValidationFailed = false;
+        string? capacityStopReason = null;
+        adaptive = options.UseAdaptiveConcurrency
             ? new AdaptiveConcurrencyLimiter(options.MaxConcurrency, min: 1, max: options.MaxConcurrency)
             : null;
         var circuit = options.UseCircuitBreaker
@@ -361,6 +460,7 @@ public sealed class SmtpTestRunner
                 failureRatePercent: options.CircuitBreakerFailurePercent)
             : null;
         var bandwidth = options.BandwidthLimitKbps > 0 ? new BandwidthLimiter(options.BandwidthLimitKbps) : null;
+        RegisterMailboxFeedbackTargets(pace, adaptive);
 
         MimeKit.FormatOptions? utf8Format = null;
         if (options.SmtpUtf8)
@@ -471,7 +571,197 @@ public sealed class SmtpTestRunner
                 }
             }
 
-            for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
+            var startupValidationEnabled = options.CapacityRun is { Enabled: true, ValidateBeforeRun: true };
+            if (startupValidationEnabled && ledger.GetState(1) != DeliveryState.Accepted)
+            {
+                var validationRecipient = options.Recipients[0];
+                Report(0, 0, "STARTUP VALIDATION: sending one small validation message before workers…", null, 2,
+                    "Úvodní validační zpráva", "Při selhání se zátěžový test nespustí");
+                try
+                {
+                    await pace.WaitBeforeSendAsync(validationRecipient, ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    pace.ReleaseRecipient(validationRecipient);
+                    throw;
+                }
+
+                var validationRecipientCommitted = false;
+                SmtpClient? validationClient = null;
+                SmtpConnectionPool? validationPool = null;
+                SmtpAccountLease? validationAccountLease = null;
+                var validationSw = Stopwatch.StartNew();
+                try
+                {
+                    var poolWaitStart = Stopwatch.GetTimestamp();
+                    if (multiAccount)
+                    {
+                        validationAccountLease = await accountHub!.RentAsync(ct).ConfigureAwait(false);
+                        validationClient = validationAccountLease.Client;
+                        validationPool = validationAccountLease.Pool;
+                    }
+                    else
+                    {
+                        validationPool = pool!;
+                        validationClient = await validationPool.RentAsync(ct).ConfigureAwait(false);
+                    }
+                    poolWaits.Add(TicksToMs(Stopwatch.GetTimestamp() - poolWaitStart));
+                    ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
+
+                    var validationData = new RandomTestData.GeneratedMessageContent(
+                        options.DisplayName,
+                        "MailLoadTester – úvodní validace",
+                        "Toto je jedna malá validační zpráva. Pokud její odeslání selže, zátěžový test nebude spuštěn.",
+                        false,
+                        Array.Empty<RandomTestData.GeneratedAttachment>());
+                    // Keep this message genuinely small and addressed only to the
+                    // selected validation recipient: no user CC/BCC, custom headers,
+                    // attachments, EML template, random payload or mutating plugins.
+                    var validationOptions = options with
+                    {
+                        CcRecipients = Array.Empty<string>(),
+                        BccRecipients = Array.Empty<string>(),
+                        CustomHeaders = new Dictionary<string, string>()
+                    };
+                    using var validationMessage = BuildMessage(
+                        validationOptions, validationData, validationRecipient,
+                        Array.Empty<AttachmentSource>(),
+                        Array.Empty<(string FileName, string Extension, byte[] Content)>(),
+                        0, false);
+
+                    var validationMimeBytes = CapacityRunMimeSizer.MeasurePreparedMimeBytes(
+                        validationClient, validationMessage, utf8Format);
+                    if (bandwidth != null)
+                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, validationMimeBytes), ct).ConfigureAwait(false);
+
+                    await using (var validationSendLease =
+                        await pace.AcquireSendSlotAsync(ct).ConfigureAwait(false))
+                    {
+                        long? serverMaxMessageBytes = validationClient.Capabilities.HasFlag(SmtpCapabilities.Size)
+                            && validationClient.MaxSize > 0
+                                ? validationClient.MaxSize
+                                : null;
+                        if (capacityGuard == null)
+                            throw new InvalidOperationException("Startup validation requires enabled Capacity Run accounting.");
+                        if (!capacityGuard.TryReserve(validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
+                        {
+                            Interlocked.CompareExchange(ref capacityStopReason, validationCapacityReason, null);
+                            throw new InvalidOperationException(validationCapacityReason);
+                        }
+
+                        Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
+                            "Odesílám malou validační zprávu", "Čekám na SMTP odpověď",
+                            MessageStep.SmtpSend, 1, 0, DeliveryStepKind.Data, null);
+                        var validationSendSw = Stopwatch.StartNew();
+                        try
+                        {
+                            Interlocked.Increment(ref smtpSendAttempts);
+                            if (utf8Format != null)
+                                await validationClient.SendAsync(utf8Format, validationMessage, ct).ConfigureAwait(false);
+                            else
+                                await validationClient.SendAsync(validationMessage, ct).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            validationSendSw.Stop();
+                            smtpSends.Add(validationSendSw.Elapsed.TotalMilliseconds);
+                        }
+                    }
+
+                    ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
+                    if (validationAccountLease != null)
+                    {
+                        accountHub!.ReportSendSuccess(validationAccountLease.Account);
+                        validationAccountLease.Return();
+                        validationAccountLease = null;
+                    }
+                    else
+                    {
+                        validationPool.Return(validationClient);
+                    }
+                    validationClient = null;
+
+                    ledger.TryClaim(1);
+                    ledger.TryMarkAccepted(1);
+                    Interlocked.Increment(ref sent);
+                    outcomeCounters.Record(SmtpOutcome.Success);
+                    if (!multiAccount)
+                        endpointHealth.RecordSuccess(endpointKey);
+                    validationRecipientCommitted = true;
+                    pace.CommitRecipient(validationRecipient);
+                    pace.RecordSuccess(validationRecipient);
+                    validationSw.Stop();
+                    Interlocked.Add(ref activeTicks, validationSw.ElapsedTicks);
+                    latencies.Add(validationSw.Elapsed.TotalMilliseconds);
+                    latencyHistogram.Add(validationSw.Elapsed.TotalMilliseconds);
+                    Report(1, 0, $"STARTUP VALIDATION ACCEPTED → {validationRecipient}", null, 3,
+                        "Validační zpráva přijata SMTP serverem", "Spouštím hlavní test",
+                        MessageStep.Succeeded, 1, 0, DeliveryStepKind.Quit, true,
+                        includeObserved: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (validationAccountLease != null)
+                    {
+                        validationAccountLease.Discard();
+                        validationAccountLease = null;
+                    }
+                    else if (validationClient != null)
+                    {
+                        validationPool?.Discard(validationClient);
+                    }
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    if (validationAccountLease != null)
+                    {
+                        validationAccountLease.Discard(ex);
+                        validationAccountLease = null;
+                    }
+                    else if (validationClient != null)
+                    {
+                        validationPool?.Discard(validationClient);
+                    }
+
+                    ledger.TryClaim(1);
+                    ledger.MarkFailed(1);
+                    Interlocked.Increment(ref failed);
+                    startupValidationFailed = true;
+                    lastError = Validation.ExplainSmtpError(ex);
+                    outcomeCounters.Record(ex);
+                    if (!multiAccount && SmtpOutcomeClassifier.Classify(ex) != SmtpOutcome.Authentication)
+                        endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(ex));
+                    if (ex is SmtpCommandException smtpError)
+                    {
+                        var code = (int)smtpError.StatusCode;
+                        if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                        else if (code >= 500) Interlocked.Increment(ref smtp5xx);
+                        observed?.Record(code, smtpError.Message);
+                    }
+                    else if (ex is TimeoutException)
+                    {
+                        Interlocked.Increment(ref timeouts);
+                    }
+                    Report(0, 1, "STARTUP VALIDATION FAILED: " + lastError, null, 3,
+                        "Úvodní validace selhala", "Zátěžový test nebyl spuštěn",
+                        MessageStep.FailedFinal, 1, 0, DeliveryStepKind.Error, false,
+                        includeObserved: true);
+                }
+                finally
+                {
+                    if (validationAccountLease != null)
+                        validationAccountLease.Return();
+                    if (!validationRecipientCommitted)
+                        pace.ReleaseRecipient(validationRecipient);
+                }
+            }
+
+            if (startupValidationEnabled && !startupValidationFailed && fsm.Phase == TestPhase.ConnectingSmtp)
+                fsm.Transition(TestPhase.Sending, "Startup validation accepted; starting load workers");
+
+            for (int batchStart = startupValidationEnabled ? 2 : 1; batchStart <= options.MessageCount && !startupValidationFailed; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
             {
                 ct.ThrowIfCancellationRequested();
                 int batchEnd = options.BatchMode
@@ -690,12 +980,22 @@ public sealed class SmtpTestRunner
                                         await payloadPipeline.ApplyAsync(message, pluginCtx).ConfigureAwait(false);
                                     }
 
-                                    if (bandwidth != null)
+                                    long serializedMimeBytes = 0;
+                                    if (capacityGuard != null)
+                                    {
+                                        // Measure after MailKit-equivalent SMTP transport preparation so
+                                        // server SIZE and operator MIME budgets use the prepared payload.
+                                        serializedMimeBytes = CapacityRunMimeSizer.MeasurePreparedMimeBytes(client!, message, utf8Format);
+                                    }
+                                    else if (bandwidth != null)
                                     {
                                         var sizeCounter = new CountingStream();
                                         message.WriteTo(sizeCounter);
-                                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, sizeCounter.BytesWritten), workerCt).ConfigureAwait(false);
+                                        serializedMimeBytes = sizeCounter.BytesWritten;
                                     }
+
+                                    if (bandwidth != null)
+                                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, serializedMimeBytes), workerCt).ConfigureAwait(false);
 
                                     Report(Volatile.Read(ref sent), Volatile.Read(ref failed), $"SEND #{i} · W{workerId}", null, 3,
                                         $"SMTP SEND · zpráva #{i} · W{workerId}", "OK nebo retry",
@@ -710,9 +1010,29 @@ public sealed class SmtpTestRunner
                                         await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
                                     {
                                         samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
+                                        if (capacityGuard != null)
+                                        {
+                                            // MailKit refreshes capabilities after connection/authentication.
+                                            // SIZE is a per-message server ceiling, never a mailbox quota.
+                                            long? serverMaxMessageBytes = client!.Capabilities.HasFlag(SmtpCapabilities.Size)
+                                                && client.MaxSize > 0
+                                                    ? client.MaxSize
+                                                    : null;
+                                            if (!capacityGuard.TryReserve(serializedMimeBytes, serverMaxMessageBytes, out var capacityReason))
+                                            {
+                                                Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
+                                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
+                                                    "CAPACITY STOP: " + capacityReason, null, 3,
+                                                    "Capacity guard", "Run stopped",
+                                                    includeObserved: true);
+                                                batchCts.Cancel();
+                                                throw new OperationCanceledException(capacityReason, workerCt);
+                                            }
+                                        }
                                         var smtpT0 = Stopwatch.GetTimestamp();
                                         try
                                         {
+                                            Interlocked.Increment(ref smtpSendAttempts);
                                             if (utf8Format != null)
                                                 await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
                                             else
@@ -783,30 +1103,37 @@ public sealed class SmtpTestRunner
                                 retryable = true;
                                 Interlocked.Increment(ref retries);
                                 retryMetrics.RecordRetryableFailure();
-                                // A4: connection already discarded above — backoff without holding a lease.
+                                // Record every actual SMTP outcome, even when the shared retry
+                                // budget is exhausted and no further retry will be scheduled.
                                 var used = Interlocked.Increment(ref retriesUsed);
-                                if (used > retryBudget)
-                                {
+                                var retryBudgetExhausted = used > retryBudget;
+                                if (retryBudgetExhausted)
                                     retryMetrics.RecordBudgetExhausted();
-                                    break;
-                                }
-                                retryMetrics.RecordRetryAttempt(attempt + 1);
+                                else
+                                    retryMetrics.RecordRetryAttempt(attempt + 1);
+
                                 circuit?.RecordFailure(ex);
                                 adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
                                     if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                                    else if (code >= 500) Interlocked.Increment(ref smtp5xx);
                                     observed?.Record(code, sce.Message);
                                     if (ObservedResponseCollector.IsGreylist(code, sce.Message))
                                         pace.RecordGreylist();
-                                    else
+                                    else if (code >= 400 && code < 500)
                                         pace.RecordTransientThrottle();
                                 }
                                 else if (ex is TimeoutException)
                                 {
                                     Interlocked.Increment(ref timeouts);
                                 }
+
+                                if (retryBudgetExhausted)
+                                    break;
+
+                                // A4: connection already discarded above — backoff without holding a lease.
                                 Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
                                     $"RETRY #{i} · W{workerId}", null, 3,
                                     $"Dočasná chyba · zpráva #{i} · W{workerId}",
@@ -899,20 +1226,33 @@ public sealed class SmtpTestRunner
                             else
                                 outcomeCounters.Record(SmtpOutcome.Unknown);
                             ledger.MarkFailed(i);
-                            if (lastEx != null && !multiAccount)
+                            if (lastEx != null && !multiAccount
+                                && SmtpOutcomeClassifier.Classify(lastEx) != SmtpOutcome.Authentication)
                                 endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(lastEx));
                             var f = Interlocked.Increment(ref failed);
                             Interlocked.Exchange(ref lastError, explained);
                             var done = Volatile.Read(ref sent) + f;
                             var eta = EstimateEta(done, options.MessageCount, startTime, sw);
                             var retryInfo = retryable ? " (po retry)" : "";
+                            var authenticationFailure = lastEx != null
+                                && SmtpOutcomeClassifier.Classify(lastEx) == SmtpOutcome.Authentication;
+                            if (authenticationFailure && !explained.StartsWith("[SMTP-AUTH-001]", StringComparison.Ordinal))
+                                explained = "[SMTP-AUTH-001] " + explained;
+                            Interlocked.Exchange(ref lastError, explained);
                             Report(Volatile.Read(ref sent), f,
                                 $"FAIL #{i}{retryInfo}: {explained}", eta, 3,
-                                $"Zastaveno na zprávě #{i}: {explained}",
-                                done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
+                                $"Zpráva #{i} selhala: {explained}",
+                                authenticationFailure
+                                    ? "STOP: server vyžaduje SMTP autentizaci. Zkontroluj přihlášení a heslo."
+                                    : done < options.MessageCount ? "Pokračuji dalšími zprávami (nebo STOP)" : "Souhrn chyb",
                                 MessageStep.FailedFinal, i, workerId,
                                 DeliveryStepKind.Error, false,
                                 includeObserved: true);
+                            // Authentication failures are configuration/credential errors,
+                            // not transient delivery failures. Stop the batch immediately;
+                            // do not hammer the provider with identical unauthenticated sends.
+                            if (authenticationFailure)
+                                batchCts.Cancel();
                         }
                     }
                     finally
@@ -1072,7 +1412,9 @@ public sealed class SmtpTestRunner
         double activeSeconds = activeTicks / (double)Stopwatch.Frequency;
         double activeThroughput = activeSeconds > 0 ? sent / activeSeconds : 0;
 
-        if (cancelled && string.IsNullOrEmpty(lastError))
+        if (!string.IsNullOrWhiteSpace(capacityStopReason))
+            lastError = capacityStopReason;
+        else if (cancelled && string.IsNullOrEmpty(lastError))
             lastError = "Zastaveno uživatelem";
 
         var poolConnections = multiAccount ? multiPoolConnections : (pool?.CreatedCount ?? 0);
@@ -1092,7 +1434,12 @@ public sealed class SmtpTestRunner
             QueueMetrics: queueMetrics.Snapshot(),
             RetryMetrics: retryMetrics.Snapshot(),
             OutcomeCounts: outcomeCounters.Snapshot(),
-            LatencyHistogram: latencyHistogram.Snapshot());
+            LatencyHistogram: latencyHistogram.Snapshot(),
+            SmtpSendAttempts: smtpSendAttempts,
+            CapacitySendReservations: capacityGuard?.ReservedAttempts,
+            CapacityMimeBytesReserved: capacityGuard?.ReservedMimeBytes,
+            CapacityStopReason: capacityStopReason,
+            StartupValidationFailed: startupValidationFailed);
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;

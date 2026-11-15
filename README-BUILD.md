@@ -50,20 +50,14 @@ dotnet build src/MailLoadTester.Gui/MailLoadTester.Gui.csproj -c Release
 
 CI ověřuje Core a testy na Ubuntu a WinForms GUI na Windows. Samostatný Windows package workflow navíc vytváří self-contained ZIP pro koncové uživatele.
 
-## Použití aplikace
+## Uživatelská dokumentace
 
-GUI obsahuje osm záložek:
+Kompletní popis instalace, záložek, ovládání, parametrů testu, Capacity Run, IMAP monitoru a grafů je v [uživatelské příručce](docs/USER_GUIDE.md).
 
-1. **SMTP Server** — host, port, TLS, autentizace, source IP, IP rotace, mTLS a timeouty.
-2. **Zpráva** — From/To/CC/BCC, předmět, text/HTML, SMTPUTF8, přílohy, inline obrázky, EML šablona a hlavičky.
-3. **Test** — počet zpráv, paralelismus, interval, retry, dávky, dry-run a Test Mode.
-4. **Proxy** — SOCKS5 a seznam proxy serverů.
-5. **Pokročilé** — Direct MX, pre-warming, adaptive concurrency, circuit breaker, lokální dashboard, AutoRestart a session log.
-6. **Síť / integrace** — webhook, bandwidth limit a IP verze.
-7. **Tempo a ochrana** — provider preset, jitter, burst, backoff, limity na příjemce, časové okno, warm-up, greylisting, RBL a pozorované SMTP odpovědi.
-8. **SMTP log** — přehled SMTP událostí.
-
-Po vyplnění nastavení klikni na **START**. Během běhu sleduj průběh, ETA, workery, stav pipeline a SMTP log.
+Pro správnou interpretaci výsledků použij také:
+- [Výsledky a metriky](docs/RESULTS_AND_METRICS.md) — SMTP Accepted, uložená pošta, kvóty, MIME velikost a grafy.
+- [Bezpečnost a soukromí](docs/SAFETY_AND_PRIVACY.md) — oprávnění, limity, přihlašovací údaje, logy a reporty.
+- [Řešení problémů](docs/TROUBLESHOOTING.md) — připojení, TLS, autentizace, SMTP 4xx/5xx a IMAP.
 
 ## Bezpečnost testování
 

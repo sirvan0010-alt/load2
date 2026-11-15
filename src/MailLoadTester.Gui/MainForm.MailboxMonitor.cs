@@ -4,6 +4,11 @@ namespace MailLoadTester.Gui;
 
 public sealed partial class MainForm
 {
+    private MailboxUsageChart _mailboxUsageChart = null!;
+    private Button btnDiscoverRecipientMx = null!;
+    private Button btnDiscoverSubmission = null!;
+    private Label lblSmtpDiscovery = null!;
+
     private void InitializeMailboxMonitorTab()
     {
         var tab = new TabPage("Mailbox Monitor") { Padding = new Padding(12) };
@@ -33,7 +38,16 @@ public sealed partial class MainForm
         actionPanel.Controls.Add(btnMailboxClear);
         connectionFlow.Controls.Add(actionPanel);
 
-        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Volitelně zastaví právě běžící SMTP test, až když IMAP server poskytne skutečnou STORAGE kvótu a její využití dosáhne nastaveného limitu. Bez dostupné kvóty se automatické zastavení neaktivuje. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen.");
+        var discoveryPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Margin = new Padding(0, 4, 0, 4) };
+        btnDiscoverRecipientMx = new Button { Text = "Zjistit MX příjemce", Width = 160, Height = 32 };
+        btnDiscoverSubmission = new Button { Text = "Zjistit SMTP server", Width = 160, Height = 32 };
+        discoveryPanel.Controls.Add(btnDiscoverRecipientMx);
+        discoveryPanel.Controls.Add(btnDiscoverSubmission);
+        connectionFlow.Controls.Add(discoveryPanel);
+        toolTip.SetToolTip(btnDiscoverRecipientMx, "Pouze naváže spojení na MX server(y) první adresy v poli Komu a přečte SMTP pozdrav a EHLO. Nic neodesílá a neověří kapacitu schránky.");
+        toolTip.SetToolTip(btnDiscoverSubmission, "Pouze se připojí k nastavenému SMTP serveru a načte EHLO/TLS parametry. Nepoužije přihlašovací údaje a nic neodesílá.");
+
+        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Pouze při skutečné IMAP STORAGE kvótě. Během Capacity Run navíc při opakovaném růstu úložiště poblíž limitu zpomalí SEND tempo a při kritickém tlaku sníží paralelismus, je-li zapnuté adaptivní řízení. Bez dostupné kvóty se feedback ani automatické zastavení neaktivují. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen. Zpomalování je pouze jednosměrné; tempo se během běhu automaticky nezrychluje.");
         numMailboxStopPercent = AddLabeledNumeric(connectionFlow, "Limit zaplnění (%):", 1, 100, 80, "Automatické zastavení při dosažení této hodnoty skutečné IMAP STORAGE kvóty. Výchozí hodnota je 80 %.");
         connectionGroup.Controls.Add(connectionFlow);
         layout.Controls.Add(connectionGroup, 0, 0);
@@ -66,13 +80,30 @@ public sealed partial class MainForm
         };
         summaryFlow.Controls.Add(progressMailboxQuota);
 
-        lblMailboxMessages = CreateMailboxMetricLabel("Uložené zprávy: —");
+        _mailboxUsageChart = new MailboxUsageChart { Width = 500, Margin = new Padding(0, 10, 0, 6), Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right };
+        summaryFlow.Controls.Add(_mailboxUsageChart);
+
+        lblSmtpDiscovery = new Label
+        {
+            Text = "SMTP průzkum: zatím neproveden.",
+            AutoSize = true,
+            MaximumSize = new Size(540, 0),
+            Margin = new Padding(0, 6, 0, 8),
+            ForeColor = Color.DimGray
+        };
+        summaryFlow.Controls.Add(lblSmtpDiscovery);
+
+        lblMailboxMessages = CreateMailboxMetricLabel("Zprávy podle IMAP kvóty: —");
+        lblMailboxInboxCount = CreateMailboxMetricLabel("Zprávy v INBOX: —");
+        lblMailboxJunk = CreateMailboxMetricLabel("Zprávy v Junk/Spam: —");
         lblMailboxUnread = CreateMailboxMetricLabel("Nepřečtené v INBOX: —");
         lblMailboxUsage = CreateMailboxMetricLabel("Obsazeno (kvóta): —");
         lblMailboxQuota = CreateMailboxMetricLabel("Kvóta: —");
         lblMailboxInboxSize = CreateMailboxMetricLabel("Velikost INBOX: —");
         lblMailboxLastRefresh = CreateMailboxMetricLabel("Poslední kontrola: —");
         summaryFlow.Controls.Add(lblMailboxMessages);
+        summaryFlow.Controls.Add(lblMailboxInboxCount);
+        summaryFlow.Controls.Add(lblMailboxJunk);
         summaryFlow.Controls.Add(lblMailboxUnread);
         summaryFlow.Controls.Add(lblMailboxUsage);
         summaryFlow.Controls.Add(lblMailboxQuota);
@@ -118,7 +149,86 @@ public sealed partial class MainForm
                 EnsureMailboxMonitorTimerStarted();
         };
         btnMailboxClear.Click += (_, _) => ClearMailboxMonitorCredentials();
+        btnDiscoverRecipientMx.Click += async (_, _) => await DiscoverRecipientMxAsync();
+        btnDiscoverSubmission.Click += async (_, _) => await DiscoverSubmissionEndpointAsync();
     }
+
+    private async Task DiscoverRecipientMxAsync()
+    {
+        var recipient = txtTo.Text
+            .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(Validation.IsValidEmail);
+        if (recipient is null)
+        {
+            lblSmtpDiscovery.Text = "Nejdříve zadej alespoň jednu platnou adresu příjemce do pole Komu.";
+            return;
+        }
+
+        btnDiscoverRecipientMx.Enabled = false;
+        lblSmtpDiscovery.Text = "Zjišťuji MX příjemce a čtu pouze SMTP greeting/EHLO…";
+        try
+        {
+            var result = await new SmtpCapabilityDiscoveryService().DiscoverRecipientMxAsync(
+                recipient, maxMxHosts: 3, timeoutMs: (int)numConnectTimeout.Value);
+            var lines = new List<string>
+            {
+                $"Doména příjemce: {result.RecipientDomain}",
+                $"MX záznamy: {result.MxRecords.Count}"
+            };
+            foreach (var probe in result.Probes)
+            {
+                lines.Add(probe.Connected
+                    ? $"{probe.Host}:25 – spojení OK; SIZE {(probe.MaxMessageBytes.HasValue ? FormatDiscoveryBytes(probe.MaxMessageBytes.Value) : "neoznámeno")}; TLS {(probe.TlsProtocol ?? (probe.StartTlsAdvertised ? "STARTTLS nabízen" : "nezjištěno"))}"
+                    : $"{probe.Host}:25 – nedostupný: {probe.Error}");
+            }
+            lines.Add("SIZE = limit jedné zprávy, nikoli kapacita schránky. Nebyla odeslána žádná zpráva.");
+            lblSmtpDiscovery.Text = string.Join(Environment.NewLine, lines);
+        }
+        catch (Exception ex)
+        {
+            lblSmtpDiscovery.Text = "MX průzkum se nezdařil: " + ex.Message;
+        }
+        finally
+        {
+            btnDiscoverRecipientMx.Enabled = true;
+        }
+    }
+
+    private async Task DiscoverSubmissionEndpointAsync()
+    {
+        if (string.IsNullOrWhiteSpace(txtHost.Text))
+        {
+            lblSmtpDiscovery.Text = "Zadej SMTP host v kartě SMTP Server.";
+            return;
+        }
+
+        btnDiscoverSubmission.Enabled = false;
+        lblSmtpDiscovery.Text = "Zjišťuji SMTP greeting/EHLO na nakonfigurovaném serveru…";
+        try
+        {
+            var security = Enum.TryParse<SmtpSecurity>(cmbSecurity.SelectedItem?.ToString(), true, out var parsed)
+                ? parsed
+                : SmtpSecurity.StartTls;
+            var result = await new SmtpCapabilityDiscoveryService().ProbeSubmissionEndpointAsync(
+                txtHost.Text.Trim(), (int)numPort.Value, security, (int)numConnectTimeout.Value);
+            lblSmtpDiscovery.Text = result.Connected
+                ? $"SMTP {result.Host}:{result.Port}: spojení OK; SIZE {(result.MaxMessageBytes.HasValue ? FormatDiscoveryBytes(result.MaxMessageBytes.Value) : "neoznámeno")}; AUTH {(result.AuthMechanisms.Count == 0 ? "neoznámeno" : string.Join(", ", result.AuthMechanisms))}; TLS {result.TlsProtocol ?? "nevyjednáno"}.\nSIZE je limit jedné zprávy, ne kvóta schránky. Nebyla odeslána žádná zpráva."
+                : $"SMTP {result.Host}:{result.Port}: spojení selhalo: {result.Error}";
+        }
+        catch (Exception ex)
+        {
+            lblSmtpDiscovery.Text = "SMTP průzkum se nezdařil: " + ex.Message;
+        }
+        finally
+        {
+            btnDiscoverSubmission.Enabled = true;
+        }
+    }
+
+    private static string FormatDiscoveryBytes(long bytes)
+        => bytes >= 1024L * 1024
+            ? $"{bytes / (1024d * 1024d):N1} MiB ({bytes:N0} B)"
+            : $"{bytes / 1024d:N1} KiB ({bytes:N0} B)";
 
     private void ClearMailboxMonitorCredentials()
     {
@@ -131,7 +241,10 @@ public sealed partial class MainForm
         lblMailboxStatus.Text = "IMAP údaje byly vymazány. SMTP test může běžet dál, ale stav schránky nebude ověřován.";
         lblMailboxPercent.Text = "—";
         progressMailboxQuota.Value = 0;
-        lblMailboxMessages.Text = "Uložené zprávy: —";
+        _mailboxUsageChart.ClearSamples();
+        lblMailboxMessages.Text = "Zprávy podle IMAP kvóty: nedostupné";
+        lblMailboxInboxCount.Text = "Zprávy v INBOX: —";
+        lblMailboxJunk.Text = "Zprávy v Junk/Spam: —";
         lblMailboxUnread.Text = "Nepřečtené v INBOX: —";
         lblMailboxUsage.Text = "Obsazeno (kvóta): —";
         lblMailboxQuota.Text = "Kvóta: —";
@@ -154,7 +267,6 @@ public sealed partial class MainForm
         }
 
         EnsureMailboxMonitorTimerStarted();
-        _ = RefreshMailboxMonitorAsync();
     }
 
     private void EnsureMailboxMonitorTimerStarted()
@@ -172,15 +284,15 @@ public sealed partial class MainForm
     private void StopMailboxMonitorPolling()
         => _mailboxMonitorTimer?.Stop();
 
-    private async Task RefreshMailboxMonitorAsync()
+    private async Task<MailboxMonitorSnapshot?> RefreshMailboxMonitorAsync(bool enforceQuotaStop = true)
     {
         if (_mailboxRefreshInProgress || IsDisposed || _closeApproved)
-            return;
+            return null;
 
         if (!IsMailboxMonitorConfigured())
         {
             lblMailboxStatus.Text = "Doplň IMAP host, uživatelské jméno a heslo. Bez nich SMTP test funguje dál, ale zaplnění schránky nelze ověřit.";
-            return;
+            return null;
         }
 
         MailboxMonitorOptions options;
@@ -200,7 +312,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             lblMailboxStatus.Text = "Neplatná konfigurace IMAP: " + ex.Message;
-            return;
+            return null;
         }
 
         _mailboxRefreshInProgress = true;
@@ -214,10 +326,26 @@ public sealed partial class MainForm
             lblMailboxStatus.Text = "Připojuji se k IMAP serveru a načítám stav schránky…";
             var snapshot = await new MailboxMonitorService().ReadAsync(options, cts.Token);
             if (IsDisposed || _closeApproved)
-                return;
+                return null;
 
             RenderMailboxMonitorSnapshot(snapshot);
-            if (_isRunning && chkMailboxStopAtQuota.Checked
+            if (_isRunning)
+                runMetricsChart?.AddSample(
+                    snapshot.CheckedAt,
+                    _lastRunSmtpSendAttempts,
+                    _lastRunAccepted,
+                    _lastRunSmtp4xx,
+                    _lastRunSmtp5xx,
+                    snapshot.CheckedAt,
+                    GetObservedQuotaMessageDelta(snapshot),
+                    snapshot.QuotaUsagePercent);
+            if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked)
+            {
+                var feedback = _runner?.ObserveMailboxSnapshot(snapshot);
+                if (feedback is not null)
+                    AppendLog($"Adaptivní řízení podle IMAP: úroveň {feedback.Severity}. {feedback.Reason}", Color.Orange);
+            }
+            if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked
                 && MailboxMonitorMath.ShouldStop(snapshot.QuotaUsagePercent, (int)numMailboxStopPercent.Value)
                 && _cts is { IsCancellationRequested: false })
             {
@@ -226,10 +354,12 @@ public sealed partial class MainForm
                 AppendLog($"Mailbox Monitor: využití kvóty {snapshot.QuotaUsagePercent:F1} % dosáhlo limitu {(int)numMailboxStopPercent.Value} %. Zastavuji SMTP test.", Color.OrangeRed);
                 _cts.Cancel();
             }
+            return snapshot;
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             // Expected when the form is closing.
+            return null;
         }
         catch (Exception ex)
         {
@@ -237,7 +367,19 @@ public sealed partial class MainForm
             {
                 lblMailboxStatus.Text = "IMAP kontrola selhala: " + ex.Message;
                 lblMailboxStatus.ForeColor = Color.DarkRed;
+                var failedAt = DateTimeOffset.UtcNow;
+                runMetricsChart?.AddSample(
+                    failedAt,
+                    _lastRunSmtpSendAttempts,
+                    _lastRunAccepted,
+                    _lastRunSmtp4xx,
+                    _lastRunSmtp5xx,
+                    failedAt,
+                    null,
+                    null);
+                _mailboxUsageChart.AddSample(failedAt, null);
             }
+            return null;
         }
         finally
         {
@@ -250,9 +392,28 @@ public sealed partial class MainForm
         }
     }
 
+    private long? GetObservedQuotaMessageDelta(MailboxMonitorSnapshot? snapshot)
+    {
+        if (_mailboxRunBaseline?.QuotaMessageCount is uint before
+            && snapshot?.QuotaMessageCount is uint after)
+            return (long)after - before;
+        return null;
+    }
+
+    private async Task<MailboxMonitorSnapshot?> CaptureFinalMailboxSnapshotAsync()
+    {
+        var pending = _mailboxMonitorCompletion;
+        if (_mailboxRefreshInProgress && pending is not null)
+            await pending.Task.ConfigureAwait(true);
+
+        return await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
+    }
+
     private void RenderMailboxMonitorSnapshot(MailboxMonitorSnapshot snapshot)
     {
+        _mailboxLastSnapshot = snapshot;
         var percent = snapshot.QuotaUsagePercent;
+        _mailboxUsageChart.AddSample(snapshot.CheckedAt, percent);
         if (percent.HasValue)
         {
             lblMailboxPercent.Text = $"{percent.Value:F1} %";
@@ -270,12 +431,16 @@ public sealed partial class MainForm
             lblMailboxQuota.Text = "Kvóta: server ji neposkytuje nebo nemá kladný limit";
         }
 
-        var messageCount = snapshot.QuotaMessageCount.HasValue
-            ? $"Zprávy v kvótě: {snapshot.QuotaMessageCount.Value:N0}"
-            : snapshot.InboxMessageCount.HasValue
-                ? $"Zprávy v INBOX: {snapshot.InboxMessageCount.Value:N0}"
-                : "Zprávy: nedostupné";
-        lblMailboxMessages.Text = messageCount;
+        lblMailboxMessages.Text = snapshot.QuotaMessageCount.HasValue
+            ? $"Zprávy podle IMAP kvóty: {snapshot.QuotaMessageCount.Value:N0}" +
+              (snapshot.QuotaMessageLimit.HasValue ? $" / {snapshot.QuotaMessageLimit.Value:N0}" : "")
+            : "Zprávy podle IMAP kvóty: server neposkytuje";
+        lblMailboxInboxCount.Text = snapshot.InboxMessageCount.HasValue
+            ? $"Zprávy v INBOX: {snapshot.InboxMessageCount.Value:N0}"
+            : "Zprávy v INBOX: nedostupné";
+        lblMailboxJunk.Text = snapshot.JunkMessageCount.HasValue
+            ? $"Zprávy v Junk/Spam: {snapshot.JunkMessageCount.Value:N0}"
+            : "Zprávy v Junk/Spam: složka nebo počet nedostupný";
         lblMailboxUnread.Text = snapshot.InboxUnreadCount.HasValue
             ? $"Nepřečtené v INBOX: {snapshot.InboxUnreadCount.Value:N0}"
             : "Nepřečtené v INBOX: nedostupné";
@@ -284,6 +449,12 @@ public sealed partial class MainForm
         lblMailboxStatus.Text = snapshot.Status;
         lblMailboxStatus.ForeColor = percent.HasValue ? Color.DarkGreen : Color.DarkOrange;
     }
+
+    private static string FormatDelta(long? value)
+        => value.HasValue ? (value.Value > 0 ? "+" : "") + value.Value.ToString("N0") : "nedostupné";
+
+    private static string FormatByteDelta(long? bytes)
+        => bytes.HasValue ? (bytes.Value > 0 ? "+" : "") + FormatMailboxBytes(bytes.Value) : "nedostupné";
 
     private static string FormatMailboxBytes(long? bytes)
     {

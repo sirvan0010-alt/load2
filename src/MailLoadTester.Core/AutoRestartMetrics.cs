@@ -66,6 +66,8 @@ public static class AutoRestartMetrics
             Authentication: SaturatingAdd(aggregate.Authentication, next.Authentication),
             PolicyRejected: SaturatingAdd(aggregate.PolicyRejected, next.PolicyRejected),
             Recipient: SaturatingAdd(aggregate.Recipient, next.Recipient),
+            MailboxFull: SaturatingAdd(aggregate.MailboxFull, next.MailboxFull),
+            MessageTooLarge: SaturatingAdd(aggregate.MessageTooLarge, next.MessageTooLarge),
             Permanent: SaturatingAdd(aggregate.Permanent, next.Permanent),
             Cancelled: SaturatingAdd(aggregate.Cancelled, next.Cancelled),
             Unknown: SaturatingAdd(aggregate.Unknown, next.Unknown));

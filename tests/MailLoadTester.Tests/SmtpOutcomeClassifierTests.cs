@@ -47,6 +47,24 @@ public class SmtpOutcomeClassifierTests
         Assert.False(SmtpOutcomeClassifier.IsRetryable(ex));
     }
 
+    [Theory]
+    [InlineData(530, "5.7.0 authentication required")]
+    [InlineData(535, "5.7.8 authentication credentials invalid")]
+    public void AuthenticationRequired_EnhancedStatus_IsNotRetryable(int code, string response)
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(code, response);
+        Assert.Equal(SmtpOutcome.Authentication, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
+    [Fact]
+    public void AuthenticationRequired_InWrappedOrGenericException_IsClassified()
+    {
+        var ex = new InvalidOperationException("5.7.0 authentication required");
+        Assert.Equal(SmtpOutcome.Authentication, SmtpOutcomeClassifier.Classify(ex));
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(ex));
+    }
+
     [Fact]
     public void Recipient_550_not_retryable()
     {
@@ -94,6 +112,51 @@ public class SmtpOutcomeClassifierTests
         var s = c.Snapshot();
         Assert.Equal(1, s.Success);
         Assert.Equal(2, s.Throttled);
+    }
+
+    [Theory]
+    [InlineData(552, "552 5.2.2 mailbox full")]
+    [InlineData(452, "452 4.2.2 mailbox full")]
+    public void MailboxFull_IsDistinctAndNeverRetried(int code, string response)
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(code, response);
+        if (code >= 500)
+        {
+            Assert.Equal(SmtpOutcome.MailboxFull, outcome);
+            Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+        }
+        else
+        {
+            Assert.Equal(SmtpOutcome.Transient, outcome);
+            Assert.True(SmtpOutcomeClassifier.IsRetryable(outcome));
+        }
+    }
+
+    [Fact]
+    public void MessageTooLarge_IsNotRetried()
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(552, "552 5.3.4 message size exceeds fixed maximum message size");
+        Assert.Equal(SmtpOutcome.MessageTooLarge, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
+    [Fact]
+    public void EnhancedPolicyStatus_IsStopAndReview()
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(550, "550 5.7.1 message rejected by policy");
+        Assert.Equal(SmtpOutcome.PolicyRejected, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
+    [Fact]
+    public void MailboxFullAndMessageTooLarge_AreCountedSeparately()
+    {
+        var counters = new SmtpOutcomeCounters();
+        counters.Record(SmtpOutcome.MailboxFull);
+        counters.Record(SmtpOutcome.MessageTooLarge);
+        var snapshot = counters.Snapshot();
+        Assert.Equal(1, snapshot.MailboxFull);
+        Assert.Equal(1, snapshot.MessageTooLarge);
     }
 
     [Fact]

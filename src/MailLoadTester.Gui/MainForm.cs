@@ -5,6 +5,7 @@ public sealed partial class MainForm : Form
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
     private TabControl tabs = null!;
+    private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
     // UI enhancement
@@ -15,15 +16,16 @@ public sealed partial class MainForm : Form
     private bool _darkMode;
 
     // SMTP tab
-    private TextBox txtHost = null!;
+    private ComboBox txtHost = null!;
     private NumericUpDown numPort = null!;
     private ComboBox cmbSecurity = null!;
     private CheckBox chkIgnoreCert = null!;
     private CheckBox chkAuth = null!;
     private ComboBox cmbAuthMethod = null!;
-    private TextBox txtUser = null!, txtPass = null!;
-    private Button btnTestConnection = null!;
-    private TextBox txtSourceIp = null!;
+    private ComboBox txtUser = null!;
+    private TextBox txtPass = null!;
+    private Button btnTestConnection = null!, btnSendTest = null!;
+    private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
     private NumericUpDown numIpv6PrefixLen = null!;
@@ -33,7 +35,9 @@ public sealed partial class MainForm : Form
     private NumericUpDown numConnectTimeout = null!, numReadTimeout = null!;
 
     // Message tab
-    private TextBox txtFrom = null!, txtTo = null!, txtCc = null!, txtBcc = null!;
+    private ComboBox txtFrom = null!;
+    private ComboBox txtTo = null!, txtCc = null!, txtBcc = null!;
+    private readonly List<string> _knownEmailAddresses = new();
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
@@ -46,6 +50,8 @@ public sealed partial class MainForm : Form
 
     // Test tab
     private NumericUpDown numCount = null!, numConcurrency = null!, numInterval = null!, numRetries = null!;
+    private CheckBox chkCapacityRun = null!, chkCapacityStartupValidation = null!;
+    private NumericUpDown numCapacityMaxMessages = null!, numCapacityTargetMiB = null!, numCapacityMaxMessageMiB = null!, numCapacityMaxPerMinute = null!;
     private CheckBox chkBatchMode = null!;
     private NumericUpDown numBatchSize = null!, numBatchPause = null!;
     private CheckBox chkDryRun = null!, chkTestMode = null!;
@@ -57,6 +63,9 @@ public sealed partial class MainForm : Form
     private NumericUpDown numProxyPort = null!;
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
     private TextBox txtProxyList = null!;
+    private Label lblProxyStatus = null!;
+    private FlowLayoutPanel pnlQueueFlow = null!;
+    private readonly Dictionary<string, Label> _queueFlowLabels = new(StringComparer.Ordinal);
     // Options without dedicated controls (persist via profile / defaults)
     private int _idleHealthCheckSeconds = 30;
     private int _circuitWindowSize = 100;
@@ -113,6 +122,7 @@ public sealed partial class MainForm : Form
     private Button btnMailboxRefresh = null!, btnMailboxClear = null!;
     private ProgressBar progressMailboxQuota = null!;
     private Label lblMailboxPercent = null!, lblMailboxMessages = null!, lblMailboxUnread = null!;
+    private Label lblMailboxInboxCount = null!, lblMailboxJunk = null!;
     private Label lblMailboxUsage = null!, lblMailboxQuota = null!, lblMailboxInboxSize = null!;
     private Label lblMailboxStatus = null!, lblMailboxLastRefresh = null!;
 
@@ -132,12 +142,21 @@ public sealed partial class MainForm : Form
     // Status
     private StatusStrip statusStrip = null!;
     private ToolStripProgressBar progressBar = null!;
-    private ToolStripStatusLabel lblStatus = null!, lblEta = null!, lblSentFailed = null!;
+    private ToolStripStatusLabel lblStatus = null!, lblEta = null!, lblSentFailed = null!, lblCapacityRun = null!;
+    private Button btnCapacityEstimate = null!;
+    private Label lblCapacityEstimate = null!;
+    private RunMetricsChart runMetricsChart = null!;
+    private AdaptiveControlChart adaptiveControlChart = null!;
+    private int _lastRunSmtpSendAttempts;
+    private int _lastRunSmtp4xx;
+    private int _lastRunSmtp5xx;
+    private int _lastRunAccepted;
 
     // Runtime
     private CancellationTokenSource? _cts;
     private SmtpTestRunner? _runner;
     private bool _isRunning;
+    private int _activeRunMessageCount;
     private TaskCompletionSource<bool>? _runCompletion;
     private CancellationTokenSource? _testConnectionCts;
     private TaskCompletionSource<bool>? _testConnectionCompletion;
@@ -146,22 +165,94 @@ public sealed partial class MainForm : Form
     private TaskCompletionSource<bool>? _mailboxMonitorCompletion;
     private bool _mailboxRefreshInProgress;
     private bool _mailboxQuotaStopTriggered;
+    private MailboxMonitorSnapshot? _mailboxRunBaseline;
+    private MailboxMonitorSnapshot? _mailboxLastSnapshot;
     private bool _closeApproved;
     private DateTime _logThrottleWindow = DateTime.MinValue;
     private DateTime _observedThrottle = DateTime.MinValue;
 
     public MainForm()
     {
-        Text = $"MailLoadTester {MailLoadTester.AppVersion.Current} — Maximum Brutal Edition";
+        Text = $"MailLoadTester {MailLoadTester.AppVersion.Current} — SMTP testovací nástroj";
         Size = new Size(1280, 920);
         MinimumSize = new Size(1000, 750);
         StartPosition = FormStartPosition.CenterScreen;
+        AutoScaleMode = AutoScaleMode.Font;
+        Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
+        txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
+        txtFrom.TextChanged += (_, _) => SyncFromAddressSuggestions(addCurrentAddress: true, copyLoginWhenEmpty: false);
+        txtTo.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
+        txtCc.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
+        txtBcc.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
         WireEvents();
         SetDefaults();
+        SyncFromAddressSuggestions();
         UpdateSafetyBanner();
         ApplyTheme(false);
         FormClosing += MainForm_FormClosing;
+        Shown += (_, _) => LoadLayoutPreferences();
+        FormClosed += (_, _) => SaveLayoutPreferences();
+    }
+
+    private static bool IsValidEmailSuggestion(string value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && System.Net.Mail.MailAddress.TryCreate(value.Trim(), out var parsed)
+        && parsed.Address.Equals(value.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private void SyncFromAddressSuggestions(bool addCurrentAddress = false, bool copyLoginWhenEmpty = true)
+    {
+        var login = txtUser.Text.Trim();
+        if (IsValidEmailSuggestion(login))
+            AddKnownEmailAddress(login);
+
+        foreach (var account in _accountDrafts)
+            if (account.Enabled && IsValidEmailSuggestion(account.Username))
+                AddKnownEmailAddress(account.Username);
+
+        var current = txtFrom.Text.Trim();
+        if (addCurrentAddress && IsValidEmailSuggestion(current))
+            AddKnownEmailAddress(current);
+
+        RefreshEmailAddressSuggestions();
+
+        // Most SMTP providers expect the authenticated mailbox to be the sender.
+        // Use it as a convenience default, but never overwrite a manually entered From address.
+        if (copyLoginWhenEmpty && string.IsNullOrWhiteSpace(txtFrom.Text) && IsValidEmailSuggestion(login))
+            txtFrom.Text = login;
+    }
+
+    private void AddKnownEmailAddress(string address)
+    {
+        address = address.Trim();
+        if (!IsValidEmailSuggestion(address)) return;
+        if (!_knownEmailAddresses.Contains(address, StringComparer.OrdinalIgnoreCase))
+            _knownEmailAddresses.Add(address);
+    }
+
+    private void RefreshEmailAddressSuggestions()
+    {
+        if (txtFrom is null) return;
+
+        foreach (var account in _accountDrafts)
+            if (account.Enabled && IsValidEmailSuggestion(account.Username))
+                AddKnownEmailAddress(account.Username);
+
+        foreach (var address in new[] { txtTo?.Text, txtCc?.Text, txtBcc?.Text })
+        {
+            if (string.IsNullOrWhiteSpace(address)) continue;
+            foreach (var token in address.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                if (IsValidEmailSuggestion(token))
+                    AddKnownEmailAddress(token);
+        }
+
+        foreach (var combo in new[] { txtUser, txtFrom, txtTo, txtCc, txtBcc })
+        {
+            if (combo is null) continue;
+            foreach (var address in _knownEmailAddresses)
+                if (!combo.Items.Contains(address))
+                    combo.Items.Add(address);
+        }
     }
 
     /// <summary>
@@ -230,4 +321,77 @@ public sealed partial class MainForm : Form
         if (!IsDisposed)
             Close();
     }
+
+    /// <summary>Shows an error in a persistent, selectable dialog with one-click copy.</summary>
+    private void ShowErrorWithCopy(string message, string title, string? technicalDetails = null, string errorCode = GuiErrorCodes.General)
+    {
+        var copyText = $"Kód chyby: {errorCode}" + Environment.NewLine + message
+            + (string.IsNullOrWhiteSpace(technicalDetails)
+                ? string.Empty
+                : Environment.NewLine + Environment.NewLine + "Technické podrobnosti:" + Environment.NewLine + technicalDetails);
+
+        using var dialog = new Form
+        {
+            Text = $"{title} [{errorCode}]",
+            Width = 720,
+            Height = 360,
+            MinimumSize = new Size(520, 260),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoScaleMode = AutoScaleMode.Font,
+            Font = Font
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+
+        var details = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = true,
+            Text = copyText
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+        var close = new Button { Text = "Zavřít", Width = 100, Height = 30, DialogResult = DialogResult.OK };
+        var copy = new Button { Text = "Kopírovat chybu", Width = 140, Height = 30 };
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(copyText);
+                copy.Text = "Zkopírováno";
+            }
+            catch (Exception clipboardError)
+            {
+                MessageBox.Show("Text se nepodařilo zkopírovat: " + clipboardError.Message,
+                    "Schránka", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+        buttons.Controls.Add(close);
+        buttons.Controls.Add(copy);
+        layout.Controls.Add(details, 0, 0);
+        layout.Controls.Add(buttons, 0, 1);
+        dialog.Controls.Add(layout);
+        dialog.AcceptButton = close;
+        dialog.CancelButton = close;
+        dialog.ShowDialog(this);
+    }
+
 }

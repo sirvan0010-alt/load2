@@ -107,7 +107,9 @@ public sealed record MailTestOptions(
     /// </summary>
     IReadOnlyList<SmtpAccount>? Accounts = null,
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
-    int DurationSeconds = 0);
+    int DurationSeconds = 0,
+    /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
+    CapacityRunLimits? CapacityRun = null);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
@@ -157,7 +159,19 @@ public sealed record MailTestResult(
     /// <summary>A5: unified SMTP outcome counts for this run.</summary>
     SmtpOutcomeCountsSnapshot? OutcomeCounts = null,
     /// <summary>Fixed-bucket distribution of successful-message latency samples.</summary>
-    LatencyHistogramSnapshot? LatencyHistogram = null);
+    LatencyHistogramSnapshot? LatencyHistogram = null,
+    /// <summary>Actual SmtpClient.SendAsync calls started, including retries and AutoRestart attempts.</summary>
+    int SmtpSendAttempts = 0,
+    /// <summary>Pre-send capacity reservations; may exceed actual network attempts if cancellation occurs after reservation.</summary>
+    int? CapacitySendReservations = null,
+    /// <summary>Conservatively reserved SMTP-prepared MIME bytes; null when capacity mode is disabled.</summary>
+    long? CapacityMimeBytesReserved = null,
+    /// <summary>Reason the capacity guard stopped the run, if it did.</summary>
+    string? CapacityStopReason = null,
+    /// <summary>Independent IMAP before/after observations; not causal proof of messages stored by this run.</summary>
+    MailboxRunDelta? MailboxRunDelta = null,
+    /// <summary>True when the opt-in startup validation message failed; AutoRestart must not retry it.</summary>
+    bool StartupValidationFailed = false);
 
 public static class Validation
 {
@@ -224,6 +238,21 @@ public static class Validation
             throw new ArgumentException("Počet zpráv musí být 1–10000.");
         if (o.DurationSeconds is < 0 or > 86_400)
             throw new ArgumentException("DurationSeconds musí být 0–86400.");
+        if (o.CapacityRun is { ValidateBeforeRun: true, Enabled: false })
+            throw new ArgumentException("Startup validation vyžaduje zapnutý Capacity Run, aby se zpráva započítala do limitů.");
+        if (o.CapacityRun is { Enabled: true } capacity)
+        {
+            if (capacity.MaxMessageCount is < 1 or > 10_000)
+                throw new ArgumentException("CapacityRun.MaxMessageCount musí být 1–10000.");
+            if (capacity.TargetMimeBytes < 0)
+                throw new ArgumentException("CapacityRun.TargetMimeBytes nesmí být záporné.");
+            if (capacity.MaxMimeMessageBytes < 0)
+                throw new ArgumentException("CapacityRun.MaxMimeMessageBytes nesmí být záporné.");
+            if (capacity.MaxMessagesPerMinute is < 0 or > 60_000)
+                throw new ArgumentException("CapacityRun.MaxMessagesPerMinute musí být 0–60000.");
+            if (o.DryRun)
+                throw new ArgumentException("Capacity run vyžaduje serializaci skutečné MIME zprávy; vypni Dry-run.");
+        }
         if (o.IntervalMs is < 0 or > 3_600_000)
             throw new ArgumentException("Interval je mimo povolený rozsah (0–3600000 ms).");
         if (o.UseAuthentication && string.IsNullOrWhiteSpace(o.Username))

@@ -12,6 +12,10 @@ public enum ResponseClassification
     RateLimit,
     TransientOther,
     Permanent,
+    MailboxFull,
+    MessageTooLarge,
+    PolicyRejected,
+    Recipient,
     Timeout,
     Other
 }
@@ -84,30 +88,42 @@ public sealed class ObservedResponseCollector
 
     public static ResponseClassification Classify(int code, string text)
     {
-        var t = text.ToLowerInvariant();
-        if (code >= 200 && code < 300) return ResponseClassification.Success;
-        if (code == 421 || code == 450 || code == 451 || code == 452)
+        var normalized = (text ?? "").ToLowerInvariant();
+        if (code is >= 400 and < 500 &&
+            (normalized.Contains("greylist") || normalized.Contains("graylist") ||
+             normalized.Contains("try again later") || normalized.Contains("try later") ||
+             normalized.Contains("deferred") || normalized.Contains("temporarily deferred")))
+            return ResponseClassification.Greylist;
+
+        return SmtpOutcomeClassifier.ClassifySmtp(code, normalized) switch
         {
-            if (t.Contains("greylist") || t.Contains("graylist") || t.Contains("try again") ||
-                t.Contains("try later") || t.Contains("deferred") || t.Contains("temporarily"))
-                return ResponseClassification.Greylist;
-            if (t.Contains("rate") || t.Contains("limit") || t.Contains("too many") || t.Contains("throttle"))
-                return ResponseClassification.RateLimit;
-            return ResponseClassification.TransientOther;
-        }
-        if (code >= 500) return ResponseClassification.Permanent;
-        return ResponseClassification.Other;
+            SmtpOutcome.Success => ResponseClassification.Success,
+            SmtpOutcome.Throttled => ResponseClassification.RateLimit,
+            SmtpOutcome.Transient => ResponseClassification.TransientOther,
+            SmtpOutcome.MailboxFull => ResponseClassification.MailboxFull,
+            SmtpOutcome.MessageTooLarge => ResponseClassification.MessageTooLarge,
+            SmtpOutcome.PolicyRejected => ResponseClassification.PolicyRejected,
+            SmtpOutcome.Recipient => ResponseClassification.Recipient,
+            SmtpOutcome.Authentication or SmtpOutcome.Permanent => ResponseClassification.Permanent,
+            SmtpOutcome.Timeout => ResponseClassification.Timeout,
+            _ => ResponseClassification.Other
+        };
     }
 
     public static string Recommend(int code, string text)
     {
         return Classify(code, text) switch
         {
-            ResponseClassification.Greylist => "Počkat 5–15 min a zkusit znovu (zapněte greylist retry).",
-            ResponseClassification.RateLimit => "Snížit tempo, zapnout jitter a burst+pause.",
-            ResponseClassification.TransientOther => "Dočasná chyba – retry s progressive backoff.",
-            ResponseClassification.Permanent => "Trvalá chyba – zkontrolovat From, DNS, reputaci, obsah.",
-            ResponseClassification.Success => "OK",
+            ResponseClassification.Greylist => "Dočasné greylisting odmítnutí – respektovat odklad serveru a provést omezený retry.",
+            ResponseClassification.RateLimit => "Server omezuje tempo – snížit rychlost a paralelismus, použít omezený backoff.",
+            ResponseClassification.TransientOther => "Dočasná chyba – retry s progressive backoff a limitem pokusů.",
+            ResponseClassification.MailboxFull => "Schránka nebo její kvóta je plná – zastavit kapacitní test a ověřit IMAP kvótu.",
+            ResponseClassification.MessageTooLarge => "Zpráva překročila limit jedné zprávy – snížit velikost pod limit SIZE.",
+            ResponseClassification.PolicyRejected => "Politika/reputace odmítla zprávu – zastavit a prověřit autentizaci a pravidla příjemce; neopakovat naslepo.",
+            ResponseClassification.Recipient => "Ověřit adresu příjemce a existenci schránky.",
+            ResponseClassification.Permanent => "Trvalá chyba – zkontrolovat konfiguraci a odpověď serveru; bez automatického retry.",
+            ResponseClassification.Timeout => "Vypršel časový limit – ověřit dostupnost serveru a použít omezený retry.",
+            ResponseClassification.Success => "SMTP server zprávu přijal; uložení do schránky musí ověřit IMAP.",
             _ => "Zkontrolovat session log a nastavení serveru."
         };
     }

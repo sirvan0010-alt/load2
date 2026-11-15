@@ -203,6 +203,19 @@ public sealed class AdaptiveConcurrencyLimiter
         }
     }
 
+    /// <summary>
+    /// Reduces concurrency by one in response to independently observed mailbox
+    /// storage pressure. Existing in-flight permits are allowed to finish.
+    /// </summary>
+    public void ApplyMailboxPressure()
+    {
+        lock (_lock)
+        {
+            if (_current > _min)
+                _current--;
+        }
+    }
+
     public void Reset()
     {
         Queue<TaskCompletionSource<bool>> cancel;

@@ -22,6 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validate user documentation links
+        run: python3 scripts/check-user-doc-links.py
+
+      - name: Check workflow hygiene
+        run: python3 scripts/check-workflow-hygiene.py
+
       - name: Check release version synchronization
         shell: bash
         run: |
@@ -39,8 +45,8 @@ jobs:
 
       - name: Restore Core + Tests
         run: |
-          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
-          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=high -p:WarningsAsErrors=NU1903%3BNU1904
 
       - name: Build Release
         run: |

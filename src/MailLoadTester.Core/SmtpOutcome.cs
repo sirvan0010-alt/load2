@@ -1,5 +1,6 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using System.Text.RegularExpressions;
 
 namespace MailLoadTester;
 
@@ -15,6 +16,8 @@ public enum SmtpOutcome
     Authentication,
     PolicyRejected,
     Recipient,
+    MailboxFull,
+    MessageTooLarge,
     Permanent,
     Cancelled,
     Unknown
@@ -31,6 +34,11 @@ public static class SmtpOutcomeClassifier
         if (ex is OperationCanceledException) return SmtpOutcome.Cancelled;
         if (ex is TimeoutException) return SmtpOutcome.Timeout;
         if (ex is AuthenticationException) return SmtpOutcome.Authentication;
+        var message = ex.Message.ToLowerInvariant();
+        if (message.Contains("authentication required") || message.Contains("auth required")
+            || message.Contains("not authenticated") || message.Contains("authentication failed")
+            || message.Contains("authentication credentials"))
+            return SmtpOutcome.Authentication;
         if (ex is SmtpCommandException sce)
             return ClassifySmtp((int)sce.StatusCode, sce.Message);
         if (ex is SmtpProtocolException or IOException)
@@ -68,12 +76,30 @@ public static class SmtpOutcomeClassifier
 
         if (code is >= 500 and < 600)
         {
+            var enhanced = Regex.Match(t, @"(?<!\d)5\.([0-9]{1,3})\.([0-9]{1,3})(?!\d)");
+            var enhancedClass = enhanced.Success ? enhanced.Groups[1].Value : "";
+            var enhancedSubject = enhanced.Success ? enhanced.Groups[2].Value : "";
+
             if (code is 530 or 535 || t.Contains("auth") || t.Contains("credential") || t.Contains("login"))
                 return SmtpOutcome.Authentication;
-            if (code is 550 or 551 or 552 or 553 || t.Contains("user unknown") || t.Contains("mailbox") && t.Contains("exist"))
-                return SmtpOutcome.Recipient;
-            if (code is 554 || t.Contains("policy") || t.Contains("spam") || t.Contains("rejected") || t.Contains("blocked"))
+
+            if ((enhancedClass == "2" && enhancedSubject == "2") ||
+                t.Contains("mailbox full") || t.Contains("quota exceeded") || t.Contains("over quota"))
+                return SmtpOutcome.MailboxFull;
+
+            if ((enhancedClass == "3" && enhancedSubject == "4") ||
+                t.Contains("message too large") || t.Contains("maximum message size") ||
+                t.Contains("size limit exceeded") || t.Contains("message size exceeds"))
+                return SmtpOutcome.MessageTooLarge;
+
+            if (enhancedClass == "7" || code == 554 ||
+                t.Contains("policy") || t.Contains("spam") || t.Contains("rejected") || t.Contains("blocked"))
                 return SmtpOutcome.PolicyRejected;
+
+            if (enhancedClass == "1" || code is 550 or 551 or 553 ||
+                t.Contains("user unknown") || (t.Contains("mailbox") && t.Contains("exist")))
+                return SmtpOutcome.Recipient;
+
             return SmtpOutcome.Permanent;
         }
 
@@ -98,6 +124,8 @@ public static class SmtpOutcomeClassifier
         SmtpOutcome.Authentication => "auth",
         SmtpOutcome.PolicyRejected => "policy",
         SmtpOutcome.Recipient => "recipient",
+        SmtpOutcome.MailboxFull => "mailbox_full",
+        SmtpOutcome.MessageTooLarge => "message_too_large",
         SmtpOutcome.Permanent => "permanent",
         SmtpOutcome.Cancelled => "cancelled",
         _ => "unknown"
@@ -117,7 +145,7 @@ public static class SmtpOutcomeClassifier
 /// <summary>A5: thread-safe aggregate counts for one run (not a parallel telemetry system).</summary>
 public sealed class SmtpOutcomeCounters
 {
-    long _success, _transient, _throttled, _timeout, _auth, _policy, _recipient, _permanent, _cancelled, _unknown;
+    long _success, _transient, _throttled, _timeout, _auth, _policy, _recipient, _mailboxFull, _messageTooLarge, _permanent, _cancelled, _unknown;
 
     public void Record(SmtpOutcome outcome)
     {
@@ -130,6 +158,8 @@ public sealed class SmtpOutcomeCounters
             case SmtpOutcome.Authentication: Interlocked.Increment(ref _auth); break;
             case SmtpOutcome.PolicyRejected: Interlocked.Increment(ref _policy); break;
             case SmtpOutcome.Recipient: Interlocked.Increment(ref _recipient); break;
+            case SmtpOutcome.MailboxFull: Interlocked.Increment(ref _mailboxFull); break;
+            case SmtpOutcome.MessageTooLarge: Interlocked.Increment(ref _messageTooLarge); break;
             case SmtpOutcome.Permanent: Interlocked.Increment(ref _permanent); break;
             case SmtpOutcome.Cancelled: Interlocked.Increment(ref _cancelled); break;
             default: Interlocked.Increment(ref _unknown); break;
@@ -146,6 +176,8 @@ public sealed class SmtpOutcomeCounters
         Authentication: (int)Math.Max(0, Volatile.Read(ref _auth)),
         PolicyRejected: (int)Math.Max(0, Volatile.Read(ref _policy)),
         Recipient: (int)Math.Max(0, Volatile.Read(ref _recipient)),
+        MailboxFull: (int)Math.Max(0, Volatile.Read(ref _mailboxFull)),
+        MessageTooLarge: (int)Math.Max(0, Volatile.Read(ref _messageTooLarge)),
         Permanent: (int)Math.Max(0, Volatile.Read(ref _permanent)),
         Cancelled: (int)Math.Max(0, Volatile.Read(ref _cancelled)),
         Unknown: (int)Math.Max(0, Volatile.Read(ref _unknown)));
@@ -159,6 +191,8 @@ public sealed record SmtpOutcomeCountsSnapshot(
     int Authentication,
     int PolicyRejected,
     int Recipient,
+    int MailboxFull,
+    int MessageTooLarge,
     int Permanent,
     int Cancelled,
     int Unknown);

@@ -36,6 +36,24 @@ public sealed partial class MainForm
             cmbAuthMethod.SelectedItem = o.AuthMethod.ToString();
             txtUser.Text = o.Username;
             txtPass.Text = o.Password ?? string.Empty;
+            _accountDrafts.Clear();
+            if (o.Accounts is { Count: > 0 })
+            {
+                foreach (var account in o.Accounts)
+                {
+                    _accountDrafts.Add(new SmtpAccountDraft(
+                        account.Id,
+                        account.SmtpHost,
+                        account.Port,
+                        account.Security,
+                        account.UseAuthentication,
+                        account.Username,
+                        account.Password,
+                        Enabled: true,
+                        AuthMethod: account.AuthMethod));
+                }
+            }
+            RefreshAccountsListView();
             txtSourceIp.Text = o.SourceIp;
             txtIpv6Prefix.Text = o.Ipv6Prefix;
             numIpv6PrefixLen.Value = Math.Clamp(o.Ipv6PrefixLength, numIpv6PrefixLen.Minimum, numIpv6PrefixLen.Maximum);
@@ -65,6 +83,12 @@ public sealed partial class MainForm
             numBatchSize.Value = Math.Clamp(o.BatchSize, numBatchSize.Minimum, numBatchSize.Maximum);
             numBatchPause.Value = Math.Clamp(o.BatchPauseSeconds, numBatchPause.Minimum, numBatchPause.Maximum);
             numRetries.Value = Math.Clamp(o.MaxRetries, numRetries.Minimum, numRetries.Maximum);
+            chkCapacityRun.Checked = o.CapacityRun?.Enabled ?? false;
+            numCapacityMaxMessages.Value = Math.Clamp(o.CapacityRun?.MaxMessageCount ?? 1000, numCapacityMaxMessages.Minimum, numCapacityMaxMessages.Maximum);
+            numCapacityTargetMiB.Value = Math.Clamp((decimal)(o.CapacityRun?.TargetMimeBytes ?? 0) / (1024m * 1024m), numCapacityTargetMiB.Minimum, numCapacityTargetMiB.Maximum);
+            numCapacityMaxMessageMiB.Value = Math.Clamp((decimal)(o.CapacityRun?.MaxMimeMessageBytes ?? 0) / (1024m * 1024m), numCapacityMaxMessageMiB.Minimum, numCapacityMaxMessageMiB.Maximum);
+            numCapacityMaxPerMinute.Value = Math.Clamp(o.CapacityRun?.MaxMessagesPerMinute ?? 0, numCapacityMaxPerMinute.Minimum, numCapacityMaxPerMinute.Maximum);
+            chkCapacityStartupValidation.Checked = o.CapacityRun?.ValidateBeforeRun ?? false;
             chkDryRun.Checked = o.DryRun;
             chkTestMode.Checked = o.TestMode;
             txtAllowedDomains.Text = o.AllowedDomains;

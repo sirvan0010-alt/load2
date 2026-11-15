@@ -137,6 +137,54 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public async Task LastEffectiveInterval_IncludesWarmupAndMailboxPressureFloor()
+    {
+        var warmup = new SmartPaceController(BaseOptions(500) with
+        {
+            EnableWarmup = true,
+            WarmupPhases = "10;20"
+        });
+
+        await using (await warmup.AcquireSendSlotAsync(CancellationToken.None)) { }
+        Assert.Equal(1_000, warmup.LastEffectiveIntervalMs);
+
+        var mailboxPressure = new SmartPaceController(BaseOptions(0));
+        mailboxPressure.ApplyMailboxPressure(1);
+        await using (await mailboxPressure.AcquireSendSlotAsync(CancellationToken.None)) { }
+        Assert.Equal(1_000, mailboxPressure.LastEffectiveIntervalMs);
+    }
+
+    [Fact]
+    public async Task MailboxPressureFloor_CannotBeUndercutByJitter()
+    {
+        var pace = new SmartPaceController(BaseOptions(500, jitter: true) with { JitterPercent = 90 });
+        pace.ApplyMailboxPressure(1);
+
+        var sw = Stopwatch.StartNew();
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        sw.Stop();
+
+        Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(850),
+            $"Jitter shortened a mailbox-pressure floor: {sw.Elapsed.TotalMilliseconds:F0} ms.");
+    }
+
+    [Fact]
+    public void MailboxPressure_OnlyIncreasesGlobalInterval()
+    {
+        var pace = new SmartPaceController(BaseOptions(250));
+
+        pace.ApplyMailboxPressure(1);
+        var moderateInterval = pace.CurrentIntervalMs;
+        pace.ApplyMailboxPressure(2);
+        var criticalInterval = pace.CurrentIntervalMs;
+
+        Assert.True(moderateInterval >= 250);
+        Assert.True(criticalInterval >= moderateInterval);
+        Assert.True(criticalInterval >= 2_000);
+    }
+
+    [Fact]
     public async Task ZeroInterval_DoesNotBlock()
     {
         var pace = new SmartPaceController(BaseOptions(0));

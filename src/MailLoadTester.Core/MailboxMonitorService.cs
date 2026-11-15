@@ -41,6 +41,19 @@ public sealed class MailboxMonitorService
             await client.ConnectAsync(options.Host.Trim(), options.Port, socketOptions, cancellationToken).ConfigureAwait(false);
             await client.AuthenticateAsync(options.Username.Trim(), options.Password, cancellationToken).ConfigureAwait(false);
 
+            IReadOnlyList<MailboxFolderSnapshot> folderSnapshots;
+            try
+            {
+                folderSnapshots = await ReadFolderInventoryAsync(client, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (ex is NotSupportedException or ImapCommandException)
+            {
+                // Folder listing is an optional enhancement; do not lose quota/INBOX metrics
+                // merely because a provider restricts LIST or special-use discovery.
+                folderSnapshots = Array.Empty<MailboxFolderSnapshot>();
+            }
+
             var inbox = client.Inbox;
             long? inboxSizeBytes = null;
             try
@@ -92,7 +105,8 @@ public sealed class MailboxMonitorService
                 QuotaMessageCount: quotaMessageCount,
                 QuotaMessageLimit: quotaMessageLimit,
                 CheckedAt: DateTimeOffset.UtcNow,
-                Status: status);
+                Status: status,
+                Folders: folderSnapshots);
         }
         finally
         {
@@ -102,6 +116,97 @@ public sealed class MailboxMonitorService
                 catch { /* Preserve the original result/error; this is best-effort cleanup. */ }
             }
         }
+    }
+
+
+    private static async Task<IReadOnlyList<MailboxFolderSnapshot>> ReadFolderInventoryAsync(
+        ImapClient client,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<MailboxFolderSnapshot>();
+        if (client.PersonalNamespaces.Count == 0)
+            return result;
+
+        var pending = new Queue<IMailFolder>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var roots = await client.GetFoldersAsync(client.PersonalNamespaces[0], StatusItems.None, false, cancellationToken).ConfigureAwait(false);
+        foreach (var folder in roots)
+            pending.Enqueue(folder);
+
+        const int maxFolders = 100;
+        while (pending.Count > 0 && result.Count < maxFolders)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var folder = pending.Dequeue();
+            if (!visited.Add(folder.FullName))
+                continue;
+
+            int? count = null;
+            int? unread = null;
+            long? size = null;
+            try
+            {
+                await folder.StatusAsync(
+                    StatusItems.Count | StatusItems.Unread | StatusItems.Size,
+                    cancellationToken).ConfigureAwait(false);
+                count = folder.Count;
+                unread = folder.Unread;
+                size = ToInt64(folder.Size);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or ImapCommandException)
+            {
+                try
+                {
+                    await folder.StatusAsync(StatusItems.Count | StatusItems.Unread, cancellationToken)
+                        .ConfigureAwait(false);
+                    count = folder.Count;
+                    unread = folder.Unread;
+                }
+                catch (Exception nested) when (nested is NotSupportedException or ImapCommandException)
+                {
+                    // A folder that cannot return STATUS is still listed with unknown metrics.
+                }
+            }
+
+            var attributes = folder.Attributes;
+            var isInbox = attributes.HasFlag(FolderAttributes.Inbox) ||
+                string.Equals(folder.Name, "INBOX", StringComparison.OrdinalIgnoreCase);
+            var isJunk = attributes.HasFlag(FolderAttributes.Junk) || IsLikelyJunkFolder(folder.Name);
+            result.Add(new MailboxFolderSnapshot(
+                Name: folder.Name,
+                FullName: folder.FullName,
+                IsInbox: isInbox,
+                IsJunk: isJunk,
+                IsSent: attributes.HasFlag(FolderAttributes.Sent),
+                IsTrash: attributes.HasFlag(FolderAttributes.Trash),
+                MessageCount: count,
+                UnreadCount: unread,
+                SizeBytes: size));
+
+            if (result.Count >= maxFolders)
+                break;
+
+            try
+            {
+                var children = await folder.GetSubfoldersAsync(StatusItems.None, false, cancellationToken).ConfigureAwait(false);
+                foreach (var child in children)
+                    pending.Enqueue(child);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or ImapCommandException)
+            {
+                // Some servers do not expose recursive folder listing.
+            }
+        }
+
+        return result;
+    }
+
+    private static bool IsLikelyJunkFolder(string name)
+    {
+        var normalized = name.Trim().ToLowerInvariant();
+        return normalized is "junk" or "spam" or "bulk mail" or "junk e-mail" or
+            "nevyžádaná pošta" or "spamové zprávy" or "nevyžádané" or
+            "courrier indésirable" or "correo no deseado";
     }
 
     private static long? ToInt64(ulong? value)

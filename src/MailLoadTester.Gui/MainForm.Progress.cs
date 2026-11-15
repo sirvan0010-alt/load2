@@ -10,10 +10,34 @@ public sealed partial class MainForm
         if (IsDisposed) return;
 
         var done = u.Sent + u.Failed;
-        var total = Math.Max(1, (int)numCount.Value);
+        var total = Math.Max(1, _activeRunMessageCount > 0 ? _activeRunMessageCount : (int)numCount.Value);
         progressBar.Value = Math.Min(100, (int)(done * 100.0 / total));
         lblSentFailed.Text = $"OK:{u.Sent} FAIL:{u.Failed}";
         lblStatus.Text = u.CurrentStep;
+        UpdateQueueFlow(u.MessageStep);
+        if (u.MessageStep is MessageStep.RentingConnection or MessageStep.BuildingMime or MessageStep.SmtpSend)
+            UpdateProxyStatus(smtpProxyWasUsed: true);
+        _lastRunSmtpSendAttempts = u.SmtpSendAttempts;
+        _lastRunSmtp4xx = u.Smtp4xx;
+        _lastRunSmtp5xx = u.Smtp5xx;
+        _lastRunAccepted = u.Sent;
+        runMetricsChart?.AddSample(
+            DateTimeOffset.UtcNow,
+            u.SmtpSendAttempts,
+            u.Sent,
+            u.Smtp4xx,
+            u.Smtp5xx,
+            _mailboxLastSnapshot?.CheckedAt,
+            GetObservedQuotaMessageDelta(_mailboxLastSnapshot),
+            _mailboxLastSnapshot?.QuotaUsagePercent);
+        adaptiveControlChart?.AddSample(
+            DateTimeOffset.UtcNow,
+            u.EffectiveIntervalMs,
+            u.AdaptiveConcurrency,
+            u.WorkerCount);
+        lblCapacityRun.Text = u.CapacityMimeBytesReserved.HasValue
+            ? $"MIME: {FormatMailboxBytes(u.CapacityMimeBytesReserved)} / {(u.CapacityMimeBytesTarget.HasValue ? FormatMailboxBytes(u.CapacityMimeBytesTarget) : "bez limitu")}"
+            : string.Empty;
         if (u.EtaSeconds.HasValue)
             lblEta.Text = $"ETA: {u.EtaSeconds.Value:F0}s";
 
@@ -36,6 +60,42 @@ public sealed partial class MainForm
 
         if (u.MessageStep.HasValue)
         {
+            // The SMTP log tab used to be cleared at run start but never received
+            // entries. Publish the meaningful per-message lifecycle events here.
+            // Progress<T> is created on the UI thread, so this callback is marshalled
+            // back to the WinForms synchronization context before touching controls.
+            var (logStatus, logColor) = u.MessageStep.Value switch
+            {
+                MessageStep.SmtpSend => ("ODESÍLÁNÍ", Color.SteelBlue),
+                MessageStep.Succeeded => ("OK", Color.ForestGreen),
+                MessageStep.FailedTransient => ("RETRY", Color.DarkOrange),
+                MessageStep.FailedFinal => ("CHYBA", Color.Firebrick),
+                MessageStep.Cancelled => ("ZRUŠENO", Color.Gray),
+                _ => (string.Empty, Color.Gray)
+            };
+            if (!string.IsNullOrEmpty(logStatus))
+            {
+                var message = string.IsNullOrWhiteSpace(u.Status) ? u.CurrentStep : u.Status;
+                var recipient = string.Empty;
+                var arrow = message.IndexOf("→", StringComparison.Ordinal);
+                if (arrow >= 0)
+                {
+                    var tail = message[(arrow + 1)..].Trim();
+                    var end = tail.IndexOfAny([' ', '(']);
+                    recipient = end >= 0 ? tail[..end] : tail;
+                }
+                var detail = $"#{u.MessageIndex?.ToString() ?? "?"} · W{u.WorkerId?.ToString() ?? "—"} · {message}";
+                smtpLogTab?.AddLogEntry(recipient, logStatus, detail, logColor);
+
+                // Keep the main application log useful without writing every success
+                // line during a high-volume run. Errors/retries are never sampled out.
+                var shouldWriteMainLog = u.MessageStep.Value is
+                    MessageStep.FailedTransient or MessageStep.FailedFinal or MessageStep.Cancelled
+                    || (u.MessageStep.Value == MessageStep.Succeeded && (u.Sent <= 10 || u.Sent % 10 == 0));
+                if (shouldWriteMainLog)
+                    AppendLog($"{logStatus}: {detail}", logColor);
+            }
+
             int stepIdx = u.MessageStep.Value switch
             {
                 MessageStep.Queued => 0,
@@ -207,6 +267,16 @@ public sealed partial class MainForm
         rtbLog.SelectionLength = 0;
         rtbLog.SelectionColor = color;
         rtbLog.AppendText(message + Environment.NewLine);
+        const int maxUiLogChars = 1_000_000;
+        const int retainedUiLogChars = 800_000;
+        if (rtbLog.TextLength > maxUiLogChars)
+        {
+            var trimCount = rtbLog.TextLength - retainedUiLogChars;
+            rtbLog.Select(0, trimCount);
+            rtbLog.SelectedText = string.Empty;
+        }
+        rtbLog.SelectionStart = rtbLog.TextLength;
+        rtbLog.SelectionLength = 0;
         rtbLog.SelectionColor = rtbLog.ForeColor;
         rtbLog.ScrollToCaret();
     }

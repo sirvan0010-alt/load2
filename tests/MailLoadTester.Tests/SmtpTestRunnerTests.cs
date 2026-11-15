@@ -1,4 +1,5 @@
 using MailLoadTester;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -33,6 +34,161 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task CapacityRun_StopsBeforeTheNextSendWouldExceedMimeBudget()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.Accept);
+        var runner = new SmtpTestRunner();
+
+        var measurement = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 1, maxRetries: 0) with
+            {
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 1,
+                    TargetMimeBytes: 100_000)
+            },
+            new Progress<ProgressUpdate>(),
+            CancellationToken.None);
+
+        Assert.Equal(1, measurement.Sent);
+        Assert.Equal(1, measurement.SmtpSendAttempts);
+        Assert.Equal(1, measurement.CapacitySendReservations);
+        var oneMessageBytes = Assert.IsType<long>(measurement.CapacityMimeBytesReserved);
+        var acceptedBeforeBoundedRun = server.MessagesAccepted;
+        var dataAttemptsBeforeBoundedRun = server.DataAttempts;
+
+        var bounded = await runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 2, maxRetries: 0, maxConcurrency: 2) with
+            {
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 2,
+                    // Leave room for one message, but far less than two. MIME headers
+                    // (e.g. Date) can vary slightly between independently built messages.
+                    TargetMimeBytes: oneMessageBytes + 100)
+            },
+            new Progress<ProgressUpdate>(),
+            CancellationToken.None);
+
+        Assert.True(bounded.Cancelled);
+        Assert.Contains("Capacity stop", bounded.CapacityStopReason);
+        Assert.Equal(1, bounded.SmtpSendAttempts);
+        Assert.Equal(1, bounded.CapacitySendReservations);
+        var boundedReservedBytes = Assert.IsType<long>(bounded.CapacityMimeBytesReserved);
+        var boundedTargetBytes = oneMessageBytes + 100;
+        Assert.InRange(boundedReservedBytes, 1, boundedTargetBytes);
+        Assert.True(boundedReservedBytes * 2 > boundedTargetBytes,
+            "The configured budget must fit one message but not two messages of the measured size.");
+        Assert.InRange(server.MessagesAccepted - acceptedBeforeBoundedRun, 0, 1);
+        Assert.InRange(server.DataAttempts - dataAttemptsBeforeBoundedRun, 0, 1);
+    }
+
+    [Fact]
+    public async Task StartupValidation_IsSentBeforeWorkersAndIncludedInCapacityAccounting()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.Accept);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 3, maxRetries: 0, maxConcurrency: 3) with
+        {
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 3,
+                TargetMimeBytes: 100_000,
+                ValidateBeforeRun: true)
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.False(result.StartupValidationFailed);
+        Assert.False(result.Cancelled);
+        Assert.Equal(3, result.Requested);
+        Assert.Equal(3, result.Sent);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal(3, result.SmtpSendAttempts);
+        Assert.Equal(3, result.CapacitySendReservations);
+        Assert.Equal(3, server.MessagesAccepted);
+        Assert.Equal(3, server.DataAttempts);
+    }
+
+    [Fact]
+    public async Task StartupValidationFailure_IsFailFastAndNeverAutoRestarted()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailPermanent);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 5, maxRetries: 2) with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 3,
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 5,
+                TargetMimeBytes: 100_000,
+                ValidateBeforeRun: true)
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.True(result.StartupValidationFailed);
+        Assert.False(result.Cancelled);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(0, result.AutoRestartAttempts);
+        Assert.Equal(1, result.SmtpSendAttempts);
+        Assert.Equal(1, result.CapacitySendReservations);
+        Assert.Equal(1, server.DataAttempts);
+        Assert.Equal(0, server.MessagesAccepted);
+    }
+
+    [Fact]
+    public async Task MailboxFeedback_SlowsActiveCapacityRunAndReducesAdaptiveConcurrency()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(500));
+        var runner = new SmtpTestRunner();
+        var progress = new RecordingProgress<ProgressUpdate>();
+        var start = DateTimeOffset.UtcNow;
+        static MailboxMonitorSnapshot Quota(long used, DateTimeOffset at)
+            => new(0, 0, 0, used, 10_000, null, null, at, "quota available");
+
+        runner.SetMailboxFeedbackBaseline(Quota(7_000, start), stopThresholdPercent: 80, enabled: true);
+        using var cts = new CancellationTokenSource();
+        var run = runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 20, maxRetries: 0, maxConcurrency: 4) with
+            {
+                UseAdaptiveConcurrency = true,
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 20,
+                    TargetMimeBytes: 10_000_000,
+                    MaxMessagesPerMinute: 30)
+            },
+            progress,
+            cts.Token);
+
+        for (var i = 0; i < 100 && runner.CurrentAdaptiveConcurrency is null; i++)
+            await Task.Delay(20);
+
+        Assert.Equal(4, runner.CurrentAdaptiveConcurrency);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 2_000,
+            "The configured 30 messages/minute ceiling must remain active.");
+
+        Assert.Null(runner.ObserveMailboxSnapshot(Quota(7_100, start.AddSeconds(30))));
+        var moderate = runner.ObserveMailboxSnapshot(Quota(7_200, start.AddSeconds(60)));
+        Assert.Equal(1, moderate!.Severity);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 3_000);
+
+        var critical = runner.ObserveMailboxSnapshot(Quota(7_600, start.AddSeconds(90)));
+        Assert.Equal(2, critical!.Severity);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 6_000);
+        Assert.Equal(3, runner.CurrentAdaptiveConcurrency);
+
+        cts.Cancel();
+        var result = await run;
+        Assert.True(result.Cancelled);
+        Assert.Contains(progress.Updates, update => update.AdaptiveConcurrency == 4);
+        Assert.Contains(progress.Updates, update => update.EffectiveIntervalMs is >= 2_000);
+    }
+
+    [Fact]
     public async Task Permanent5xx_DoesNotRetry()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.FailPermanent);
@@ -63,6 +219,30 @@ public sealed class SmtpTestRunnerTests
         Assert.True(result.Smtp4xx >= 1);
         Assert.False(result.Cancelled);
         Assert.True(server.ConnectionCount >= 2, "Retry should use a new SMTP connection after the failed send.");
+    }
+
+    [Fact]
+    public async Task AutoRestart_PreservesAllTransientSmtpTelemetry()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailTransient);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 1, maxRetries: 1) with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 1,
+            UseAdaptiveConcurrency = true
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        // Each run makes one retry plus a final failed attempt. All four actual
+        // SMTP 451 responses must be present in the aggregated run telemetry.
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(1, result.AutoRestartAttempts);
+        Assert.Equal(4, result.Smtp4xx);
+        Assert.Equal(4, result.SmtpSendAttempts);
+        Assert.Equal(4, server.DataAttempts);
     }
 
     [Fact]
@@ -198,6 +378,13 @@ public sealed class SmtpTestRunnerTests
             $"Expected partial results, got Sent={result.Sent}, Failed={result.Failed}, Requested={result.Requested}.");
         Assert.NotNull(result.QueueMetrics);
         Assert.Equal(0, result.QueueMetrics!.QueueDepth);
+    }
+
+    private sealed class RecordingProgress<T> : IProgress<T>
+    {
+        private readonly ConcurrentQueue<T> _updates = new();
+        public IReadOnlyCollection<T> Updates => _updates.ToArray();
+        public void Report(T value) => _updates.Enqueue(value);
     }
 
     private static MailTestOptions CreateOptions(int port, int messageCount, int maxRetries, int maxConcurrency = 1) => new(

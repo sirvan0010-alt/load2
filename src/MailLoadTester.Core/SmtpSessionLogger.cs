@@ -18,11 +18,12 @@ public sealed class SmtpSessionLogger : IDisposable
     {
         PathSecurity.EnsureNoReparsePoints(path);
         _path = path;
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        if (append && File.Exists(_path))
-            File.AppendAllText(_path, $"\r\n=== Nový pokus (auto-restart): {DateTime.Now:O} ===\r\n\r\n");
-        else
-            File.WriteAllText(_path, $"=== MailLoadTester SMTP Session Log ===\r\nStarted: {DateTime.Now:O}\r\n\r\n");
+        SmtpSessionLogRetention.StartSession(
+            _path,
+            append,
+            append
+                ? $"\r\n=== Nový pokus (auto-restart): {DateTime.Now:O} ===\r\n\r\n"
+                : $"=== MailLoadTester SMTP Session Log ===\r\nStarted: {DateTime.Now:O}\r\n\r\n");
         _flushTimer = new Timer(_ => Flush(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
@@ -61,7 +62,7 @@ public sealed class SmtpSessionLogger : IDisposable
 
             try
             {
-                File.AppendAllText(_path, text);
+                SmtpSessionLogRetention.Append(_path, text);
             }
             catch (Exception ex)
             {

@@ -13,6 +13,7 @@ public sealed class SmartPaceController
     private int _successCount;
     private int _messagesInCurrentBurst;
     private int _currentIntervalMs;
+    private int _mailboxMinimumIntervalMs;
     private int _warmupPhaseIndex;
     private int _warmupMessagesInPhase;
     private readonly ConcurrentDictionary<string, RecipientWindow> _recipientWindows = new(StringComparer.OrdinalIgnoreCase);
@@ -23,6 +24,7 @@ public sealed class SmartPaceController
     private readonly LinkedList<long> _schedule = new();
     private readonly long _freq = Stopwatch.Frequency;
     private long _lastActualSendTicks;
+    private int? _lastEffectiveIntervalMs;
 
     private sealed class RecipientWindow
     {
@@ -57,6 +59,12 @@ public sealed class SmartPaceController
     public int CurrentIntervalMs
     {
         get { lock (_lock) return _currentIntervalMs; }
+    }
+
+    /// <summary>Last interval actually selected for a global SEND slot, including warm-up, jitter and mailbox floor.</summary>
+    public int? LastEffectiveIntervalMs
+    {
+        get { lock (_lock) return _lastEffectiveIntervalMs; }
     }
 
     public string StatusText
@@ -151,6 +159,9 @@ public sealed class SmartPaceController
                         var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
                         intervalMs = (int)Math.Max(0, intervalMs * factor);
                     }
+                    // Jitter may never undercut a mailbox-pressure slowdown.
+                    intervalMs = Math.Max(intervalMs, _mailboxMinimumIntervalMs);
+                    _lastEffectiveIntervalMs = intervalMs;
 
                     var now = Stopwatch.GetTimestamp();
                     if (intervalMs <= 0 || _lastActualSendTicks == 0)
@@ -344,6 +355,26 @@ public sealed class SmartPaceController
                 return;
             _greylistHits++;
             _greylistPauseUntil = DateTimeOffset.UtcNow.AddMinutes(Math.Max(1, _options.GreylistRetryMinutes));
+        }
+    }
+
+    /// <summary>
+    /// Applies mailbox quota pressure as a down-only pacing adjustment. It never
+    /// shortens an existing interval and therefore cannot violate operator rate caps.
+    /// </summary>
+    public void ApplyMailboxPressure(int severity)
+    {
+        if (severity <= 0) return;
+        lock (_lock)
+        {
+            var multiplier = severity >= 2 ? 2.0 : 1.5;
+            var floorMs = severity >= 2 ? 2_000 : 1_000;
+            var current = Math.Max(0, _currentIntervalMs);
+            var scaled = current <= 0 ? floorMs : (int)Math.Ceiling(current * multiplier);
+            var candidate = Math.Max(floorMs, scaled);
+            var max = _options.MaxIntervalMs > 0 ? _options.MaxIntervalMs : 60_000;
+            _currentIntervalMs = Math.Max(current, Math.Min(max, candidate));
+            _mailboxMinimumIntervalMs = Math.Max(_mailboxMinimumIntervalMs, _currentIntervalMs);
         }
     }
 

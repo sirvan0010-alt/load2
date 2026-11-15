@@ -93,7 +93,7 @@ public sealed partial class MainForm
         Controls.Add(pnlSafetyBanner);
 
         // === TabControl ===
-        tabs = new TabControl { Dock = DockStyle.Top, Height = 480 };
+        tabs = new TabControl { Dock = DockStyle.Fill };
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
@@ -103,32 +103,35 @@ public sealed partial class MainForm
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        txtHost = AddLabeledText(flConn, "SMTP Host:", "Např. smtp.gmail.com nebo IP adresa serveru.");
-        numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "25=plain, 587=STARTTLS, 465=Implicit TLS");
+        txtHost = AddLabeledEditableCombo(flConn, "SMTP Host:",
+            ["smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com", "smtp.office365.com",
+             "smtp.mail.yahoo.com", "smtp.mail.me.com", "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"],
+            "Začni psát adresu SMTP serveru nebo vyber poskytovatele z nabídky. Výběr automaticky nastaví běžný port, TLS a zapne SMTP autentizaci. Vše lze ručně změnit.");
+        txtHost.SelectionChangeCommitted += (_, _) => ApplySmtpHostPreset();
+        txtHost.DropDown += (_, _) => EnsureSmtpHostSuggestionsVisible();
+        flConn.Controls.Add(new Label
+        {
+            Text = "Zadej skutečný SMTP server svého poskytovatele. Příklad smtp.example.com je pouze ukázková hodnota.",
+            AutoSize = true, MaximumSize = new Size(420, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
+        numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "SMTP port. 587=STARTTLS, 465=Implicit TLS, 25/2525=závisí na poskytovateli.");
+        var cmbPortPreset = AddLabeledEditableCombo(flConn, "Běžné porty (rychlý výběr):",
+            ["587", "465", "25", "2525"],
+            "Vyber běžný SMTP port. Hodnota se přenese do číselného pole Port; vlastní port lze zadat přímo tam.");
+        cmbPortPreset.SelectionChangeCommitted += (_, _) =>
+        {
+            if (int.TryParse(cmbPortPreset.Text, out var selectedPort) && selectedPort >= 1 && selectedPort <= 65535)
+                numPort.Value = selectedPort;
+        };
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
-        txtSourceIp = AddLabeledText(flConn, "Source IP (volitelné):", "Váže SMTP socket na konkrétní lokální IP. Můžeš vybrat ze seznamu níže.");
-        var lblLocalIp = new Label { Text = "Lokální IPv4 (výběr):", AutoSize = true, Margin = new Padding(0, 6, 0, 2) };
-        flConn.Controls.Add(lblLocalIp);
-        cmbLocalIp = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 280 };
-        cmbLocalIp.Items.Add("(automaticky – systém)");
-        try
-        {
-            foreach (var ip in NetworkAdapterInfo.GetLocalIPv4Addresses())
-                cmbLocalIp.Items.Add(ip);
-        }
-        catch { /* ignore */ }
-        cmbLocalIp.SelectedIndex = 0;
-        cmbLocalIp.SelectedIndexChanged += (s, e) =>
-        {
-            if (cmbLocalIp.SelectedIndex > 0)
-                txtSourceIp.Text = cmbLocalIp.SelectedItem?.ToString() ?? "";
-            else if (cmbLocalIp.SelectedIndex == 0)
-                txtSourceIp.Text = "";
-        };
-        toolTip.SetToolTip(lblLocalIp, "Vyber lokální IPv4 adresu počítače, ze které se budou navazovat SMTP spojení.");
-        toolTip.SetToolTip(cmbLocalIp, "Vybere lokální IPv4 adresu pro IP binding (Source IP). Automatická volba ponechá výběr na operačním systému.");
-        flConn.Controls.Add(cmbLocalIp);
+        string[] localIpSuggestions;
+        try { localIpSuggestions = NetworkAdapterInfo.GetLocalIPv4Addresses().ToArray(); }
+        catch { localIpSuggestions = Array.Empty<string>(); }
+        txtSourceIp = AddLabeledEditableCombo(flConn, "Source IP (volitelné):",
+            localIpSuggestions,
+            "Začni psát lokální IPv4 adresu nebo rozbal seznam. Prázdné pole = automatický výběr operačním systémem.");
         txtIpv6Prefix = AddLabeledText(flConn, "IPv6 prefix (rotace):",
             "Např. 2001:db8:85a3:0:: — každé nové SMTP spojení dostane náhodnou adresu z /N. OS musí prefix routovat. Prázdné = vypnuto. Má přednost před Source IP.");
         numIpv6PrefixLen = AddLabeledNumeric(flConn, "IPv6 prefix length:", 1, 128, 64,
@@ -145,7 +148,7 @@ public sealed partial class MainForm
         var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
-        txtUser = AddLabeledText(flAuth, "Uživatel:", "SMTP username (často celý e-mail).");
+        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
         txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
         txtPass.PasswordChar = '●';
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
@@ -155,7 +158,17 @@ public sealed partial class MainForm
         numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
         btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
         flAuth.Controls.Add(btnTestConnection);
-        toolTip.SetToolTip(btnTestConnection, "Ověří spojení k serveru bez odeslání zprávy.");
+        toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
+        btnSendTest = new Button
+        {
+            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
+            Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
+            Cursor = Cursors.Hand
+        };
+        btnSendTest.FlatAppearance.BorderSize = 0;
+        flAuth.Controls.Add(btnSendTest);
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu na první adresu v poli Komu. Nepoužívá zátěžový režim.");
         gbAuth.Controls.Add(flAuth);
         tblSmtp.Controls.Add(gbAuth, 1, 0);
 
@@ -164,18 +177,29 @@ public sealed partial class MainForm
         InitAccountsTab(tabs);
 
         // --- Tab: Zpráva ---
-        var tabMsg = new TabPage("Zpráva") { Padding = new Padding(12) };
+        var tabMsg = new TabPage("E-mail (Od / Komu)") { Padding = new Padding(12) };
         var tblMsg = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
 
         var gbAddr = new GroupBox { Text = "Adresy", Dock = DockStyle.Fill };
         var flAddr = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        txtFrom = AddLabeledText(flAddr, "Od:", "Odesílatel (např. test@example.com).");
-        txtTo = AddLabeledText(flAddr, "Komu:", "Příjemci oddělení čárkou nebo novým řádkem.");
-        txtTo.Multiline = true; txtTo.Height = 50;
-        txtCc = AddLabeledText(flAddr, "CC:", "Kopie — oddělené čárkou.");
-        txtBcc = AddLabeledText(flAddr, "BCC:", "Skryté kopie — oddělené čárkou.");
+        txtFrom = AddEditableAddressCombo(flAddr, "Od:", "Adresa odesílatele; návrhy se doplňují z SMTP přihlášení a dříve zadaných adres.");
+        flAddr.Controls.Add(new Label
+        {
+            Text = "Zadej skutečnou adresu schránky (např. jmeno@gmail.com). smtp.gmail.com je pouze adresa serveru.",
+            AutoSize = true, MaximumSize = new Size(380, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
+        txtTo = AddEditableAddressCombo(flAddr, "Komu:", "PŘÍJEMCE E-MAILU. Začni psát adresu a vyber návrh; více adres odděl čárkou nebo středníkem.");
+        txtCc = AddEditableAddressCombo(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
+        txtBcc = AddEditableAddressCombo(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
+        flAddr.Controls.Add(new Label
+        {
+            Text = "CC = viditelná kopie · BCC = skrytá kopie. Obojí je volitelné; nevyužíváš-li je, nech pole prázdná.",
+            AutoSize = true, MaximumSize = new Size(380, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
         txtDisplayName = AddLabeledText(flAddr, "Zobrazované jméno:", "Jméno, které se zobrazí v mail klientu.");
         gbAddr.Controls.Add(flAddr);
         tblMsg.Controls.Add(gbAddr, 0, 0);
@@ -228,51 +252,93 @@ public sealed partial class MainForm
         gbContent.Controls.Add(flContent);
         tblMsg.Controls.Add(gbContent, 1, 0);
 
-        var gbAttach = new GroupBox { Text = "Přílohy", Dock = DockStyle.Bottom, Height = 160 };
-        var flAttach = new FlowLayoutPanel { Dock = DockStyle.Fill };
-        lstAttachments = new ListBox { Width = 280, Height = 90 };
-        flAttach.Controls.Add(lstAttachments);
-        var btnAdd = new Button { Text = "Přidat…", Width = 80, Height = 26 };
-        var btnRem = new Button { Text = "Odebrat", Width = 80, Height = 26 };
-        flAttach.Controls.Add(btnAdd);
-        flAttach.Controls.Add(btnRem);
+        // Keep message composition and optional MIME extras in a deterministic layout.
+        // A single root TableLayoutPanel avoids several Dock=Bottom group boxes competing
+        // for the same client area (which caused controls to overlap or disappear while resizing).
+        var msgLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0),
+            Margin = new Padding(0)
+        };
+        msgLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        msgLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        msgLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200F));
+
+        var msgOptionsTabs = new TabControl { Dock = DockStyle.Fill };
+        var attachmentsPage = new TabPage("Přílohy") { Padding = new Padding(6) };
+        var attachmentsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0)
+        };
+        attachmentsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        attachmentsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        attachmentsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+        lstAttachments = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+        var attachmentButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 4, 0, 0)
+        };
+        var btnAdd = new Button { Text = "Přidat…", Width = 90, Height = 28 };
+        var btnRem = new Button { Text = "Odebrat", Width = 90, Height = 28 };
+        attachmentButtons.Controls.Add(btnAdd);
+        attachmentButtons.Controls.Add(btnRem);
         btnAdd.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true }; if (dlg.ShowDialog() == DialogResult.OK) lstAttachments.Items.AddRange(dlg.FileNames); };
         btnRem.Click += (s, e) => { if (lstAttachments.SelectedIndex >= 0) lstAttachments.Items.RemoveAt(lstAttachments.SelectedIndex); };
+        attachmentsLayout.Controls.Add(lstAttachments, 0, 0);
+        attachmentsLayout.Controls.Add(attachmentButtons, 0, 1);
+        attachmentsPage.Controls.Add(attachmentsLayout);
         toolTip.SetToolTip(btnAdd, "Vybere jeden nebo více souborů, které se připojí ke každé testovací zprávě.");
         toolTip.SetToolTip(btnRem, "Odebere právě vybranou přílohu ze seznamu. Soubor na disku nesmaže.");
-        toolTip.SetToolTip(lstAttachments, "Seznam souborů připojených ke každé zprávě.");
-        gbAttach.Controls.Add(flAttach);
-        tabMsg.Controls.Add(gbAttach);
-        gbAttach.Dock = DockStyle.Bottom;
+        toolTip.SetToolTip(lstAttachments, "Seznam souborů připojených ke každé testovací zprávě.");
 
-        var gbInline = new GroupBox { Text = "Inline přílohy (HTML CID)", Dock = DockStyle.Bottom, Height = 100 };
-        var flInline = new FlowLayoutPanel { Dock = DockStyle.Fill };
-        lstInlineAttachments = new ListBox { Width = 280, Height = 60 };
-        flInline.Controls.Add(lstInlineAttachments);
-        var btnAddInline = new Button { Text = "Přidat…", Width = 80, Height = 26 };
-        var btnRemInline = new Button { Text = "Odebrat", Width = 80, Height = 26 };
-        flInline.Controls.Add(btnAddInline);
-        flInline.Controls.Add(btnRemInline);
+        var inlinePage = new TabPage("Inline obrázky") { Padding = new Padding(6) };
+        var inlineLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0)
+        };
+        inlineLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        inlineLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        inlineLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+        lstInlineAttachments = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+        var inlineButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 4, 0, 0)
+        };
+        var btnAddInline = new Button { Text = "Přidat obrázky…", Width = 130, Height = 28 };
+        var btnRemInline = new Button { Text = "Odebrat", Width = 90, Height = 28 };
+        inlineButtons.Controls.Add(btnAddInline);
+        inlineButtons.Controls.Add(btnRemInline);
         btnAddInline.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true, Filter = "Images|*.png;*.jpg;*.jpeg;*.gif;*.bmp" }; if (dlg.ShowDialog() == DialogResult.OK) lstInlineAttachments.Items.AddRange(dlg.FileNames); };
         btnRemInline.Click += (s, e) => { if (lstInlineAttachments.SelectedIndex >= 0) lstInlineAttachments.Items.RemoveAt(lstInlineAttachments.SelectedIndex); };
+        inlineLayout.Controls.Add(lstInlineAttachments, 0, 0);
+        inlineLayout.Controls.Add(inlineButtons, 0, 1);
+        inlinePage.Controls.Add(inlineLayout);
         toolTip.SetToolTip(btnAddInline, "Vybere obrázky, které se vloží přímo do HTML zprávy jako inline obsah.");
         toolTip.SetToolTip(btnRemInline, "Odebere vybraný inline obrázek ze seznamu. Soubor na disku nesmaže.");
         toolTip.SetToolTip(lstInlineAttachments, "Obrázky vložené do HTML těla. V HTML použij {{cid:nazev_souboru_bez_pripony}}.");
-        gbInline.Controls.Add(flInline);
-        tabMsg.Controls.Add(gbInline);
-        gbInline.Dock = DockStyle.Bottom;
 
-        var gbHeaders = new GroupBox { Text = "Vlastní hlavičky (X-…)", Dock = DockStyle.Bottom, Height = 100 };
-        txtHeaders = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9) };
+        var headersPage = new TabPage("Vlastní hlavičky") { Padding = new Padding(6) };
+        txtHeaders = new TextBox
+        {
+            Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical,
+            Font = new Font("Consolas", 10)
+        };
         txtHeaders.Text = "X-Test-ID: 123";
+        headersPage.Controls.Add(txtHeaders);
         toolTip.SetToolTip(txtHeaders, "Jedna hlavička na řádek. Formát: X-Něco: hodnota");
-        gbHeaders.Controls.Add(txtHeaders);
-        tabMsg.Controls.Add(gbHeaders);
-        gbHeaders.Dock = DockStyle.Bottom;
 
-        tabMsg.Controls.Add(tblMsg);
-        tblMsg.Dock = DockStyle.Fill;
-        tabs.TabPages.Add(tabMsg);
+        msgOptionsTabs.TabPages.Add(attachmentsPage);
+        msgOptionsTabs.TabPages.Add(inlinePage);
+        msgOptionsTabs.TabPages.Add(headersPage);
+        msgLayout.Controls.Add(tblMsg, 0, 0);
+        msgLayout.Controls.Add(msgOptionsTabs, 0, 1);
+        tabMsg.Controls.Add(msgLayout);
+
 
         // --- Tab: Test ---
         var tabTest = new TabPage("Test") { Padding = new Padding(12) };
@@ -284,8 +350,48 @@ public sealed partial class MainForm
         var flParams = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         numCount = AddLabeledNumeric(flParams, "Počet zpráv:", 1, 10000, 10, "Kolik zpráv celkem odeslat (1–10000).");
         numConcurrency = AddLabeledNumeric(flParams, "Paralelismus:", 1, 20, 1, "Kolik zpráv se odesílá současně (1–20).");
-        numInterval = AddLabeledNumeric(flParams, "Interval (ms):", 0, 3600000, 0, "GLOBÁLNÍ rozestup mezi odesláními (ne per-worker). 1000 ms ≈ max 1 msg/s i při 20 workerech.");
+        numInterval = AddLabeledNumeric(flParams, "Interval (ms):", 0, 3600000, 0, "Minimální GLOBÁLNÍ rozestup mezi začátky SMTP SEND (ne per-worker). 0 = bez pevného časového stropu; rychlost pak omezuje paralelismus, příprava zprávy a odezva serveru. 1000 ms = nejvýše přibližně 1 nový SEND/s i při 20 workerech.");
         numRetries = AddLabeledNumeric(flParams, "Retry:", 0, 5, 0, "Kolikrát zkusit znovu při dočasné chybě (0–5).");
+        chkCapacityRun = AddCheckBox(flParams, "Zapnout Capacity Run – bezpečnostní limity", false,
+            "Zapne pevné limity běhu. MIME bajty se měří až po sestavení zprávy a pluginech, těsně před SMTP SEND. Souhrnný rozpočet započítává i opakované pokusy. Nejde o velikost uloženou ve schránce.");
+        numCapacityMaxMessages = AddLabeledNumeric(flParams, "Capacity: max. zpráv:", 1, 10000, 1000,
+            "Horní limit logických zpráv pro tento běh. Skutečný počet je nejvýše také hodnota Počet zpráv.");
+        numCapacityTargetMiB = AddLabeledNumeric(flParams, "Capacity: celkový MIME limit (MiB):", 0, 1048576, 0,
+            "Maximální součet serializovaných MIME bajtů napříč všemi SEND pokusy včetně retry. 0 = bez limitu.", decimalPlaces: 2);
+        numCapacityMaxMessageMiB = AddLabeledNumeric(flParams, "Capacity: max. MIME zpráva (MiB):", 0, 1048576, 0,
+            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Aktivní SMTP SIZE limit se automaticky uplatní, pokud ho server po připojení oznámí.", decimalPlaces: 2);
+        numCapacityMaxPerMinute = AddLabeledNumeric(flParams, "Capacity: max. zpráv/min:", 0, 60000, 0,
+            "Pevný strop globálního tempa včetně retry. 0 = bez dodatečného stropu; nikdy nezrychlí již pomalejší interval.");
+        chkCapacityStartupValidation = AddCheckBox(flParams, "Před testem odeslat 1 malou validační zprávu", false,
+            "Výchozí vypnuto. Po výslovném spuštění odešle jednu malou zprávu prvnímu příjemci ještě před spuštěním workerů. Je zahrnuta do Počtu zpráv, Capacity: max. zpráv, MIME rozpočtu, SMTP pokusů i výsledků. Při chybě se hlavní zátěžový test vůbec nespustí; validační zpráva se automaticky neopakuje.");
+        btnCapacityEstimate = new Button { Text = "Odhad MIME objemu", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+        btnCapacityEstimate.Click += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); }
+            catch (Exception ex) { lblCapacityEstimate.Text = "Odhad nelze spočítat: " + ex.Message; }
+        };
+        lblCapacityEstimate = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(450, 0),
+            ForeColor = Color.DimGray,
+            Text = "Orientační MIME odhad se zobrazí po kliknutí na tlačítko.",
+            Margin = new Padding(3, 2, 3, 8)
+        };
+        chkCapacityRun.CheckedChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        numCount.ValueChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        numCapacityMaxMessages.ValueChanged += (_, _) =>
+        {
+            try { UpdateCapacityEstimate(BuildOptions()); } catch { }
+        };
+        flParams.Controls.Add(btnCapacityEstimate);
+        flParams.Controls.Add(lblCapacityEstimate);
         gbParams.Controls.Add(flParams);
         tblTest.Controls.Add(gbParams, 0, 0);
 
@@ -295,28 +401,76 @@ public sealed partial class MainForm
         numBatchSize = AddLabeledNumeric(flBatch, "Velikost dávky:", 1, 1000, 10, "Kolik zpráv v jedné dávce.");
         numBatchPause = AddLabeledNumeric(flBatch, "Pauza (s):", 1, 86400, 1, "Kolik sekund počkat mezi dávkami.");
         gbBatch.Controls.Add(flBatch);
-        tblTest.Controls.Add(gbBatch, 1, 0);
 
-        tabTest.Controls.Add(tblTest);
-        tblTest.Dock = DockStyle.Fill;
+        var rightTestPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        rightTestPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 220F));
+        rightTestPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        rightTestPanel.Controls.Add(gbBatch, 0, 0);
+        var chartTabs = new TabControl { Dock = DockStyle.Fill };
+        var smtpMetricsPage = new TabPage("SMTP / IMAP") { Padding = new Padding(3) };
+        runMetricsChart = new RunMetricsChart { Dock = DockStyle.Fill };
+        toolTip.SetToolTip(runMetricsChart, "Živý graf rychlosti SMTP SEND pokusů, SMTP Accepted a chyb za minutu, počítané z klouzavého přibližně desetisekundového okna. IMAP Δ/min je nezávislé pozorování změny schránky, nikoli důkaz, že konkrétní zprávy uložil tento běh.");
+        smtpMetricsPage.Controls.Add(runMetricsChart);
+        var adaptiveMetricsPage = new TabPage("Adaptivní řízení") { Padding = new Padding(3) };
+        adaptiveControlChart = new AdaptiveControlChart { Dock = DockStyle.Fill };
+        toolTip.SetToolTip(adaptiveControlChart, "Historie efektivního globálního SEND intervalu a aktuálního limitu adaptivní souběžnosti. Interval 0 ms znamená, že není nastaven pevný časový strop; skutečnou rychlost dále omezuje souběžnost a odezva SMTP.");
+        adaptiveMetricsPage.Controls.Add(adaptiveControlChart);
+        chartTabs.TabPages.Add(smtpMetricsPage);
+        chartTabs.TabPages.Add(adaptiveMetricsPage);
+        rightTestPanel.Controls.Add(chartTabs, 0, 1);
+        tblTest.Controls.Add(rightTestPanel, 1, 0);
 
-        var gbMode = new GroupBox { Text = "Režim", Dock = DockStyle.Bottom, Height = 110 };
-        var flMode = new FlowLayoutPanel { Dock = DockStyle.Fill };
+        var gbMode = new GroupBox { Text = "Režim", Dock = DockStyle.Fill };
+        var flMode = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
         chkDryRun = AddCheckBox(flMode, "Dry-run (bez reálného SMTP)", false, "Simuluje odesílání bez spojení k serveru. Pipeline cesty je v dry-run jen ilustrativní, ne skutečná SMTP komunikace.");
         chkTestMode = AddCheckBox(flMode, "Test mode (omezit domény)", false, "Povolí odesílat jen na vybrané domény.");
         txtAllowedDomains = AddLabeledText(flMode, "Povolené domény:", "Seznam domén oddělených čárkou (např. example.com,test.cz).");
         gbMode.Controls.Add(flMode);
-        tabTest.Controls.Add(gbMode);
+
+        // Use explicit rows instead of mixing Dock=Fill and Dock=Bottom on the tab page.
+        // This prevents the mode panel from covering or being covered by the parameter/chart area.
+        var testLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        testLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        testLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        testLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110F));
+        testLayout.Controls.Add(tblTest, 0, 0);
+        testLayout.Controls.Add(gbMode, 0, 1);
+        tabTest.Controls.Add(testLayout);
         tabs.TabPages.Add(tabTest);
 
         // --- Tab: Proxy ---
         var tabProxy = new TabPage("Proxy") { Padding = new Padding(12) };
         var flProxy = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (jedna)", false, "Jedna SOCKS5 proxy níže. Pro více serverů použij seznam rotace.");
+        chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
+        lblProxyStatus = new Label
+        {
+            AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
+            Margin = new Padding(0, 4, 0, 12), BorderStyle = BorderStyle.FixedSingle,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
+        };
+        flProxy.Controls.Add(lblProxyStatus);
+        chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
+        txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
+        txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
+        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9050, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
+        numProxyPort.ValueChanged += (_, _) => UpdateProxyStatus();
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
-        txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (např. 127.0.0.1).");
-        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 1080, "SOCKS5 proxy port (Tor používá 9050).");
+        txtProxyList.TextChanged += (_, _) => UpdateProxyStatus();
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
@@ -326,17 +480,36 @@ public sealed partial class MainForm
         // --- Tab: Pokročilé ---
         var tabAdv = new TabPage("Pokročilé") { Padding = new Padding(12) };
         var flAdv = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkDirectMx = AddCheckBox(flAdv, "Direct MX delivery", false, "Místo relay SMTP se zeptá DNS na MX záznam a mluví přímo s cílovým serverem.");
+        chkDirectMx = AddCheckBox(flAdv, "Direct MX delivery", false, "Přímé doručování na MX server příjemce bez SMTP relay.");
+        flAdv.Controls.Add(new Label
+        {
+            Text = "Doporučení: běžně používej SMTP účet (např. Gmail). Direct MX zapínej jen pro vlastní správně nastavenou doménu.",
+            AutoSize = true, MaximumSize = new Size(760, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(24, 0, 0, 4)
+        });
+        var lnkDirectMxHelp = new LinkLabel
+        {
+            Text = "Proč Direct MX není anonymní a kdy ho použít",
+            AutoSize = true, Margin = new Padding(24, 0, 0, 10)
+        };
+        lnkDirectMxHelp.LinkClicked += (_, _) => MessageBox.Show(
+            "SMTP účet (doporučeno pro běžné použití)\n" +
+            "Připojíš se k poskytovateli, například Gmailu, a odešleš zprávu přes ověřený účet. Adresa odesílatele musí být účet nebo povolený alias.\n\n" +
+            "Direct MX (jen pro vlastní doménu)\n" +
+            "Aplikace kontaktuje přímo poštovní server příjemce. Potřebuješ doménu a správné DNS/e-mailové nastavení (zejména SPF, DKIM, DMARC a reverzní DNS/PTR). Bez toho bývá doručování nespolehlivé.\n\n" +
+            "Důležité: Direct MX neznamená anonymitu. Příjemce může z hlaviček a síťových záznamů zjistit odesílající IP/server. Adresa From je stále viditelná a musí být platná. Gmail SMTP ani Direct MX nezaručují skrytí identity odesílatele.",
+            "SMTP vs. Direct MX", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        flAdv.Controls.Add(lnkDirectMxHelp);
         chkPreWarm = AddCheckBox(flAdv, "Pre-warm spojení", false, "Před testem vytvoří a ověří všechna spojení v poolu — první dávka nečeká na handshake.");
-        chkAdaptive = AddCheckBox(flAdv, "Adaptive concurrency", false, "Při návalu 4xx/timeout automaticky snižuje paralelismus, po chvíli zase zvedne.");
+        chkAdaptive = AddCheckBox(flAdv, "Adaptive concurrency", false, "Začíná na nastaveném max. paralelismu. V přibližně 10s oknech při tlaku serveru (4xx/timeout/transport) paralelismus sníží; po zdravých oknech ho postupně obnoví nejvýše na nastavený počet workerů. Samo o sobě nezvyšuje rychlost nad globální interval a nikdy nepřekročí MaxConcurrency.");
         chkCircuit = AddCheckBox(flAdv, "Circuit breaker", false, "Po N po sobě jdoucích selháních stejného typu přestane zkoušet a vrátí výsledek.");
         numCircuitThreshold = AddLabeledNumeric(flAdv, "Circuit breaker threshold:", 1, 50, 5, "Kolik po sobě jdoucích selhání otevře jistič.");
         chkDashboard = AddCheckBox(flAdv, "HTTP Dashboard", false, "Spustí mini webový server na localhost — otevři prohlížeč a sleduj live grafy.");
         numDashboardPort = AddLabeledNumeric(flAdv, "Dashboard port:", 1, 65535, 5000, "Port pro live dashboard (výchozí 5000).");
         chkAutoRestart = AddCheckBox(flAdv, "Auto-restart při selhání", false, "POZOR: znovu odešle CELÝ test (může doručit zprávy vícekrát). Defaultně vypnuto. Snižuje paralelismus po většinovém selhání.");
         numAutoRestartAttempts = AddLabeledNumeric(flAdv, "Max auto-restartů:", 1, 10, 3, "Kolikrát zkusit restart při selhání.");
-        chkSessionLog = AddCheckBox(flAdv, "SMTP session log", false, "Uloží kompletní SMTP konverzaci (C:/S:) do .txt pro debug.");
-        txtSessionLogPath = AddLabeledText(flAdv, "Session log soubor:", "Cesta k .txt souboru pro SMTP log.");
+        chkSessionLog = AddCheckBox(flAdv, "SMTP session log", false, "Volitelné podrobné SMTP C:/S: logování, ve výchozím stavu vypnuté. Pozor: může obsahovat adresy, hlavičky a obsah zpráv; autentizační tajemství se redigují. Aktivní soubor má limit 8 MiB a uchovávají se nejvýše 3 zálohy (celkem přibližně 32 MiB).");
+        txtSessionLogPath = AddLabeledText(flAdv, "Session log soubor:", "Cílová cesta SMTP session logu. Při novém běhu se předchozí soubor přesune do .1 až .3; během běhu se soubor automaticky rotuje při 8 MiB. Starší zálohy nad limit se odstraní.");
         tabAdv.Controls.Add(flAdv);
         tabs.TabPages.Add(tabAdv);
 
@@ -438,29 +611,44 @@ public sealed partial class MainForm
         tabPace.Controls.Add(flPace);
         tabs.TabPages.Add(tabPace);
 
-        // Záložka rychlého SMTP logu (DataGrid, max 1000 řádků, thread-safe)
-        var tabSmtpLog = new TabPage("SMTP log") { Padding = new Padding(4) };
+        // SMTP event log is hosted beside the application log in the live workspace,
+        // not buried among configuration tabs.
         smtpLogTab = new SmtpLogTab();
-        tabSmtpLog.Controls.Add(smtpLogTab);
-        tabs.TabPages.Add(tabSmtpLog);
+        toolTip.SetToolTip(smtpLogTab, "Živý přehled SMTP odesílání. Zobrazuje nejvýše 1 000 posledních událostí; nejde o trvalý diskový protokol.");
         InitializeMailboxMonitorTab();
-
-        Controls.Add(tabs);
 
         // === Bottom area ===
         var bottomPanel = new Panel { Dock = DockStyle.Fill };
-        var bottomTbl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        bottomTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68F));
-        bottomTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
+        // Resizable live workspace: drag the splitter to give more room to the
+        // application log or to the delivery pipeline / worker status area.
+        bottomSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(1280, 600),
+            Orientation = Orientation.Vertical,
+            SplitterDistance = 640,
+            SplitterWidth = 8,
+            Panel1MinSize = 400,
+            Panel2MinSize = 300,
+            BackColor = Color.FromArgb(220, 224, 230)
+        };
 
         rtbLog = new RichTextBox
         {
             Dock = DockStyle.Fill, ReadOnly = true,
             BackColor = Color.FromArgb(30, 30, 30), ForeColor = Color.LightGray,
-            Font = new Font("Consolas", 9.5f), BorderStyle = BorderStyle.None,
+            Font = new Font("Consolas", 10F), BorderStyle = BorderStyle.None,
             ScrollBars = RichTextBoxScrollBars.Vertical
         };
-        bottomTbl.Controls.Add(rtbLog, 0, 0);
+        toolTip.SetToolTip(rtbLog, "Průběžný aplikační log pouze v paměti. Při novém běhu se vymaže a při delším běhu se automaticky zkracuje na posledních přibližně 800 tisíc znaků; nevytváří samostatný diskový soubor.");
+        var logTabs = new TabControl { Dock = DockStyle.Fill };
+        var appLogPage = new TabPage("Aplikační log") { Padding = new Padding(3) };
+        var smtpLogPage = new TabPage("SMTP události") { Padding = new Padding(3) };
+        appLogPage.Controls.Add(rtbLog);
+        smtpLogPage.Controls.Add(smtpLogTab);
+        logTabs.TabPages.Add(appLogPage);
+        logTabs.TabPages.Add(smtpLogPage);
+        bottomSplit.Panel1.Controls.Add(logTabs);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
 
@@ -468,7 +656,7 @@ public sealed partial class MainForm
         var lblPath = new Label
         {
             Text = "Cesta odesílání (PC → cílový server):",
-            AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold), Dock = DockStyle.Top
+            AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold), Dock = DockStyle.Top
         };
         rightPanel.Controls.Add(lblPath);
         pnlDeliveryPath = new FlowLayoutPanel
@@ -480,7 +668,7 @@ public sealed partial class MainForm
         BuildDeliveryPathPipeline();
         rightPanel.Controls.Add(pnlDeliveryPath);
 
-        var lblWorkers = new Label { Text = "Workery:", AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold), Dock = DockStyle.Top };
+        var lblWorkers = new Label { Text = "Workery:", AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold), Dock = DockStyle.Top };
         pnlWorkers = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 100, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, AutoScroll = true, BackColor = Color.FromArgb(245, 245, 245) };
         rightPanel.Controls.Add(pnlWorkers);
         rightPanel.Controls.Add(lblWorkers);
@@ -495,7 +683,7 @@ public sealed partial class MainForm
                 Text = _checklistTexts[i], AutoSize = true,
                 Padding = new Padding(6, 3, 6, 3), Margin = new Padding(2),
                 BackColor = Color.LightGray, ForeColor = Color.DimGray,
-                Font = new Font("Segoe UI", 8.5f), BorderStyle = BorderStyle.FixedSingle
+                Font = new Font("Segoe UI", 9.5f), BorderStyle = BorderStyle.FixedSingle
             };
             pnlCheck.Controls.Add(_checklistLabels[i]);
             if (i < 5)
@@ -503,9 +691,40 @@ public sealed partial class MainForm
         }
         rightPanel.Controls.Add(pnlCheck);
 
-        bottomTbl.Controls.Add(rightPanel, 1, 0);
-        bottomPanel.Controls.Add(bottomTbl);
-        Controls.Add(bottomPanel);
+        var lblQueueTitle = new Label
+        {
+            Text = "Živá cesta zprávy",
+            AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Dock = DockStyle.Top, Padding = new Padding(0, 8, 0, 4)
+        };
+        pnlQueueFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top, Height = 44, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, AutoScroll = true, Padding = new Padding(3),
+            BackColor = Color.FromArgb(245, 247, 250)
+        };
+        BuildQueueFlow();
+        rightPanel.Controls.Add(pnlQueueFlow);
+        rightPanel.Controls.Add(lblQueueTitle);
+
+        bottomSplit.Panel2.Controls.Add(rightPanel);
+        bottomPanel.Controls.Add(bottomSplit);
+
+        // Resize the configuration tabs and the live workspace independently.
+        workspaceSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(1280, 800),
+            Orientation = Orientation.Horizontal,
+            SplitterDistance = 390,
+            SplitterWidth = 8,
+            Panel1MinSize = 260,
+            Panel2MinSize = 180,
+            BackColor = Color.FromArgb(220, 224, 230)
+        };
+        workspaceSplit.Panel1.Controls.Add(tabs);
+        workspaceSplit.Panel2.Controls.Add(bottomPanel);
+        Controls.Add(workspaceSplit);
 
         // === StatusStrip ===
         statusStrip = new StatusStrip { Dock = DockStyle.Bottom };
@@ -513,14 +732,86 @@ public sealed partial class MainForm
         lblStatus = new ToolStripStatusLabel { Text = "Připraveno", Spring = true };
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
+        lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
         statusStrip.Items.Add(lblSentFailed);
+        statusStrip.Items.Add(lblCapacityRun);
         Controls.Add(statusStrip);
+
+        // WinForms docks controls in z-order. Keep the bottom status strip first,
+        // then both top bars, and the Fill workspace last; otherwise the Fill
+        // SplitContainer can consume the entire client area and hide the top bars.
+        Controls.SetChildIndex(workspaceSplit, 0);
+        Controls.SetChildIndex(pnlSafetyBanner, 1);
+        Controls.SetChildIndex(topPanel, 2);
+        Controls.SetChildIndex(statusStrip, 3);
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
         ApplyFallbackToolTips(this);
+        UpdateProxyStatus();
+        UpdateQueueFlow(null);
+    }
+
+    private static string LayoutPreferencesFile =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MailLoadTester", "ui-layout.json");
+
+    private sealed record UiLayoutPreferences(int WorkspaceSplitterDistance, int BottomSplitterDistance);
+
+    private void LoadLayoutPreferences()
+    {
+        try
+        {
+            var path = LayoutPreferencesFile;
+            if (!File.Exists(path))
+                return;
+
+            var preferences = System.Text.Json.JsonSerializer.Deserialize<UiLayoutPreferences>(File.ReadAllText(path));
+            if (preferences is null)
+                return;
+
+            if (workspaceSplit.Width > 0 && workspaceSplit.Height > 0)
+            {
+                var max = Math.Max(workspaceSplit.Panel1MinSize,
+                    workspaceSplit.Height - workspaceSplit.Panel2MinSize - workspaceSplit.SplitterWidth);
+                workspaceSplit.SplitterDistance = Math.Clamp(
+                    preferences.WorkspaceSplitterDistance, workspaceSplit.Panel1MinSize, max);
+            }
+
+            if (bottomSplit.Width > 0)
+            {
+                var max = Math.Max(bottomSplit.Panel1MinSize,
+                    bottomSplit.Width - bottomSplit.Panel2MinSize - bottomSplit.SplitterWidth);
+                bottomSplit.SplitterDistance = Math.Clamp(
+                    preferences.BottomSplitterDistance, bottomSplit.Panel1MinSize, max);
+            }
+        }
+        catch
+        {
+            // A damaged or inaccessible optional UI preference must never prevent startup.
+        }
+    }
+
+    private void SaveLayoutPreferences()
+    {
+        try
+        {
+            var path = LayoutPreferencesFile;
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            var preferences = new UiLayoutPreferences(
+                workspaceSplit.SplitterDistance,
+                bottomSplit.SplitterDistance);
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(preferences));
+        }
+        catch
+        {
+            // Layout persistence is best-effort and must not block application shutdown.
+        }
     }
 
     private TextBox AddLabeledText(Control parent, string label, string tip)
@@ -533,11 +824,80 @@ public sealed partial class MainForm
         return txt;
     }
 
-    private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip)
+    private ComboBox AddEditableAddressCombo(Control parent, string label, string tip)
     {
         var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
         parent.Controls.Add(lbl);
-        var num = new NumericUpDown { Minimum = min, Maximum = max, Value = value, Width = 120, Margin = new Padding(0, 0, 0, 4) };
+        var cmb = new ComboBox
+        {
+            Width = 360,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
+            IntegralHeight = false,
+            MaxDropDownItems = 10,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+        parent.Controls.Add(cmb);
+        SetFieldToolTip(lbl, cmb, tip);
+        return cmb;
+    }
+
+    private void EnsureSmtpHostSuggestionsVisible()
+    {
+        // Keep the provider list explicit even when Windows autocomplete is disabled
+        // by accessibility settings or keyboard navigation.
+        if (txtHost.Items.Count == 0)
+            txtHost.Items.AddRange(new object[]
+            {
+                "smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com",
+                "smtp.office365.com", "smtp.mail.yahoo.com", "smtp.mail.me.com",
+                "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"
+            });
+    }
+
+    private ComboBox AddLabeledEditableCombo(Control parent, string label, string[] suggestions, string tip)
+    {
+        var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        parent.Controls.Add(lbl);
+        var cmb = new ComboBox
+        {
+            Width = 360,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+        cmb.Items.AddRange(suggestions);
+        parent.Controls.Add(cmb);
+        SetFieldToolTip(lbl, cmb, tip);
+        return cmb;
+    }
+
+    private void ApplySmtpHostPreset()
+    {
+        var host = txtHost.Text.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(host)) return;
+
+        // Submission defaults for common providers. The operator can still edit
+        // port/security/authentication after selecting a suggestion.
+        if (host is "smtp.seznam.cz" or "smtp.gmail.com" or "smtp-mail.outlook.com"
+            or "smtp.office365.com" or "smtp.mail.yahoo.com" or "smtp.mail.me.com"
+            or "smtp.zoho.com" or "smtp.zoho.eu" or "smtp.fastmail.com")
+        {
+            numPort.Value = 587;
+            cmbSecurity.SelectedItem = "StartTls";
+            chkAuth.Checked = true;
+            if (cmbAuthMethod.SelectedItem is null)
+                cmbAuthMethod.SelectedItem = "Auto";
+        }
+    }
+
+    private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip, int decimalPlaces = 0)
+    {
+        var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        parent.Controls.Add(lbl);
+        var num = new NumericUpDown { Minimum = min, Maximum = max, Value = value, DecimalPlaces = decimalPlaces, Increment = decimalPlaces > 0 ? 0.1m : 1m, Width = 120, Margin = new Padding(0, 0, 0, 4) };
         parent.Controls.Add(num);
         var rangeTip = $"{tip}{(string.IsNullOrWhiteSpace(tip) ? string.Empty : Environment.NewLine)}Rozsah: {min} až {max}. Výchozí hodnota: {value}.";
         SetFieldToolTip(lbl, num, rangeTip);
@@ -617,6 +977,7 @@ public sealed partial class MainForm
         chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
         chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
+        btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numRandomAttachmentSizeMb.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numConcurrency.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
@@ -630,9 +991,9 @@ public sealed partial class MainForm
 
     private void SetDefaults()
     {
-        txtHost.Text = "smtp.example.com";
-        txtFrom.Text = "test@example.com";
-        txtTo.Text = "user@example.com";
+        txtHost.Text = "";
+        txtFrom.Text = "";
+        txtTo.Text = "";
         txtSubject.Text = "MailLoadTester test";
         txtBody.Text = "Toto je testovací zpráva generovaná aplikací MailLoadTester.";
         txtDisplayName.Text = "MailLoadTester";
