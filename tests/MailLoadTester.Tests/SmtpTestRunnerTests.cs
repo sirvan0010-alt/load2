@@ -83,6 +83,62 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task StartupValidation_IsSentBeforeWorkersAndIncludedInCapacityAccounting()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.Accept);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 3, maxRetries: 0, maxConcurrency: 3) with
+        {
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 3,
+                TargetMimeBytes: 100_000,
+                ValidateBeforeRun: true)
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.False(result.StartupValidationFailed);
+        Assert.False(result.Cancelled);
+        Assert.Equal(3, result.Requested);
+        Assert.Equal(3, result.Sent);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal(3, result.SmtpSendAttempts);
+        Assert.Equal(3, result.CapacitySendReservations);
+        Assert.Equal(3, server.MessagesAccepted);
+        Assert.Equal(3, server.DataAttempts);
+    }
+
+    [Fact]
+    public async Task StartupValidationFailure_IsFailFastAndNeverAutoRestarted()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.FailPermanent);
+        var runner = new SmtpTestRunner();
+        var options = CreateOptions(server.Port, messageCount: 5, maxRetries: 2) with
+        {
+            AutoRestartOnFailure = true,
+            AutoRestartMaxAttempts = 3,
+            CapacityRun = new CapacityRunLimits(
+                Enabled: true,
+                MaxMessageCount: 5,
+                TargetMimeBytes: 100_000,
+                ValidateBeforeRun: true)
+        };
+
+        var result = await runner.RunAsync(options, new Progress<ProgressUpdate>(), CancellationToken.None);
+
+        Assert.True(result.StartupValidationFailed);
+        Assert.False(result.Cancelled);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(0, result.AutoRestartAttempts);
+        Assert.Equal(1, result.SmtpSendAttempts);
+        Assert.Equal(1, result.CapacitySendReservations);
+        Assert.Equal(1, server.DataAttempts);
+        Assert.Equal(0, server.MessagesAccepted);
+    }
+
+    [Fact]
     public async Task MailboxFeedback_SlowsActiveCapacityRunAndReducesAdaptiveConcurrency()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(500));
