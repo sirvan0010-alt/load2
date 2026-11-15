@@ -39,11 +39,18 @@
 - Tests for localized folder names, missing quota, unsupported STATUS SIZE, and read-only behavior.
 
 ### M4 — Capacity-run configuration and accounting
-- Add target total bytes, target message count, maximum message size, rate ceiling and safety stop.
-- Track attempted, SMTP-accepted, transient-rejected, permanent-rejected, verified-stored messages separately.
-- Track prepared MIME bytes, server-accepted SMTP bytes (only if measured), mailbox used/quota bytes separately.
-- Estimate Base64 MIME expansion and show the estimate before sending large attachments.
-- Auto-stop only on a real quota measurement or explicit operator limit; disclose polling overshoot.
+- [x] Add optional, profile-persisted capacity-run settings: logical message-count ceiling, cumulative MIME-byte budget, per-message MIME-byte ceiling, and messages/minute ceiling.
+- [x] Apply count/rate ceilings before run startup. The rate ceiling is global and also applies to retry SEND attempts; it never accelerates an already slower configured interval.
+- [x] Serialize the fully built MIME message after payload plugins and measure its actual serialized size immediately before SMTP SEND. SMTPUTF8 format is used for the measurement when enabled.
+- [x] Enforce per-message and cumulative MIME-byte budgets atomically across workers and AutoRestart attempts. If the next SEND would exceed a configured budget, stop the run rather than send it.
+- [x] Count every admitted SEND attempt against the cumulative MIME budget, including retries. This is conservative because a timeout/rejection may occur after some or all DATA bytes reached the server.
+- [x] Add unit tests for count/rate planning, exact byte-budget boundaries, per-message ceiling, retry accounting, validation and profile round-trip.
+- [ ] Add visible live counters for reserved MIME bytes and stop reason.
+- [ ] Compare configured per-message ceiling with a discovered SMTP SIZE limit and use the stricter value automatically.
+- [ ] Track attempted, SMTP-accepted, transient-rejected, permanent-rejected, and independently verified stored messages separately.
+- [ ] Track prepared MIME bytes, measured serialized MIME bytes, actual SMTP wire bytes only if measured, and mailbox used/quota bytes separately.
+- [ ] Estimate Base64 MIME expansion before send for operator preview; the runtime guard uses serialized MIME bytes rather than the estimate.
+- [ ] Auto-stop on a real quota measurement only when the IMAP STORAGE quota is available; disclose polling overshoot.
 
 ### M5 — Adaptive pacing and bounded calibration
 - Begin with one small validation message only when the operator explicitly starts the run.
@@ -80,5 +87,7 @@
 - **Tests added:** fake local SMTP server verifies SIZE/EHLO parsing and that discovery issues no MAIL or DATA command; MIME sizing tests cover 1 GiB and the 25 MiB message ceiling.
 - **M2 in progress:** enhanced SMTP status codes now distinguish mailbox full (5.2.2), message too large (5.3.4), and policy refusal (5.7.x). These are non-retryable; temporary 4xx remain bounded-retry candidates. The observed-response guidance now explains the correct capacity/size/policy action.
 - **M3 in progress:** IMAP monitor now enumerates a bounded set of folders (up to 100), reads supported STATUS count/unread/size values without fetching message bodies, uses SPECIAL-USE Junk/Sent/Trash/Inbox flags with localized-name fallback for Junk, and keeps unknown folder metrics null. Restricted folder listing does not block the existing quota/INBOX check. GUI separates quota message count, INBOX count and Junk/Spam count.
-- **Not yet complete:** capacity-run controls, integration of verified mailbox deltas into adaptive pacing, and multi-series live chart.
-- **Verification state:** CI and Windows package workflows are pending for the current branch head. Do not merge until they pass and a Windows GUI run is performed.
+- **M4 implementation started:** optional CapacityRunLimits are persisted in profiles; count/rate ceilings are applied at startup; serialized MIME message sizes are guarded per-message and cumulatively across concurrent workers and AutoRestart attempts. Capacity byte budgets count retries and are explicitly MIME-byte budgets, not SMTP wire bytes or mailbox growth. The UI exposes all four controls. Automated tests cover planner, exact budget boundaries, retry accounting, validation and profile persistence.
+- **M4 remaining:** live budget counters/stop reason, automatic stricter SMTP SIZE integration, and independent counters/reporting for accepted vs verified-stored messages.
+- **M5/M6 not yet implemented:** verified mailbox deltas into adaptive pacing and the multi-series live chart.
+- **Verification state:** run CI and Windows packaging against the latest branch head after this implementation slice; then perform manual Windows GUI verification. Do not merge until all release acceptance criteria pass.
