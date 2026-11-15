@@ -53,26 +53,17 @@ public static class SmtpSessionLogRetention
 
     private static void Rotate(string path)
     {
-        for (var index = MaxBackupFiles; index >= 1; index--)
+        for (var index = MaxBackupFiles; index >= 2; index--)
         {
+            var source = path + "." + (index - 1);
             var destination = path + "." + index;
+            PathSecurity.EnsureNoReparsePoints(source);
             PathSecurity.EnsureNoReparsePoints(destination);
 
-            if (index == MaxBackupFiles)
-            {
-                if (File.Exists(destination))
-                    File.Delete(destination);
-                continue;
-            }
-
-            var source = path + "." + (index - 1);
-            PathSecurity.EnsureNoReparsePoints(source);
+            if (File.Exists(destination))
+                File.Delete(destination);
             if (File.Exists(source))
-            {
-                if (File.Exists(destination))
-                    File.Delete(destination);
                 File.Move(source, destination);
-            }
         }
 
         if (File.Exists(path))
