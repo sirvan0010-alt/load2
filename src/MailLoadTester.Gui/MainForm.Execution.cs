@@ -73,7 +73,13 @@ public sealed partial class MainForm
             // CLI --unauthorized also grants live send outside Test mode.
             Unauthorized: !chkTestMode.Checked
                 || AuthorizationGate.HasUnauthorizedFlag(Environment.GetCommandLineArgs()),
-            Accounts: BuildAccountsFromUi());
+            Accounts: BuildAccountsFromUi(),
+            CapacityRun: new CapacityRunLimits(
+                Enabled: chkCapacityRun.Checked,
+                MaxMessageCount: (int)numCapacityMaxMessages.Value,
+                TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
+                MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
+                MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value));
     }
 
     private async Task OnStartAsync()
