@@ -36,10 +36,27 @@ public sealed record MailboxMonitorSnapshot(
     public double? QuotaUsagePercent => MailboxMonitorMath.GetUsagePercent(QuotaUsedBytes, QuotaLimitBytes);
     public bool HasStorageQuota => QuotaUsedBytes.HasValue && QuotaLimitBytes is > 0;
 
-    public int? JunkMessageCount => Folders?.Where(f => f.IsJunk).Sum(f => f.MessageCount ?? 0);
-    public long? JunkSizeBytes => Folders is null || !Folders.Any(f => f.IsJunk && f.SizeBytes.HasValue)
-        ? null
-        : Folders.Where(f => f.IsJunk).Sum(f => f.SizeBytes ?? 0);
+    public int? JunkMessageCount
+    {
+        get
+        {
+            var junk = Folders?.Where(f => f.IsJunk).ToArray();
+            return junk is null || junk.Length == 0 || !junk.Any(f => f.MessageCount.HasValue)
+                ? null
+                : junk.Sum(f => f.MessageCount ?? 0);
+        }
+    }
+
+    public long? JunkSizeBytes
+    {
+        get
+        {
+            var junk = Folders?.Where(f => f.IsJunk).ToArray();
+            return junk is null || !junk.Any(f => f.SizeBytes.HasValue)
+                ? null
+                : junk.Sum(f => f.SizeBytes ?? 0);
+        }
+    }
 }
 
 public sealed record MailboxFolderSnapshot(
