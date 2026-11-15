@@ -336,7 +336,8 @@ public sealed partial class MainForm
                     _lastRunAccepted,
                     _lastRunSmtp4xx,
                     _lastRunSmtp5xx,
-                    GetObservedQuotaMessageDelta(snapshot));
+                    GetObservedQuotaMessageDelta(snapshot),
+                    snapshot.QuotaUsagePercent);
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked)
             {
                 var feedback = _runner?.ObserveMailboxSnapshot(snapshot);
