@@ -27,7 +27,7 @@ for path in files:
     if re.search(r"(?m)^\s*permissions:\s*write-all\s*$", content):
         errors.append(f"{relative}: permissions: write-all is not allowed.")
 
-    if re.search(r"(?m)^\\s*(pull_request_target|workflow_run):", content):
+    if re.search(r"(?m)^\s*(pull_request_target|workflow_run):", content):
         errors.append(f"{relative}: sensitive trigger requires a separate security review.")
 
     if re.search(r"curl\s+[^\n]*\|\s*(bash|sh)|wget\s+[^\n]*\|\s*(bash|sh)", content):
