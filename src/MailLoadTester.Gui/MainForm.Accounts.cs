@@ -13,8 +13,9 @@ public sealed partial class MainForm
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2
+            RowCount = 3
         };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
 
@@ -50,8 +51,17 @@ public sealed partial class MainForm
         btnAccountToggle.Click += (_, _) => AccountToggle();
         buttons.Controls.AddRange(new Control[] { btnAccountAdd, btnAccountEdit, btnAccountRemove, btnAccountToggle });
 
-        root.Controls.Add(lvAccounts, 0, 0);
-        root.Controls.Add(buttons, 0, 1);
+        var help = new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "Seznam samostatných SMTP účtů pro vícenásobné odesílání. Nejde o import adres ani o pole Odesílatel (From). Účty přidáš ručně tlačítkem Přidat.",
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = SystemColors.GrayText
+        };
+        root.Controls.Add(help, 0, 0);
+        root.Controls.Add(lvAccounts, 0, 1);
+        root.Controls.Add(buttons, 0, 2);
         tab.Controls.Add(root);
         tabs.TabPages.Add(tab);
         RefreshAccountsListView();
