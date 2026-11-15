@@ -624,6 +624,7 @@ public sealed partial class MainForm
             using var dlg = new OpenFileDialog { Filter = "EML files|*.eml|All files|*.*" };
             if (dlg.ShowDialog() == DialogResult.OK) txtEmlTemplate.Text = dlg.FileName;
         };
+        WireMailboxMonitorEvents();
     }
 
     private void SetDefaults()
