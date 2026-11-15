@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MailLoadTester;
 
 public enum MailboxMonitorSecurity
@@ -12,7 +14,11 @@ public sealed record MailboxMonitorOptions(
     int Port,
     MailboxMonitorSecurity Security,
     string Username,
-    string Password);
+    [property: JsonIgnore] string Password)
+{
+    public override string ToString()
+        => $"MailboxMonitorOptions {{ Host = {Host}, Port = {Port}, Security = {Security}, Username = {Username}, Password = [REDACTED] }}";
+}
 
 /// <summary>Credential-free, read-only mailbox snapshot.</summary>
 public sealed record MailboxMonitorSnapshot(
