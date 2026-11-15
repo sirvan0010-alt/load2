@@ -21,11 +21,11 @@ internal sealed class AdaptiveControlChart : Control
 
     public void AddSample(
         DateTimeOffset at,
-        int? effectiveEffectiveIntervalMs,
+        int? effectiveIntervalMs,
         int? adaptiveConcurrency,
         int configuredConcurrency)
     {
-        if (_sampler.AddSample(at, effectiveEffectiveIntervalMs, adaptiveConcurrency, configuredConcurrency))
+        if (_sampler.AddSample(at, effectiveIntervalMs, adaptiveConcurrency, configuredConcurrency))
             Invalidate();
     }
 
