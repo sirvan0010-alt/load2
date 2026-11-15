@@ -38,7 +38,7 @@
 - Test: tests/MailLoadTester.Tests/MailboxMonitorTests.cs
 
 **Interfaces:**
-- Produces: MailboxMonitorOptions, MailboxMonitorSnapshot, MailboxMonitorMath.GetUsagePercent(FolderQuota), and MailboxMonitorMath.ShouldStop(snapshot, thresholdPercent).
+- Produces: MailboxMonitorOptions, MailboxMonitorSnapshot, MailboxMonitorMath.GetUsagePercentFromKiB(uint? usedKiB, uint? limitKiB), MailboxMonitorMath.GetUsagePercent(long? usedBytes, long? limitBytes), MailboxMonitorMath.ToBytes(uint? kib), and MailboxMonitorMath.ShouldStop(double? usagePercent, int thresholdPercent).
 
 - [ ] Write failing tests for KiB-to-byte conversion, 0/100/over-100 percentage handling, missing quota, zero quota limit, and threshold comparison.
 - [ ] Run the focused test and confirm it fails because the model/calculator does not exist.
