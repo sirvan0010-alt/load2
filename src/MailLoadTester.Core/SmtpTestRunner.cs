@@ -595,6 +595,7 @@ public sealed class SmtpTestRunner
 
                         for (int attempt = 0; attempt <= options.MaxRetries; attempt++)
                         {
+                            sampleSmtpMs = 0; // Do not carry a previous retry's latency into a later connect failure.
                             workerCt.ThrowIfCancellationRequested();
 
                             // Fail-fast i pro ÚPLNĚ NOVÉ zprávy (ne jen retry téže zprávy) —
