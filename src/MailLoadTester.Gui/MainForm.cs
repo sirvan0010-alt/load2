@@ -240,7 +240,7 @@ public sealed partial class MainForm : Form
         foreach (var address in new[] { txtTo?.Text, txtCc?.Text, txtBcc?.Text })
         {
             if (string.IsNullOrWhiteSpace(address)) continue;
-            foreach (var token in address.Split(new[] { ',', ';', '\\r', '\\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var token in address.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 if (IsValidEmailSuggestion(token))
                     AddKnownEmailAddress(token);
         }
