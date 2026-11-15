@@ -65,6 +65,41 @@ public sealed class MailboxMonitorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMonitorMath.ShouldStop(80, threshold));
     }
     [Fact]
+    public void Snapshot_AggregatesJunkFoldersWithoutInventingMissingCounts()
+    {
+        var snapshot = new MailboxMonitorSnapshot(
+            InboxMessageCount: 12,
+            InboxUnreadCount: 3,
+            InboxSizeBytes: 4096,
+            QuotaUsedBytes: null,
+            QuotaLimitBytes: null,
+            QuotaMessageCount: null,
+            QuotaMessageLimit: null,
+            CheckedAt: DateTimeOffset.UtcNow,
+            Status: "quota unavailable",
+            Folders:
+            [
+                new MailboxFolderSnapshot("Junk", "Junk", false, true, false, false, 4, 2, 2048),
+                new MailboxFolderSnapshot("Spam", "Spam", false, true, false, false, null, null, null),
+                new MailboxFolderSnapshot("INBOX", "INBOX", true, false, false, false, 12, 3, 4096)
+            ]);
+
+        Assert.Equal(4, snapshot.JunkMessageCount);
+        Assert.Equal(2048L, snapshot.JunkSizeBytes);
+    }
+
+    [Fact]
+    public void Snapshot_LeavesJunkMetricsUnknownWhenNoJunkFolderIsReadable()
+    {
+        var snapshot = new MailboxMonitorSnapshot(
+            12, 3, 4096, null, null, null, null, DateTimeOffset.UtcNow, "quota unavailable",
+            [new MailboxFolderSnapshot("Spam", "Spam", false, true, false, false, null, null, null)]);
+
+        Assert.Null(snapshot.JunkMessageCount);
+        Assert.Null(snapshot.JunkSizeBytes);
+    }
+
+    [Fact]
     public void Options_RedactPasswordFromToStringAndJsonSerialization()
     {
         var options = new MailboxMonitorOptions("imap.example.com", 993, MailboxMonitorSecurity.ImplicitTls, "user@example.com", "secret-value");
