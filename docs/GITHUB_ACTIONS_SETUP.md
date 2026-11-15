@@ -10,7 +10,7 @@ Větev `feature/mailbox-capacity-adaptive` obsahuje:
 - Windows package: self-contained Windows x64 ZIP, testy, SHA-256 a kontrolu obsahu archivu;
 - CodeQL pro C# a GitHub Actions;
 - Dependency Review pro změny závislostí v PR;
-- Actions Hygiene a Architecture Consistency;
+- workflow-hygiene kontrolu integrovanou do CI a Architecture Consistency;
 - NuGet audit, který zastaví restore při závažných a kritických zranitelnostech;
 - Dependabot weekly update konfiguraci pro NuGet a GitHub Actions.
 
@@ -85,7 +85,7 @@ V repozitáři je soubor [github-main-ruleset.json](github-main-ruleset.json). J
 - zákaz force-push;
 - povinný pull request;
 - vyřešení všech konverzací v PR;
-- povinné úspěšné CI, Windows package, CodeQL, Dependency Review, Actions Hygiene a Architecture checks;
+- povinné úspěšné CI, Windows package, CodeQL, Dependency Review a Architecture checks;
 - požadavek, aby kontroly odpovídaly aktuálnímu HEAD commitu;
 - nulový počet povinných schválení, aby se samostatný vlastník repozitáře nezablokoval tím, že nemá kdo schválit jeho vlastní PR.
 
