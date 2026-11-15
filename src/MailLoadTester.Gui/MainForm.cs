@@ -61,6 +61,9 @@ public sealed partial class MainForm : Form
     private NumericUpDown numProxyPort = null!;
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
     private TextBox txtProxyList = null!;
+    private Label lblProxyStatus = null!;
+    private FlowLayoutPanel pnlQueueFlow = null!;
+    private readonly Dictionary<string, Label> _queueFlowLabels = new(StringComparer.Ordinal);
     // Options without dedicated controls (persist via profile / defaults)
     private int _idleHealthCheckSeconds = 30;
     private int _circuitWindowSize = 100;
