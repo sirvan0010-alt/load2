@@ -560,7 +560,6 @@ public sealed partial class MainForm
         var chk = new CheckBox { Text = text, AutoSize = true, Checked = check, Margin = new Padding(0, 6, 0, 2) };
         parent.Controls.Add(chk);
         toolTip.SetToolTip(chk, tip);
-        toolTip.SetToolTip(new Control[] { chk }.First(), tip);
         return chk;
     }
 
