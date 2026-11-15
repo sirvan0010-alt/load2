@@ -5,6 +5,7 @@ public sealed partial class MainForm : Form
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
     private TabControl tabs = null!;
+    private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
     // UI enhancement
@@ -178,6 +179,8 @@ public sealed partial class MainForm : Form
         UpdateSafetyBanner();
         ApplyTheme(false);
         FormClosing += MainForm_FormClosing;
+        Shown += (_, _) => LoadLayoutPreferences();
+        FormClosed += (_, _) => SaveLayoutPreferences();
     }
 
     /// <summary>
