@@ -329,6 +329,8 @@ public sealed partial class MainForm
                 return null;
 
             RenderMailboxMonitorSnapshot(snapshot);
+            if (enforceQuotaStop && _isRunning)
+                _runner?.ObserveMailboxSnapshot(snapshot);
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked
                 && MailboxMonitorMath.ShouldStop(snapshot.QuotaUsagePercent, (int)numMailboxStopPercent.Value)
                 && _cts is { IsCancellationRequested: false })
