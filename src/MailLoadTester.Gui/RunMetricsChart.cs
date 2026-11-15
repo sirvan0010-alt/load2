@@ -87,7 +87,6 @@ internal sealed class RunMetricsChart : Control
         if (_lastChartSampleAt.HasValue
             && at - _lastChartSampleAt.Value < TimeSpan.FromSeconds(1))
         {
-            Invalidate();
             return;
         }
 
