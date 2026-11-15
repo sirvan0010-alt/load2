@@ -22,7 +22,8 @@ public sealed partial class MainForm : Form
     private CheckBox chkIgnoreCert = null!;
     private CheckBox chkAuth = null!;
     private ComboBox cmbAuthMethod = null!;
-    private TextBox txtUser = null!, txtPass = null!;
+    private ComboBox txtUser = null!;
+    private TextBox txtPass = null!;
     private Button btnTestConnection = null!, btnSendTest = null!;
     private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
@@ -245,7 +246,7 @@ public sealed partial class MainForm : Form
                     AddKnownEmailAddress(token);
         }
 
-        foreach (var combo in new[] { txtFrom, txtTo, txtCc, txtBcc })
+        foreach (var combo in new[] { txtUser, txtFrom, txtTo, txtCc, txtBcc })
         {
             if (combo is null) continue;
             foreach (var address in _knownEmailAddresses)
