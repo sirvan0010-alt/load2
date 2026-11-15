@@ -12,6 +12,13 @@ public sealed class MailboxMonitorTests
     }
 
     [Fact]
+    public void GetUsagePercent_HandlesEmptyAndFullQuota()
+    {
+        Assert.Equal(0d, MailboxMonitorMath.GetUsagePercentFromKiB(0, 1024));
+        Assert.Equal(100d, MailboxMonitorMath.GetUsagePercentFromKiB(1024, 1024));
+    }
+
+    [Fact]
     public void GetUsagePercent_DoesNotHideUsageAboveQuota()
     {
         Assert.Equal(125d, MailboxMonitorMath.GetUsagePercentFromKiB(125, 100));
@@ -32,9 +39,16 @@ public sealed class MailboxMonitorTests
         Assert.Equal(1_048_576L, MailboxMonitorMath.ToBytes(1024));
     }
 
+    [Fact]
+    public void ToBytes_ReturnsNullWhenQuotaValueIsMissing()
+    {
+        Assert.Null(MailboxMonitorMath.ToBytes((uint?)null));
+    }
+
     [Theory]
     [InlineData(80d, 80, true)]
     [InlineData(79.99d, 80, false)]
+    [InlineData(100d, 100, true)]
     [InlineData(125d, 80, true)]
     [InlineData(null, 80, false)]
     public void ShouldStop_UsesOnlyRealQuotaPercentage(double? usagePercent, int threshold, bool expected)
@@ -49,6 +63,13 @@ public sealed class MailboxMonitorTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMonitorMath.ShouldStop(80, threshold));
     }
+    [Fact]
+    public void ValidateOptions_RejectsUnsupportedSecurityMode()
+    {
+        var options = new MailboxMonitorOptions("imap.example.com", 993, (MailboxMonitorSecurity)99, "user@example.com", "app-password");
+        Assert.Throws<ArgumentException>(() => MailboxMonitorService.ValidateOptions(options));
+    }
+
     [Fact]
     public void ValidateOptions_RejectsMissingHost()
     {
