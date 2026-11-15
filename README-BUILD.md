@@ -2,14 +2,19 @@
 
 Verze aplikace je řízena souborem `VERSION`. Hodnota musí odpovídat `AppVersion.Current` a verzi uvedené v tomto dokumentu; CI jejich shodu automaticky kontroluje.
 
-## Co je v projektu
+## Nejjednodušší spuštění ve Windows
 
-- **MailLoadTester.Core** — SMTP transport, connection pool, validace, pacing, retry, bounded concurrency, MX routing, health registry, dashboard a reporty.
-- **MailLoadTester.Gui** — Windows Forms aplikace.
-- **Testy** — xUnit unit a loopback SMTP integrační testy.
-- **Build skripty** — vytvoření self-contained EXE a instalátoru.
+Pro běžné používání **není potřeba instalovat .NET SDK ani Visual Studio**.
 
-## Build
+1. Otevři [Windows package workflow](https://github.com/sirvan0010-alt/load2/actions/workflows/windows-package.yml).
+2. Vyber poslední úspěšný běh workflow na větvi `main`.
+3. V části **Artifacts** stáhni `MailLoadTester-win-x64`.
+4. Rozbal ZIP do libovolné složky.
+5. Spusť `MailLoadTester.exe`. Soubor `START-HERE.txt` obsahuje stručný návod.
+
+Balíček je self-contained pro Windows x64 a obsahuje .NET runtime. Není nutné ručně přesouvat DLL ani instalovat vývojové nástroje. Balíček je dostupný jako GitHub Actions artifact po dobu 30 dnů od běhu workflow. Při každé změně na `main` se automaticky vytvoří nový balíček.
+
+## Vývojářský build
 
 Vyžaduje .NET 8 SDK a Windows pro WinForms GUI.
 
@@ -21,7 +26,7 @@ V kořeni repozitáře spusť:
 build.bat
 ```
 
-Výstup: `publish\\MailLoadTester.exe`. Self-contained balíček obsahuje .NET runtime, takže na cílovém PC není nutné instalovat .NET.
+Výstup: `publish\MailLoadTester.exe`. Self-contained balíček obsahuje .NET runtime, takže na cílovém PC není nutné instalovat .NET.
 
 ### Instalátor
 
@@ -29,7 +34,7 @@ Výstup: `publish\\MailLoadTester.exe`. Self-contained balíček obsahuje .NET r
 build-installer.bat
 ```
 
-Vyžaduje [Inno Setup](https://jrsoftware.org/isdl.php). Výstup: `installer\\Output\\Setup-MailLoadTester.exe`.
+Vyžaduje [Inno Setup](https://jrsoftware.org/isdl.php). Výstup: `installer\Output\Setup-MailLoadTester.exe`.
 
 ### Build a testy z příkazové řádky
 
@@ -43,7 +48,7 @@ dotnet restore src/MailLoadTester.Gui/MailLoadTester.Gui.csproj
 dotnet build src/MailLoadTester.Gui/MailLoadTester.Gui.csproj -c Release
 ```
 
-CI ověřuje Core a testy na Ubuntu a WinForms GUI na Windows.
+CI ověřuje Core a testy na Ubuntu a WinForms GUI na Windows. Samostatný Windows package workflow navíc vytváří self-contained ZIP pro koncové uživatele.
 
 ## Použití aplikace
 
