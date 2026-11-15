@@ -49,7 +49,7 @@ public sealed class CapacityRunControlsTests
         Assert.True(guard.TryReserve(40, out _));
         Assert.False(guard.TryReserve(1, out _));
 
-        Assert.Equal(100, guard.ReservedMimeBytes);
+        Assert.Equal(100L, guard.ReservedMimeBytes);
         Assert.Equal(2, guard.ReservedAttempts);
     }
 
@@ -77,7 +77,7 @@ public sealed class CapacityRunControlsTests
 
         Assert.False(guard.TryReserve(76, out var reason));
         Assert.Contains("per-message", reason, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(0, guard.ReservedMimeBytes);
+        Assert.Equal(0L, guard.ReservedMimeBytes);
         Assert.Equal(0, guard.ReservedAttempts);
         Assert.True(guard.TryReserve(75, out _));
     }
@@ -95,7 +95,7 @@ public sealed class CapacityRunControlsTests
         Assert.True(guard.TryReserve(70, out _));
         Assert.False(guard.TryReserve(20, out _));
 
-        Assert.Equal(140, guard.ReservedMimeBytes);
+        Assert.Equal(140L, guard.ReservedMimeBytes);
         Assert.Equal(2, guard.ReservedAttempts);
     }
 
