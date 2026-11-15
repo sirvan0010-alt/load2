@@ -192,14 +192,23 @@ public sealed partial class MainForm
             Margin = new Padding(0, 0, 0, 4)
         };
         flAddr.Controls.Add(txtFrom);
-        SetFieldToolTip(lblFrom, txtFrom,
-            "Skutečná e-mailová adresa odesílatele, např. vase.adresa@gmail.com — nikoli SMTP server smtp.gmail.com. " +
-            "Pokud se přihlašuješ SMTP e-mailovou adresou, aplikace ji nabídne v seznamu a při prázdném poli ji předvyplní. " +
-            "Můžeš vybrat návrh nebo napsat jinou adresu ručně.");
-        txtTo = AddLabeledText(flAddr, "Komu:", "Hlavní příjemce e-mailu. Více adres odděl čárkou nebo každou napiš na nový řádek.");
+        SetFieldToolTip(lblFrom, txtFrom, "Adresa odesílatele, nikoli SMTP server. Návrh se převezme z přihlašovacího e-mailu.");
+        flAddr.Controls.Add(new Label
+        {
+            Text = "Zadej skutečnou adresu schránky (např. jmeno@gmail.com). smtp.gmail.com je pouze adresa serveru.",
+            AutoSize = true, MaximumSize = new Size(380, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
+        txtTo = AddLabeledText(flAddr, "Komu:", "Hlavní příjemce. Více adres odděl čárkou nebo novým řádkem.");
         txtTo.Multiline = true; txtTo.Height = 50;
-        txtCc = AddLabeledText(flAddr, "Kopie (CC):", "Kopie e-mailu pro další příjemce. Jejich adresy uvidí všichni ostatní příjemci. Více adres odděl čárkou. Pokud kopii nikomu posílat nechceš, nech pole prázdné.");
-        txtBcc = AddLabeledText(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie e-mailu. Ostatní příjemci neuvidí adresy v tomto poli. Více adres odděl čárkou. Volitelné.");
+        txtCc = AddLabeledText(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
+        txtBcc = AddLabeledText(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
+        flAddr.Controls.Add(new Label
+        {
+            Text = "CC = viditelná kopie · BCC = skrytá kopie. Obojí je volitelné; nevyužíváš-li je, nech pole prázdná.",
+            AutoSize = true, MaximumSize = new Size(380, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
         txtDisplayName = AddLabeledText(flAddr, "Zobrazované jméno:", "Jméno, které se zobrazí v mail klientu.");
         gbAddr.Controls.Add(flAddr);
         tblMsg.Controls.Add(gbAddr, 0, 0);
@@ -414,7 +423,26 @@ public sealed partial class MainForm
         // --- Tab: Pokročilé ---
         var tabAdv = new TabPage("Pokročilé") { Padding = new Padding(12) };
         var flAdv = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkDirectMx = AddCheckBox(flAdv, "Direct MX delivery", false, "Místo relay SMTP se zeptá DNS na MX záznam a mluví přímo s cílovým serverem.");
+        chkDirectMx = AddCheckBox(flAdv, "Direct MX delivery", false, "Přímé doručování na MX server příjemce bez SMTP relay.");
+        flAdv.Controls.Add(new Label
+        {
+            Text = "Doporučení: běžně používej SMTP účet (např. Gmail). Direct MX zapínej jen pro vlastní správně nastavenou doménu.",
+            AutoSize = true, MaximumSize = new Size(760, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(24, 0, 0, 4)
+        });
+        var lnkDirectMxHelp = new LinkLabel
+        {
+            Text = "Proč Direct MX není anonymní a kdy ho použít",
+            AutoSize = true, Margin = new Padding(24, 0, 0, 10)
+        };
+        lnkDirectMxHelp.LinkClicked += (_, _) => MessageBox.Show(
+            "SMTP účet (doporučeno pro běžné použití)\\n" +
+            "Připojíš se k poskytovateli, například Gmailu, a odešleš zprávu přes ověřený účet. Adresa odesílatele musí být účet nebo povolený alias.\\n\\n" +
+            "Direct MX (jen pro vlastní doménu)\\n" +
+            "Aplikace kontaktuje přímo poštovní server příjemce. Potřebuješ doménu a správné DNS/e-mailové nastavení (zejména SPF, DKIM, DMARC a reverzní DNS/PTR). Bez toho bývá doručování nespolehlivé.\\n\\n" +
+            "Důležité: Direct MX neznamená anonymitu. Příjemce může z hlaviček a síťových záznamů zjistit odesílající IP/server. Adresa From je stále viditelná a musí být platná. Gmail SMTP ani Direct MX nezaručují skrytí identity odesílatele.",
+            "SMTP vs. Direct MX", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        flAdv.Controls.Add(lnkDirectMxHelp);
         chkPreWarm = AddCheckBox(flAdv, "Pre-warm spojení", false, "Před testem vytvoří a ověří všechna spojení v poolu — první dávka nečeká na handshake.");
         chkAdaptive = AddCheckBox(flAdv, "Adaptive concurrency", false, "Začíná na nastaveném max. paralelismu. V přibližně 10s oknech při tlaku serveru (4xx/timeout/transport) paralelismus sníží; po zdravých oknech ho postupně obnoví nejvýše na nastavený počet workerů. Samo o sobě nezvyšuje rychlost nad globální interval a nikdy nepřekročí MaxConcurrency.");
         chkCircuit = AddCheckBox(flAdv, "Circuit breaker", false, "Po N po sobě jdoucích selháních stejného typu přestane zkoušet a vrátí výsledek.");
