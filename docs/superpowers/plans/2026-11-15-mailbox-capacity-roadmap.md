@@ -75,8 +75,11 @@
 - [x] Keep both chart histories bounded to 120 samples and isolate chart rendering from SMTP send execution.
 - [x] Add regression coverage for effective interval telemetry and live adaptive-concurrency progress values.
 - [ ] Complete manual visual and interaction verification on a real Windows workstation.
-- [ ] Finalize user guide, metric definitions, safety/privacy notes and troubleshooting documentation.
-- [ ] Complete final provider/MIME comparison and packaged release validation.
+- [x] Publish the user guide, metric definitions, safety/privacy notes and troubleshooting documentation.
+- [x] Add GitHub Actions setup instructions and an importable `main` branch ruleset template.
+- [x] Extend CI with user-documentation link validation, high/critical NuGet audit, all-PR security checks, Windows ZIP content validation and executable SHA-256 verification.
+- [x] Add weekly Dependabot updates for NuGet and GitHub Actions.
+- [ ] Complete final provider/MIME comparison and manual interactive GUI verification on a real Windows workstation.
 
 ## Acceptance criteria for final release
 
@@ -105,5 +108,8 @@
 - **M5 implementation:** IMAP STORAGE deltas provide cautious down-only feedback during opted-in Capacity Runs. Repeated positive storage growth near the configured quota threshold increases global SEND spacing; critical pressure also reduces adaptive concurrency by one. Unknown quota produces no feedback. The opt-in startup validation message now runs serially before workers, is charged to message/MIME budgets and metrics, and stops the run without AutoRestart if it fails. Runner tests cover feedback escalation, validation success/accounting, and fail-fast behavior.
 - **M6 implementation:** the SMTP/IMAP chart now plots SEND attempts/minute, SMTP Accepted/minute, 4xx/minute, 5xx/minute and independently observed IMAP quota-message delta/minute from an approximately ten-second rolling baseline. Absolute quota percentage remains on a separate right axis. SMTP counter resets at AutoRestart boundaries produce gaps instead of negative rates.
 - **M6 adaptive chart:** a separate Test-tab chart plots the last effective global SEND interval (including warm-up, jitter and mailbox-pressure floor) and the live adaptive concurrency ceiling. It explicitly distinguishes 0 ms (no fixed interval ceiling) and disabled adaptive concurrency. Both charts retain at most 120 samples.
-- **M6 tests:** regression coverage verifies effective interval telemetry and the runner's live adaptive-concurrency progress values. Manual visual/interaction verification on a real Windows workstation remains outstanding.
-- **Verification state (2026-11-15):** latest application code commit `9743f4e8f8cbe20ab631942f97c4cfd4c95299d6` passed CI with **447/447 tests**, Core Release build, and Windows Forms GUI Release build. The self-contained Windows x64 package workflow also passed. Artifact size: 72,122,684 bytes. SHA-256: `a0c40bdcc9266151d4223daf53ddcca4f5ff890746c540b913feb5fd5afe652a`. Manual interactive GUI/provider validation remains outstanding. Keep PR #38 Draft; do not merge until all release acceptance criteria pass.
+- **M6 tests:** regression coverage verifies effective interval telemetry and the runner's live adaptive-concurrency progress values. Profile tests also verify that standard profile saves redact every multi-account SMTP password and that account lists are restored on profile load.
+- **Documentation:** added the complete user guide, results/metrics definitions, safety/privacy notes, troubleshooting, and GitHub Actions/repository-security setup guide. CI checks 31 relative links across the user-facing Markdown pages.
+- **GitHub automation:** CodeQL, Dependency Review, Actions Hygiene and Architecture Consistency now run on pull requests to any base branch. NuGet restore fails on high/critical advisories. Windows package validation checks ZIP contents and recomputes the packaged EXE SHA-256. Dependabot is configured for weekly NuGet and GitHub Actions updates.
+- **Verification state (2026-11-15):** commit `8432b6aa2bc2a3b56e6df3aa7f97afd48b5990d2` passed CI with **448/448 tests**, Core Release build, Windows Forms GUI Release build and documentation link validation. CodeQL C# and Actions analyses, Dependency Review, Actions Hygiene and Architecture Consistency passed. Windows x64 package workflow passed. Artifact `MailLoadTester-win-x64`: 72,133,620 bytes; packaged EXE SHA-256: `e97b67a4ca807a5fa5617ce5854f9503b5943f433a93fbd744475aa6c3732a50`; artifact ZIP digest: `43667ad6e0e760ddff0d16ca517f978041f48dd6947db69e6b76c0f9f1903cce`. Artifact expires 2026-12-15.
+- **Remaining before release:** manual interactive GUI verification on a real Windows workstation and representative provider/MIME comparison. Cloud CI verifies compilation and package integrity, not interactive GUI behavior. Keep PR #38 Draft; do not merge until all release acceptance criteria pass.
