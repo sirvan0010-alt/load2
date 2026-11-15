@@ -99,4 +99,11 @@ public sealed class MailboxMonitorTests
         var options = new MailboxMonitorOptions("imap.example.com", 993, MailboxMonitorSecurity.ImplicitTls, "", "");
         Assert.Throws<ArgumentException>(() => MailboxMonitorService.ValidateOptions(options));
     }
+
+    [Fact]
+    public void ValidateOptions_RejectsWhitespaceOnlyPassword()
+    {
+        var options = new MailboxMonitorOptions("imap.example.com", 993, MailboxMonitorSecurity.ImplicitTls, "user@example.com", "   ");
+        Assert.Throws<ArgumentException>(() => MailboxMonitorService.ValidateOptions(options));
+    }
 }
