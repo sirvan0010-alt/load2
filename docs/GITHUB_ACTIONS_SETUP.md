@@ -107,14 +107,14 @@ Oficiální návod: [Creating rulesets for a repository](https://docs.github.com
 
 | Check name v GitHubu | Co ověřuje |
 |---|---|
-| `build-test` | Core build a kompletní testovací sadu |
+| `build-test` | Core build, kompletní testovací sadu, kontrolu odkazů dokumentace a workflow hygiene |
 | `build-gui` | Release build Windows Forms GUI |
 | `package` | Windows ZIP, testy a SHA-256 balíčku |
 | `CodeQL` | Výsledek code scanning |
 | `Analyze (csharp)` | CodeQL analýzu C# |
 | `Analyze (actions)` | CodeQL analýzu workflow |
 | `Dependency Review` | Změny závislostí v PR |
-| `Workflow Hygiene` | Kontrolu Actions workflow |
+
 | `Repository Architecture` | Architektonické invarianty repozitáře |
 
 Tyto názvy byly ověřeny v úspěšném check-run výpisu aktuálního PR.
