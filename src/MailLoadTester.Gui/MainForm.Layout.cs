@@ -296,6 +296,8 @@ public sealed partial class MainForm
             "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Aktivní SMTP SIZE limit se automaticky uplatní, pokud ho server po připojení oznámí.", decimalPlaces: 2);
         numCapacityMaxPerMinute = AddLabeledNumeric(flParams, "Capacity: max. zpráv/min:", 0, 60000, 0,
             "Pevný strop globálního tempa včetně retry. 0 = bez dodatečného stropu; nikdy nezrychlí již pomalejší interval.");
+        chkCapacityStartupValidation = AddCheckBox(flParams, "Před testem odeslat 1 malou validační zprávu", false,
+            "Výchozí vypnuto. Po výslovném spuštění odešle jednu malou zprávu prvnímu příjemci ještě před spuštěním workerů. Je zahrnuta do Počtu zpráv, Capacity: max. zpráv, MIME rozpočtu, SMTP pokusů i výsledků. Při chybě se hlavní zátěžový test vůbec nespustí; validační zpráva se automaticky neopakuje.");
         btnCapacityEstimate = new Button { Text = "Odhad MIME objemu", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
         btnCapacityEstimate.Click += (_, _) =>
         {
