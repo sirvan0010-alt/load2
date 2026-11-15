@@ -93,7 +93,7 @@ public sealed partial class MainForm
         Controls.Add(pnlSafetyBanner);
 
         // === TabControl ===
-        tabs = new TabControl { Dock = DockStyle.Top, Height = 480 };
+        tabs = new TabControl { Dock = DockStyle.Fill };
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
@@ -510,8 +510,6 @@ public sealed partial class MainForm
         tabs.TabPages.Add(tabSmtpLog);
         InitializeMailboxMonitorTab();
 
-        Controls.Add(tabs);
-
         // === Bottom area ===
         var bottomPanel = new Panel { Dock = DockStyle.Fill };
         // Resizable live workspace: drag the splitter to give more room to the
@@ -519,6 +517,7 @@ public sealed partial class MainForm
         var bottomSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
+            Size = new Size(1280, 600),
             Orientation = Orientation.Vertical,
             SplitterDistance = 760,
             SplitterWidth = 8,
@@ -580,7 +579,22 @@ public sealed partial class MainForm
 
         bottomSplit.Panel2.Controls.Add(rightPanel);
         bottomPanel.Controls.Add(bottomSplit);
-        Controls.Add(bottomPanel);
+
+        // Resize the configuration tabs and the live workspace independently.
+        var workspaceSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(1280, 800),
+            Orientation = Orientation.Horizontal,
+            SplitterDistance = 480,
+            SplitterWidth = 8,
+            Panel1MinSize = 260,
+            Panel2MinSize = 180,
+            BackColor = Color.FromArgb(220, 224, 230)
+        };
+        workspaceSplit.Panel1.Controls.Add(tabs);
+        workspaceSplit.Panel2.Controls.Add(bottomPanel);
+        Controls.Add(workspaceSplit);
 
         // === StatusStrip ===
         statusStrip = new StatusStrip { Dock = DockStyle.Bottom };
