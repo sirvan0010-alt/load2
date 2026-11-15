@@ -253,6 +253,7 @@ public sealed partial class MainForm
         rtbLog.Clear();
         smtpLogTab?.ClearLog();
         runMetricsChart?.ClearSamples();
+        adaptiveControlChart?.ClearSamples();
         _lastRunSmtpSendAttempts = 0;
         _lastRunSmtp4xx = 0;
         _lastRunSmtp5xx = 0;
