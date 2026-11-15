@@ -10,7 +10,7 @@ public sealed partial class MainForm
         if (IsDisposed) return;
 
         var done = u.Sent + u.Failed;
-        var total = Math.Max(1, (int)numCount.Value);
+        var total = Math.Max(1, _activeRunMessageCount > 0 ? _activeRunMessageCount : (int)numCount.Value);
         progressBar.Value = Math.Min(100, (int)(done * 100.0 / total));
         lblSentFailed.Text = $"OK:{u.Sent} FAIL:{u.Failed}";
         lblStatus.Text = u.CurrentStep;
