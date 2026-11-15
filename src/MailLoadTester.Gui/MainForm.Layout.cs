@@ -628,10 +628,10 @@ public sealed partial class MainForm
         // WinForms docks controls in z-order. Keep the bottom status strip first,
         // then both top bars, and the Fill workspace last; otherwise the Fill
         // SplitContainer can consume the entire client area and hide the top bars.
-        Controls.SetChildIndex(statusStrip, 0);
-        Controls.SetChildIndex(topPanel, 1);
-        Controls.SetChildIndex(pnlSafetyBanner, 2);
-        Controls.SetChildIndex(workspaceSplit, 3);
+        Controls.SetChildIndex(workspaceSplit, 0);
+        Controls.SetChildIndex(pnlSafetyBanner, 1);
+        Controls.SetChildIndex(topPanel, 2);
+        Controls.SetChildIndex(statusStrip, 3);
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
         ApplyFallbackToolTips(this);
