@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Security;
 using System.Security.Authentication;
 using System.Text;
 using MailKit.Net.Smtp;
@@ -125,8 +126,11 @@ public static class TransportDiagnostics
         if (diag.CheckMx)
         {
             ct.ThrowIfCancellationRequested();
-            var domain = DnsPolicyChecker.ExtractDomain(options.From) ?? options.SmtpHost;
-            steps.Add($"MX: resolving {domain}");
+            var recipientDomain = options.Recipients
+                .Select(DnsPolicyChecker.ExtractDomain)
+                .FirstOrDefault(domain => !string.IsNullOrWhiteSpace(domain));
+            var domain = recipientDomain ?? DnsPolicyChecker.ExtractDomain(options.From) ?? options.SmtpHost;
+            steps.Add($"MX: resolving recipient domain {domain}");
             try
             {
                 mx = await MxResolver.ResolveAsync(domain, ct).ConfigureAwait(false);
@@ -148,8 +152,11 @@ public static class TransportDiagnostics
             try
             {
                 using var client = new SmtpClient { Timeout = Math.Max(1000, options.ConnectTimeoutMs) };
-                if (options.IgnoreCertificateErrors)
-                    client.ServerCertificateValidationCallback = (_, _, _, _) => true;
+                client.ServerCertificateValidationCallback = (_, certificate, _, errors) =>
+                {
+                    certSubject = certificate?.Subject;
+                    return options.IgnoreCertificateErrors || errors == SslPolicyErrors.None;
+                };
 
                 using var cert = ClientCertificateHelper.Load(options.ClientCertificatePath, options.ClientCertificatePassword);
                 if (cert is not null)
