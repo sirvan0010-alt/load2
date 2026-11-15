@@ -61,7 +61,7 @@ public sealed class CapacityRunControlsTests
             MaxMessageCount: 100,
             TargetMimeBytes: 100));
 
-        Parallel.For(0, 100, _ => guard.TryReserve(10, out _));
+        Parallel.For(0, 100, i => { _ = guard.TryReserve(10, out var reason); });
 
         Assert.Equal(100, guard.ReservedMimeBytes);
         Assert.Equal(10, guard.ReservedAttempts);
