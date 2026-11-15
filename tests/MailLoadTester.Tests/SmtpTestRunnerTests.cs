@@ -3,11 +3,16 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MailLoadTester.Tests;
 
 public sealed class SmtpTestRunnerTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public SmtpTestRunnerTests(ITestOutputHelper output) => _output = output;
+
     [Fact]
     public async Task SuccessfulSend_ReportsSentAndLatency()
     {
@@ -80,13 +85,17 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(3, server.DataAttempts);
     }
 
-    [Fact]
-    public async Task BoundedConcurrency_DoesNotExceedConfiguredWorkerCount()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(20)]
+    public async Task BoundedConcurrency_UsesConfiguredParallelSmtpTransfers(int maxConcurrency)
     {
-        const int maxConcurrency = 3;
-        const int messageCount = 12;
+        var messageCount = maxConcurrency * 2;
 
-        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(100));
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(250));
         var runner = new SmtpTestRunner();
 
         var result = await runner.RunAsync(
@@ -98,9 +107,12 @@ public sealed class SmtpTestRunnerTests
         Assert.Equal(0, result.Failed);
         Assert.Equal(messageCount, server.MessagesAccepted);
         Assert.Equal(messageCount, server.DataAttempts);
-        // Exclusive actual-SEND gate may serialize DATA even when MaxConcurrency > 1.
-        // Workers still complete the full message set without exceeding the configured bound.
-        Assert.InRange(server.MaxConcurrentData, 1, maxConcurrency);
+        var minimumExpectedConcurrency = maxConcurrency == 1 ? 1 : 2;
+        Assert.InRange(server.MaxConcurrentData, minimumExpectedConcurrency, maxConcurrency);
+        _output.WriteLine(
+            $"workers={maxConcurrency}; maxConcurrentDATA={server.MaxConcurrentData}; " +
+            $"throughput={result.ThroughputPerSec:F2} msg/s; avgSMTP={result.AvgSmtpSendMs:F1} ms; " +
+            $"elapsed={result.Elapsed.TotalMilliseconds:F0} ms");
     }
 
     [Fact]

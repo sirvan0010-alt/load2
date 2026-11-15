@@ -32,7 +32,7 @@ jobs:
           dotnet build tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore
 
       - name: Test Release (full suite, no quarantine filter)
-        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --verbosity normal
+        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --logger "console;verbosity=detailed"
 
   build-gui:
     runs-on: windows-latest
