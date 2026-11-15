@@ -514,6 +514,7 @@ public sealed partial class MainForm
             Font = new Font("Consolas", 9.5f), BorderStyle = BorderStyle.None,
             ScrollBars = RichTextBoxScrollBars.Vertical
         };
+        toolTip.SetToolTip(rtbLog, "Průběžný aplikační log pouze v paměti. Při novém běhu se vymaže a při delším běhu se automaticky zkracuje na posledních přibližně 800 tisíc znaků; nevytváří samostatný diskový soubor.");
         bottomTbl.Controls.Add(rtbLog, 0, 0);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
