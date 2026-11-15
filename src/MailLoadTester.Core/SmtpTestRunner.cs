@@ -35,6 +35,7 @@ public sealed class SmtpTestRunner
         int attempt = 0;
 
         var sumRetries = 0;
+        var sumSmtpSendAttempts = 0;
         var sumSmtp4xx = 0;
         var sumSmtp5xx = 0;
         var sumTimeouts = 0;
@@ -52,6 +53,7 @@ public sealed class SmtpTestRunner
             attempt++;
 
             sumRetries += result.Retries;
+            sumSmtpSendAttempts += result.SmtpSendAttempts;
             sumSmtp4xx += result.Smtp4xx;
             sumSmtp5xx += result.Smtp5xx;
             sumTimeouts += result.Timeouts;
@@ -105,6 +107,7 @@ public sealed class SmtpTestRunner
             Sent = ledger.CountAccepted(),
             Failed = ledger.CountFailed(),
             Retries = sumRetries,
+            SmtpSendAttempts = sumSmtpSendAttempts,
             Smtp4xx = sumSmtp4xx,
             Smtp5xx = sumSmtp5xx,
             Timeouts = sumTimeouts,
@@ -339,7 +342,7 @@ public sealed class SmtpTestRunner
         var sw = Stopwatch.StartNew();
         long activeTicks = 0;
         int sent = 0, failed = 0;
-        int retries = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
+        int retries = 0, smtpSendAttempts = 0, smtp4xx = 0, smtp5xx = 0, timeouts = 0;
         string lastError = "";
         var latencies = new ConcurrentBag<double>();
         var latencyHistogram = new LatencyHistogram();
@@ -752,6 +755,7 @@ public sealed class SmtpTestRunner
                                         var smtpT0 = Stopwatch.GetTimestamp();
                                         try
                                         {
+                                            Interlocked.Increment(ref smtpSendAttempts);
                                             if (utf8Format != null)
                                                 await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
                                             else
@@ -1134,7 +1138,8 @@ public sealed class SmtpTestRunner
             RetryMetrics: retryMetrics.Snapshot(),
             OutcomeCounts: outcomeCounters.Snapshot(),
             LatencyHistogram: latencyHistogram.Snapshot(),
-            CapacitySendAttempts: capacityGuard?.ReservedAttempts,
+            SmtpSendAttempts: smtpSendAttempts,
+            CapacitySendReservations: capacityGuard?.ReservedAttempts,
             CapacityMimeBytesReserved: capacityGuard?.ReservedMimeBytes,
             CapacityStopReason: capacityStopReason);
     }
