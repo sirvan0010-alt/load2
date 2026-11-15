@@ -263,7 +263,7 @@ public sealed partial class MainForm
         gbInline.Dock = DockStyle.Bottom;
 
         var gbHeaders = new GroupBox { Text = "Vlastní hlavičky (X-…)", Dock = DockStyle.Bottom, Height = 100 };
-        txtHeaders = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9) };
+        txtHeaders = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 10) };
         txtHeaders.Text = "X-Test-ID: 123";
         toolTip.SetToolTip(txtHeaders, "Jedna hlavička na řádek. Formát: X-Něco: hodnota");
         gbHeaders.Controls.Add(txtHeaders);
@@ -514,9 +514,18 @@ public sealed partial class MainForm
 
         // === Bottom area ===
         var bottomPanel = new Panel { Dock = DockStyle.Fill };
-        var bottomTbl = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        bottomTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68F));
-        bottomTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
+        // Resizable live workspace: drag the splitter to give more room to the
+        // application log or to the delivery pipeline / worker status area.
+        var bottomSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterDistance = 760,
+            SplitterWidth = 8,
+            Panel1MinSize = 400,
+            Panel2MinSize = 300,
+            BackColor = Color.FromArgb(220, 224, 230)
+        };
 
         rtbLog = new RichTextBox
         {
@@ -526,7 +535,7 @@ public sealed partial class MainForm
             ScrollBars = RichTextBoxScrollBars.Vertical
         };
         toolTip.SetToolTip(rtbLog, "Průběžný aplikační log pouze v paměti. Při novém běhu se vymaže a při delším běhu se automaticky zkracuje na posledních přibližně 800 tisíc znaků; nevytváří samostatný diskový soubor.");
-        bottomTbl.Controls.Add(rtbLog, 0, 0);
+        bottomSplit.Panel1.Controls.Add(rtbLog);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
 
@@ -534,7 +543,7 @@ public sealed partial class MainForm
         var lblPath = new Label
         {
             Text = "Cesta odesílání (PC → cílový server):",
-            AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold), Dock = DockStyle.Top
+            AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold), Dock = DockStyle.Top
         };
         rightPanel.Controls.Add(lblPath);
         pnlDeliveryPath = new FlowLayoutPanel
@@ -546,7 +555,7 @@ public sealed partial class MainForm
         BuildDeliveryPathPipeline();
         rightPanel.Controls.Add(pnlDeliveryPath);
 
-        var lblWorkers = new Label { Text = "Workery:", AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold), Dock = DockStyle.Top };
+        var lblWorkers = new Label { Text = "Workery:", AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold), Dock = DockStyle.Top };
         pnlWorkers = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 100, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, AutoScroll = true, BackColor = Color.FromArgb(245, 245, 245) };
         rightPanel.Controls.Add(pnlWorkers);
         rightPanel.Controls.Add(lblWorkers);
@@ -561,7 +570,7 @@ public sealed partial class MainForm
                 Text = _checklistTexts[i], AutoSize = true,
                 Padding = new Padding(6, 3, 6, 3), Margin = new Padding(2),
                 BackColor = Color.LightGray, ForeColor = Color.DimGray,
-                Font = new Font("Segoe UI", 8.5f), BorderStyle = BorderStyle.FixedSingle
+                Font = new Font("Segoe UI", 9.5f), BorderStyle = BorderStyle.FixedSingle
             };
             pnlCheck.Controls.Add(_checklistLabels[i]);
             if (i < 5)
@@ -569,8 +578,8 @@ public sealed partial class MainForm
         }
         rightPanel.Controls.Add(pnlCheck);
 
-        bottomTbl.Controls.Add(rightPanel, 1, 0);
-        bottomPanel.Controls.Add(bottomTbl);
+        bottomSplit.Panel2.Controls.Add(rightPanel);
+        bottomPanel.Controls.Add(bottomSplit);
         Controls.Add(bottomPanel);
 
         // === StatusStrip ===
