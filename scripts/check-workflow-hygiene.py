@@ -3,6 +3,8 @@
 
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +18,27 @@ files = sorted(
 
 if not files:
     errors.append("No GitHub Actions workflow files were found.")
+
+# Parse every workflow with Ruby's standard Psych YAML parser. GitHub-hosted
+# Ubuntu runners include Ruby; parsing catches malformed YAML that text checks
+# alone cannot detect. Parse only (do not evaluate) workflow expressions.
+ruby = shutil.which("ruby")
+if ruby:
+    parser = (
+        "require 'yaml'; "
+        "ARGV.each { |file| YAML.parse_file(file); puts \"YAML OK: #{file}\" }"
+    )
+    parsed = subprocess.run(
+        [ruby, "-e", parser, *[str(path) for path in files]],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if parsed.returncode:
+        errors.append("Workflow YAML syntax validation failed:\\n" + parsed.stderr.strip())
+else:
+    errors.append("Ruby/Psych is unavailable; workflow YAML syntax could not be validated.")
 
 for path in files:
     content = path.read_text(encoding="utf-8")
