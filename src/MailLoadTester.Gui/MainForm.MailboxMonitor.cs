@@ -117,6 +117,8 @@ public sealed partial class MainForm
 
     private void ClearMailboxMonitorCredentials()
     {
+        StopMailboxMonitorPolling();
+        _mailboxMonitorCts?.Cancel();
         txtMailboxHost.Clear();
         txtMailboxUsername.Clear();
         txtMailboxPassword.Clear();
