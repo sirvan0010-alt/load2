@@ -21,6 +21,12 @@
 - Někteří poskytovatelé vyžadují app-password nebo specifické povolení SMTP AUTH.
 - Nepřeposílej do issue hesla, tokeny ani AUTH protokolové řádky.
 
+## Více SMTP účtů
+
+Multi-account režim vyžaduje alespoň dva povolené účty na záložce **Účty SMTP**. S jedním nebo žádným povoleným účtem se používá hlavní konfigurace na záložce SMTP Server. Pokud se zobrazí, že nejsou dostupné účty, mohou být všechny endpointy v karanténě; zkontroluj jejich stav a příčinu transportních chyb, místo abys obcházel karanténu.
+
+Po načtení běžného profilu je nutné znovu doplnit hesla SMTP účtů, protože se z bezpečnostních důvodů neukládají.
+
 ## SMTP 4xx
 
 4xx je dočasné odmítnutí. Může jít o throttling, greylisting, dočasnou nedostupnost nebo přechodný limit.
