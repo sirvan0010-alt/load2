@@ -5,7 +5,7 @@ namespace MailLoadTester;
 
 /// <summary>
 /// Uložení / načtení profilu testu (MailTestOptions) jako JSON.
-/// Heslo a proxy heslo se ve výchozím režimu neukládají (bezpečnost).
+/// SMTP, proxy, client-certificate and multi-account passwords are omitted by default.
 /// Chybějící nová pole při deserializaci doplní defaulty recordu (měkká migrace).
 /// </summary>
 public static class ProfileStore
