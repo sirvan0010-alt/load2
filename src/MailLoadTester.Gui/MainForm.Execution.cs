@@ -423,6 +423,140 @@ public sealed partial class MainForm
         lblStatus.Text = "Zastavuji…";
     }
 
+    private async Task OnSendTestMessageAsync()
+    {
+        if (_isRunning || _testConnectionCts != null)
+            return;
+
+        MailTestOptions options;
+        try
+        {
+            var configured = BuildOptions();
+            if (configured.Recipients.Count == 0)
+                throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+
+            // This is a single-message diagnostic, not a load test. Keep the selected
+            // SMTP transport/auth/proxy settings, but remove batch, retry, attachment,
+            // multi-recipient and automation side effects.
+            options = configured with
+            {
+                Recipients = new[] { configured.Recipients[0] },
+                CcRecipients = Array.Empty<string>(),
+                BccRecipients = Array.Empty<string>(),
+                MessageCount = 1,
+                MaxConcurrency = 1,
+                IntervalMs = 0,
+                BatchMode = false,
+                MaxRetries = 0,
+                DryRun = false,
+                Attachments = Array.Empty<string>(),
+                InlineAttachments = Array.Empty<string>(),
+                RandomTestData = false,
+                UseBogusData = false,
+                GenerateRandomHtml = false,
+                GenerateRandomAttachments = false,
+                VarySubjectBodyPerMessage = false,
+                AutoRestartOnFailure = false,
+                UseAdaptiveConcurrency = false,
+                UseCircuitBreaker = false,
+                EnableDashboard = false,
+                EnableWarmup = false,
+                EnableJitter = false,
+                EnableBurstMode = false,
+                EnableProgressiveBackoff = false,
+                EnablePerRecipientLimit = false,
+                EnableSendingTimeWindow = false,
+                DetectGreylist = false,
+                CheckRblBeforeStart = false,
+                CollectObservedResponses = true,
+                WebhookUrl = string.Empty,
+                CapacityRun = null,
+                DurationSeconds = 0,
+                EmlTemplatePath = null
+            };
+            Validation.Validate(options);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Testovací e-mail nelze připravit:\n{ex.Message}", "Kontrola nastavení",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var recipient = options.Recipients[0];
+        var confirm = MessageBox.Show(
+            $"Bude odeslána JEDNA skutečná e-mailová zpráva.\n\n" +
+            $"SMTP: {options.SmtpHost}:{options.Port} ({options.Security})\n" +
+            $"Od: {options.From}\nKomu: {recipient}\n\n" +
+            "Zátěžový test, opakování, přílohy a další příjemci jsou vypnuté. Pokračovat?",
+            "Potvrdit odeslání testovací zprávy",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (confirm != DialogResult.Yes)
+            return;
+
+        _isRunning = true;
+        btnStart.Enabled = false;
+        btnStop.Enabled = true;
+        btnSendTest.Enabled = false;
+        _lastRunReport = null;
+        btnExportReport.Enabled = false;
+        rtbLog.Clear();
+        smtpLogTab?.ClearLog();
+        runMetricsChart?.ClearSamples();
+        adaptiveControlChart?.ClearSamples();
+        progressBar.Value = 0;
+        lblStatus.Text = "Odesílám jednu testovací zprávu…";
+        lblEta.Text = string.Empty;
+        lblSentFailed.Text = "OK:0 FAIL:0";
+        AppendLog("=== JEDNORÁZOVÝ TEST SMTP ODESLÁNÍ ===", Color.Cyan);
+        AppendLog($"Cíl: {options.SmtpHost}:{options.Port} · příjemce: {recipient}", Color.LightGray);
+        AppendLog("Režim: jedna skutečná zpráva, bez retry a bez zátěžového paralelismu.", Color.LightGreen);
+
+        _cts = new CancellationTokenSource();
+        _runner = new SmtpTestRunner();
+        _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var progress = new Progress<ProgressUpdate>(UpdateProgress);
+
+        try
+        {
+            var result = await Task.Run(
+                async () => await _runner.RunAsync(options, progress, _cts.Token),
+                CancellationToken.None);
+
+            lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed}";
+            AppendLog(result.Sent == 1
+                ? "SMTP server přijal testovací zprávu (2xx). To samo o sobě nepotvrzuje doručení do Inboxu."
+                : $"Testovací odeslání selhalo: {result.LastError}", result.Sent == 1 ? Color.LightGreen : Color.Red);
+
+            MessageBox.Show(
+                result.Sent == 1
+                    ? $"SMTP server zprávu přijal.\nPříjemce: {recipient}\nDoba: {result.AvgSmtpSendMs:F0} ms\n\nZkontroluj také složku Spam/Junk."
+                    : $"SMTP server zprávu nepřijal.\n\n{result.LastError}",
+                "Výsledek testovacího odeslání",
+                MessageBoxButtons.OK,
+                result.Sent == 1 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog("Testovací odeslání bylo zrušeno.", Color.Orange);
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Testovací odeslání skončilo chybou: {Validation.ExplainSmtpError(ex)}", Color.Red);
+            MessageBox.Show(ex.Message, "SMTP odeslání selhalo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _isRunning = false;
+            btnStart.Enabled = true;
+            btnStop.Enabled = false;
+            btnSendTest.Enabled = true;
+            _cts?.Dispose();
+            _cts = null;
+            _runCompletion?.TrySetResult(true);
+        }
+    }
+
     private async Task OnTestConnectionAsync()
     {
         if (_testConnectionCts != null) return;
