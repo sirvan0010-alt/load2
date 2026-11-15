@@ -160,7 +160,7 @@ public sealed class AdaptiveConcurrencyLimiterTests
             limiter.RecordAttempt(true, 2_500, serverPressure: false);
         limiter.RecordAttempt(true, 2_500, serverPressure: false); // evaluate slow window
 
-        Assert.Equal(7, limiter.Current - 1 + 1); // current must have stepped down by one
+        Assert.Equal(6, limiter.Current); // latency pressure reduces concurrency by one
     }
 
     [Fact]
