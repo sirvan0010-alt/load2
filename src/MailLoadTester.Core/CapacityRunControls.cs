@@ -50,6 +50,55 @@ public static class CapacityRunPlanner
 }
 
 /// <summary>
+/// Conservative preflight estimate. The total covers the configured logical message
+/// count without retries; retries add more SEND attempts and consume the runtime budget.
+/// </summary>
+public sealed record CapacityRunEstimate(
+    long EstimatedMimeBytesPerMessage,
+    long EstimatedMimeBytesForLogicalMessages,
+    int LogicalMessageCount,
+    bool IsComplete,
+    string Note);
+
+public static class CapacityRunPreview
+{
+    public static CapacityRunEstimate Estimate(
+        IEnumerable<long> binaryAttachmentSizes,
+        int requestedMessageCount,
+        int maxMessageCount,
+        int randomAttachmentCount = 0,
+        long randomAttachmentSizeBytes = 0,
+        bool hasUnaccountedContent = false)
+    {
+        ArgumentNullException.ThrowIfNull(binaryAttachmentSizes);
+        if (requestedMessageCount < 1)
+            throw new ArgumentOutOfRangeException(nameof(requestedMessageCount));
+        if (maxMessageCount < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxMessageCount));
+        if (randomAttachmentCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(randomAttachmentCount));
+        if (randomAttachmentSizeBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(randomAttachmentSizeBytes));
+        if (randomAttachmentCount > 0 && randomAttachmentSizeBytes == 0)
+            throw new ArgumentException("Random attachment size must be positive when random attachments are included.", nameof(randomAttachmentSizeBytes));
+
+        long estimatedPerMessage = 16 * 1024;
+        foreach (var bytes in binaryAttachmentSizes)
+            estimatedPerMessage = checked(estimatedPerMessage + MailboxCapacityMath.EstimateBase64EncodedBytes(bytes));
+
+        for (var i = 0; i < randomAttachmentCount; i++)
+            estimatedPerMessage = checked(estimatedPerMessage + MailboxCapacityMath.EstimateBase64EncodedBytes(randomAttachmentSizeBytes));
+
+        var count = Math.Min(requestedMessageCount, maxMessageCount);
+        var total = checked(estimatedPerMessage * count);
+        var note = hasUnaccountedContent
+            ? "Odhad je neúplný: šablona nebo generovaný obsah nebyly plně započteny. Nezahrnuje retry ani proměnlivé hlavičky."
+            : "Konzervativní odhad bez retry; runtime limit používá skutečně serializovanou MIME velikost.";
+        return new CapacityRunEstimate(estimatedPerMessage, total, count, !hasUnaccountedContent, note);
+    }
+}
+
+/// <summary>
 /// Thread-safe cumulative MIME byte budget shared by all workers and auto-restart
 /// attempts in one logical run. Reservations are conservative: once a SEND attempt
 /// is admitted, its bytes remain charged even if the server later rejects or times out.
