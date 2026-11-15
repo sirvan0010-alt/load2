@@ -2,8 +2,9 @@ namespace MailLoadTester.Gui;
 
 /// <summary>
 /// Bounded live rates for SMTP counters and independently observed mailbox deltas.
-/// Rates use a rolling baseline of up to ten seconds; SMTP counter resets at an
-/// AutoRestart boundary create a gap instead of a misleading negative rate.
+/// SMTP rates use a rolling baseline of up to ten seconds; IMAP message rate is
+/// averaged between distinct quota snapshots. SMTP counter resets at an AutoRestart
+/// boundary create a gap instead of a misleading negative rate.
 /// </summary>
 internal sealed class RunMetricsChart : Control
 {
@@ -30,6 +31,11 @@ internal sealed class RunMetricsChart : Control
 
     private readonly List<RawSample> _rawSamples = new();
     private readonly List<Sample> _samples = new();
+    private DateTimeOffset? _lastChartSampleAt;
+    private DateTimeOffset? _lastQuotaObservationAt;
+    private long? _lastQuotaMessageDelta;
+    private double? _latestObservedMailboxMessagesPerMinute;
+    private double? _latestQuotaUsagePercent;
 
     public RunMetricsChart()
     {
@@ -47,17 +53,53 @@ internal sealed class RunMetricsChart : Control
         int accepted,
         int smtp4xx,
         int smtp5xx,
+        DateTimeOffset? quotaObservedAt,
         long? observedMailboxMessageDelta,
         double? quotaUsagePercent)
     {
+        // IMAP observations arrive roughly every 30 seconds. Calculate their
+        // rate only between distinct server snapshots, never from repeated
+        // progress callbacks carrying the same cumulative delta.
+        if (quotaObservedAt.HasValue
+            && (!_lastQuotaObservationAt.HasValue || quotaObservedAt.Value > _lastQuotaObservationAt.Value))
+        {
+            if (_lastQuotaObservationAt.HasValue
+                && _lastQuotaMessageDelta.HasValue
+                && observedMailboxMessageDelta.HasValue)
+            {
+                var elapsed = (quotaObservedAt.Value - _lastQuotaObservationAt.Value).TotalMinutes;
+                _latestObservedMailboxMessagesPerMinute = elapsed > 0
+                    ? (observedMailboxMessageDelta.Value - _lastQuotaMessageDelta.Value) / elapsed
+                    : null;
+            }
+            else
+            {
+                _latestObservedMailboxMessagesPerMinute = null;
+            }
+
+            _lastQuotaObservationAt = quotaObservedAt.Value;
+            _lastQuotaMessageDelta = observedMailboxMessageDelta;
+            _latestQuotaUsagePercent = quotaUsagePercent is >= 0 and <= 100 ? quotaUsagePercent : null;
+        }
+
+        // Progress events can arrive for every message/state transition. Keep
+        // a one-second chart cadence so 120 samples represent about two minutes.
+        if (_lastChartSampleAt.HasValue
+            && at - _lastChartSampleAt.Value < TimeSpan.FromSeconds(1))
+        {
+            Invalidate();
+            return;
+        }
+
+        _lastChartSampleAt = at;
         var raw = new RawSample(
             at,
             Math.Max(0, sendAttempts),
             Math.Max(0, accepted),
             Math.Max(0, smtp4xx),
             Math.Max(0, smtp5xx),
-            observedMailboxMessageDelta,
-            quotaUsagePercent is >= 0 and <= 100 ? quotaUsagePercent : null);
+            _latestObservedMailboxMessagesPerMinute,
+            _latestQuotaUsagePercent);
 
         _rawSamples.Add(raw);
         if (_rawSamples.Count > MaxSamples)
@@ -73,18 +115,13 @@ internal sealed class RunMetricsChart : Control
                 ? (current - previous) / elapsedMinutes
                 : null;
 
-        double? ObservedRate(long? current, long? previous) =>
-            elapsedMinutes > 0 && current.HasValue && previous.HasValue
-                ? (current.Value - previous.Value) / elapsedMinutes
-                : null;
-
         _samples.Add(new Sample(
             at,
             NonNegativeRate(raw.SendAttempts, baseline.SendAttempts),
             NonNegativeRate(raw.Accepted, baseline.Accepted),
             NonNegativeRate(raw.Smtp4xx, baseline.Smtp4xx),
             NonNegativeRate(raw.Smtp5xx, baseline.Smtp5xx),
-            ObservedRate(raw.ObservedMailboxMessageDelta, baseline.ObservedMailboxMessageDelta),
+            raw.ObservedMailboxMessageDelta is double observedRate ? observedRate : null,
             raw.QuotaUsagePercent));
 
         if (_samples.Count > MaxSamples)
@@ -97,6 +134,11 @@ internal sealed class RunMetricsChart : Control
     {
         _rawSamples.Clear();
         _samples.Clear();
+        _lastChartSampleAt = null;
+        _lastQuotaObservationAt = null;
+        _lastQuotaMessageDelta = null;
+        _latestObservedMailboxMessagesPerMinute = null;
+        _latestQuotaUsagePercent = null;
         Invalidate();
     }
 
@@ -177,7 +219,7 @@ internal sealed class RunMetricsChart : Control
         g.DrawString(first, Font, mutedBrush, plot.Left, plot.Bottom + 6);
         var lastSize = g.MeasureString(last, Font);
         g.DrawString(last, Font, mutedBrush, plot.Right - lastSize.Width, plot.Bottom + 6);
-        g.DrawString("levá osa: zprávy/min; pravá osa: kvóta %; IMAP Δ = nezávislé pozorování", Font, mutedBrush, 6, Height - 15);
+        g.DrawString("levá osa: zprávy/min; pravá osa: kvóta %; IMAP Δ/min = průměr mezi snapshoty", Font, mutedBrush, 6, Height - 15);
     }
 
     private void DrawLegend(Graphics g)
