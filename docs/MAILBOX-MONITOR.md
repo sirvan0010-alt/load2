@@ -19,7 +19,7 @@ Typical IMAP settings are port 993 with implicit TLS or port 143 with STARTTLS. 
 - INBOX message count, unread count, and STATUS SIZE are folder-specific. INBOX size is not a substitute for account-wide quota usage.
 - If quota is unsupported, missing, denied, or has a zero limit, the monitor shows quota as unavailable. It does not invent a percentage.
 - Some providers expose account-wide quota differently or do not expose it through IMAP. Provider-specific APIs would be required for those cases.
-- The monitor refreshes every 30 seconds while an SMTP run is active when IMAP credentials are configured. Manual refresh is also available.
+- The monitor refreshes every 30 seconds while an SMTP run is active when IMAP credentials are configured. Manual refresh is also available. A quota can be crossed between polls, so the stop is not an instantaneous hard cap; the actual overshoot depends on the sending rate and server processing delay.
 - IMAP errors are shown in the monitor and do not by themselves mark the SMTP test as failed.
 
 ## SMTP acceptance is not mailbox delivery
