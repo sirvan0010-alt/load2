@@ -167,7 +167,7 @@ public sealed partial class MainForm : Form
 
     public MainForm()
     {
-        Text = $"MailLoadTester {MailLoadTester.AppVersion.Current} — Maximum Brutal Edition";
+        Text = $"MailLoadTester {MailLoadTester.AppVersion.Current} — SMTP testovací nástroj";
         Size = new Size(1280, 920);
         MinimumSize = new Size(1000, 750);
         StartPosition = FormStartPosition.CenterScreen;
