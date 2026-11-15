@@ -151,7 +151,7 @@ Na záložce **Test** jsou dva grafické pohledy:
 - **SMTP / IMAP**: SEND pokusy/min, SMTP Accepted/min, 4xx/min, 5xx/min, nezávislá změna počtu zpráv podle IMAP kvóty/min a procento využití kvóty.
 - **Adaptivní řízení**: poslední efektivní globální SEND interval a aktuální limit adaptivní souběžnosti.
 
-Rychlosti SMTP se počítají z přibližně desetisekundového klouzavého okna. Hodnota intervalu 0 ms znamená, že není nastaven pevný časový strop. Graf adaptivní souběžnosti ukazuje povolený limit, nikoli počet právě aktivních síťových přenosů.
+Vzorky grafů se omezují přibližně na jeden za sekundu a historie je omezena na 120 vzorků. Rychlosti SMTP se počítají z přibližně desetisekundového klouzavého okna. Rychlost IMAP Δ/min se počítá jako průměr mezi dvěma odlišnými úspěšnými IMAP snapshoty a poslední vypočtená hodnota se drží do dalšího snapshotu; při chybě IMAP se vykreslí mezera. Hodnota intervalu 0 ms znamená, že není nastaven pevný časový strop. Graf adaptivní souběžnosti ukazuje povolený limit, nikoli počet právě aktivních síťových přenosů.
 
 IMAP změna je nezávislé pozorování schránky. Může ji ovlivnit jiný klient nebo souběžná aktivita a není důkazem, že zprávy uložil právě tento test. Chybějící IMAP data se zobrazují jako mezera, nikoli nula.
 
