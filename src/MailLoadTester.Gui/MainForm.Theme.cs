@@ -81,7 +81,7 @@ public sealed partial class MainForm
                     button.FlatStyle = FlatStyle.Flat;
                     button.FlatAppearance.BorderSize = 0;
                     button.Cursor = Cursors.Hand;
-                    button.Font = new Font("Segoe UI", 9.5F, FontStyle.Semibold);
+                    button.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
                     button.Padding = new Padding(8, 3, 8, 3);
                     break;
                 case GroupBox group:
