@@ -1,6 +1,8 @@
 name: Actions Hygiene
 
 on:
+  push:
+    branches: [ "main", "fix/**", "review/**", "feature/**" ]
   pull_request:
   workflow_dispatch:
 
