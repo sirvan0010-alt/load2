@@ -138,6 +138,11 @@ public sealed partial class MainForm : Form
     private ToolStripStatusLabel lblStatus = null!, lblEta = null!, lblSentFailed = null!, lblCapacityRun = null!;
     private Button btnCapacityEstimate = null!;
     private Label lblCapacityEstimate = null!;
+    private RunMetricsChart runMetricsChart = null!;
+    private int _lastRunSmtpSendAttempts;
+    private int _lastRunSmtp4xx;
+    private int _lastRunSmtp5xx;
+    private int _lastRunAccepted;
 
     // Runtime
     private CancellationTokenSource? _cts;
