@@ -26,4 +26,10 @@ public readonly record struct ProgressUpdate(
     /// <summary>Conservatively reserved SMTP-prepared MIME bytes for a capacity run.</summary>
     long? CapacityMimeBytesReserved = null,
     /// <summary>Configured cumulative MIME-byte budget; null means no total byte ceiling.</summary>
-    long? CapacityMimeBytesTarget = null);
+    long? CapacityMimeBytesTarget = null,
+    /// <summary>Actual SMTP SendAsync calls started, including retries.</summary>
+    int SmtpSendAttempts = 0,
+    /// <summary>Observed transient SMTP 4xx responses.</summary>
+    int Smtp4xx = 0,
+    /// <summary>Observed permanent SMTP 5xx responses.</summary>
+    int Smtp5xx = 0);
