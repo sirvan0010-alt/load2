@@ -66,9 +66,10 @@ internal sealed class RunMetricsChart : Control
 
         using var border = new Pen(Color.FromArgb(210, 215, 220));
         using var grid = new Pen(Color.FromArgb(225, 229, 233));
+        using var textBrush = new SolidBrush(ForeColor);
         using var mutedBrush = new SolidBrush(Color.DimGray);
 
-        g.DrawString("SMTP a schránka – živé metriky", Font, ForeColor, 6, 4);
+        g.DrawString("SMTP a schránka – živé metriky", Font, textBrush, 6, 4);
         DrawLegend(g);
 
         var plot = new Rectangle(54, 42, Math.Max(1, Width - 68), Math.Max(1, Height - 76));
@@ -134,12 +135,13 @@ internal sealed class RunMetricsChart : Control
 
         var x = 6f;
         const float y = 22f;
+        using var textBrush = new SolidBrush(ForeColor);
         foreach (var item in items)
         {
             using var brush = new SolidBrush(item.Color);
             g.FillRectangle(brush, x, y + 2, 8, 8);
             x += 11;
-            g.DrawString(item.Label, Font, ForeColor, x, y - 1);
+            g.DrawString(item.Label, Font, textBrush, x, y - 1);
             x += g.MeasureString(item.Label, Font).Width + 8;
         }
     }
