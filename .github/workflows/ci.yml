@@ -10,11 +10,27 @@ on:
 permissions:
   contents: read
 
+# Avoid wasting runners on superseded commits or duplicate push/PR runs for the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
+      - name: Check release version synchronization
+        shell: bash
+        run: |
+          version="$(cat VERSION | tr -d '\r\n')"
+          app_version="$(sed -n 's/.*Current = "\([^"]*\)".*/\1/p' src/MailLoadTester.Core/AppVersion.cs)"
+          build_readme_version="$(sed -n 's/^# MailLoadTester \([0-9.]*\).*/\1/p' README-BUILD.md)"
+          test -n "$version"
+          test "$version" = "$app_version"
+          test "$version" = "$build_readme_version"
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
