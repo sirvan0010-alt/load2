@@ -20,8 +20,11 @@ public static class SmtpConnectivityTester
 
         // X509Certificate2 is IDisposable; SmtpClient does not own ClientCertificates entries.
         using var cert = ClientCertificateHelper.Load(o.ClientCertificatePath, o.ClientCertificatePassword);
-        if (cert is { } clientCert)
-            client.ClientCertificates.Add(clientCert);
+        if (cert is not null)
+        {
+            var certificates = client.ClientCertificates ??= new();
+            certificates.Add(cert);
+        }
 
         string proxyLabel = "žádná";
         if (!string.IsNullOrWhiteSpace(o.ProxyList))

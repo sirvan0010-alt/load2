@@ -56,8 +56,7 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
         var files = new List<string>();
 
         foreach (var line in status.Split(
-                     new[] { '', '
-' },
+                     new[] { '\r', '\n' },
                      StringSplitOptions.RemoveEmptyEntries))
         {
             if (line.Length < 3)
@@ -84,7 +83,7 @@ public sealed class GitChangeScopeGuard : IAiAgentChangeScopeGuard
     }
 
     private static string Normalize(string value) =>
-        value.Trim().Replace('\', '/').Trim('/');
+        value.Trim().Replace('\\', '/').Trim('/');
 
     private static bool IsWithinScope(string file, string scope) =>
         string.Equals(file, scope, StringComparison.Ordinal) ||

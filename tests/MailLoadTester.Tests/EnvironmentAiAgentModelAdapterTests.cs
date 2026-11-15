@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using Xunit;
+using MailLoadTester.Core;
 
 namespace MailLoadTester.Tests;
 
@@ -12,21 +14,18 @@ public sealed class EnvironmentAiAgentModelAdapterTests
         var old = Environment.GetEnvironmentVariable(EnvironmentAiAgentModelAdapter.EndpointVariable);
         try
         {
-            Environment.SetEnvironmentVariable(
-                EnvironmentAiAgentModelAdapter.EndpointVariable, null);
+            Environment.SetEnvironmentVariable(EnvironmentAiAgentModelAdapter.EndpointVariable, null);
 
-            using var adapter = new EnvironmentAiAgentModelAdapter(
-                new HttpClient(new StubHandler()));
-
-            var request = CreateRequest();
+            using var handler = new StubHandler();
+            using var client = new HttpClient(handler);
+            using var adapter = new EnvironmentAiAgentModelAdapter(client);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                adapter.GenerateAsync(request, CancellationToken.None));
+                adapter.GenerateAsync(CreateRequest(), CancellationToken.None));
         }
         finally
         {
-            Environment.SetEnvironmentVariable(
-                EnvironmentAiAgentModelAdapter.EndpointVariable, old);
+            Environment.SetEnvironmentVariable(EnvironmentAiAgentModelAdapter.EndpointVariable, old);
         }
     }
 
@@ -34,55 +33,48 @@ public sealed class EnvironmentAiAgentModelAdapterTests
     public async Task RequestContainsOnlyNonSecretTaskEnvelope()
     {
         string? captured = null;
-        var handler = new StubHandler(request =>
+        using var handler = new StubHandler(request =>
         {
             captured = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    \"{\\\"summary\\\":\\\"proposal\\\",\\\"proposedChanges\\\":[],\\\"proposedTests\\\":[],\\\"evidence\\\":[\\\"observation\\\"],\\\"requiresIndependentVerification\\\":true}\",
+                    """{"summary":"proposal","proposedChanges":[],"proposedTests":[],"evidence":["observation"],"requiresIndependentVerification":true}""",
                     Encoding.UTF8,
-                    \"application/json\")
+                    "application/json")
             };
         });
+        using var client = new HttpClient(handler);
 
-        var oldEndpoint = Environment.GetEnvironmentVariable(
-            EnvironmentAiAgentModelAdapter.EndpointVariable);
-
+        var oldEndpoint = Environment.GetEnvironmentVariable(EnvironmentAiAgentModelAdapter.EndpointVariable);
         try
         {
             Environment.SetEnvironmentVariable(
                 EnvironmentAiAgentModelAdapter.EndpointVariable,
-                \"https://example.invalid/agent\");
+                "https://example.invalid/agent");
 
-            using var adapter = new EnvironmentAiAgentModelAdapter(
-                new HttpClient(handler));
+            using var adapter = new EnvironmentAiAgentModelAdapter(client);
+            var response = await adapter.GenerateAsync(CreateRequest(), CancellationToken.None);
 
-            var response = await adapter.GenerateAsync(
-                CreateRequest(),
-                CancellationToken.None);
-
-            Assert.Equal(\"proposal\", response.Summary);
+            Assert.Equal("proposal", response.Summary);
             Assert.NotNull(captured);
-            Assert.Contains(\"Task-001\", captured);
-            Assert.DoesNotContain(\"smtp-password\", captured);
-            Assert.DoesNotContain(\"AuthorizationToken\", captured);
+            Assert.Contains("Task-001", captured);
+            Assert.DoesNotContain("smtp-password", captured);
+            Assert.DoesNotContain("AuthorizationToken", captured);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(
-                EnvironmentAiAgentModelAdapter.EndpointVariable,
-                oldEndpoint);
+            Environment.SetEnvironmentVariable(EnvironmentAiAgentModelAdapter.EndpointVariable, oldEndpoint);
         }
     }
 
     private static AiAgentModelRequest CreateRequest() => new(
-        \"Task-001\",
-        \"developer\",
-        \"sirvan0010-alt/load2\",
+        "Task-001",
+        "developer",
+        "sirvan0010-alt/load2",
         new string('a', 40),
-        new[] { \"src/MailLoadTester.Core\", \"tests/MailLoadTester.Tests\" },
-        new[] { \"tests pass\", \"CI verifies the change\" },
+        new[] { "src/MailLoadTester.Core", "tests/MailLoadTester.Tests" },
+        new[] { "tests pass", "CI verifies the change" },
         1,
         DateTimeOffset.UtcNow.AddMinutes(1));
 
@@ -99,13 +91,12 @@ public sealed class EnvironmentAiAgentModelAdapterTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            return Task.FromResult(_response?.Invoke(request) ?? new HttpResponseMessage(
-                HttpStatusCode.OK)
+            return Task.FromResult(_response?.Invoke(request) ?? new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    \"{\\\"summary\\\":\\\"ok\\\",\\\"proposedChanges\\\":[],\\\"proposedTests\\\":[],\\\"evidence\\\":[],\\\"requiresIndependentVerification\\\":true}\",
+                    """{"summary":"ok","proposedChanges":[],"proposedTests":[],"evidence":[],"requiresIndependentVerification":true}""",
                     Encoding.UTF8,
-                    \"application/json\")
+                    "application/json")
             });
         }
     }

@@ -15,7 +15,7 @@ public sealed class AiAgentRunnerTests
         var result = await runner.RunAsync(TaskFor(), agent);
 
         Assert.Equal(AgentRunStatus.Blocked, result.Status);
-        Assert.Empty(agent.Calls);
+        Assert.Equal(0, agent.Calls);
     }
 
     [Fact]

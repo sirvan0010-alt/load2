@@ -31,13 +31,13 @@ public sealed class EnvironmentAiAgentModelAdapter : IAiAgentModelAdapter, IDisp
         var endpoint = Environment.GetEnvironmentVariable(EndpointVariable);
         if (string.IsNullOrWhiteSpace(endpoint))
             throw new InvalidOperationException(
-                $\"{EndpointVariable} is not configured. AI agent execution is optional.\");
+                $"{EndpointVariable} is not configured. AI agent execution is optional.");
 
         if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
             throw new InvalidOperationException(
-                $\"{EndpointVariable} must be an absolute HTTP(S) URL.\");
+                $"{EndpointVariable} must be an absolute HTTP(S) URL.");
         }
 
         var envelope = new AiAgentModelEnvelope(
@@ -55,13 +55,13 @@ public sealed class EnvironmentAiAgentModelAdapter : IAiAgentModelAdapter, IDisp
             Content = new StringContent(
                 JsonSerializer.Serialize(envelope),
                 Encoding.UTF8,
-                \"application/json\")
+                "application/json")
         };
 
         var apiKey = Environment.GetEnvironmentVariable(ApiKeyVariable);
         if (!string.IsNullOrWhiteSpace(apiKey))
             message.Headers.Authorization =
-                new AuthenticationHeaderValue(\"Bearer\", apiKey);
+                new AuthenticationHeaderValue("Bearer", apiKey);
 
         using var response = await _httpClient.SendAsync(
             message,
@@ -73,11 +73,11 @@ public sealed class EnvironmentAiAgentModelAdapter : IAiAgentModelAdapter, IDisp
 
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(
-                $\"AI agent endpoint returned HTTP {(int)response.StatusCode}.\");
+                $"AI agent endpoint returned HTTP {(int)response.StatusCode}.");
 
         if (string.IsNullOrWhiteSpace(body))
             throw new InvalidOperationException(
-                \"AI agent endpoint returned an empty response.\");
+                "AI agent endpoint returned an empty response.");
 
         try
         {
@@ -89,12 +89,12 @@ public sealed class EnvironmentAiAgentModelAdapter : IAiAgentModelAdapter, IDisp
                 });
 
             return result ?? throw new InvalidOperationException(
-                \"AI agent endpoint returned an invalid response.\");
+                "AI agent endpoint returned an invalid response.");
         }
         catch (JsonException ex)
         {
             throw new InvalidOperationException(
-                \"AI agent endpoint returned malformed JSON.\", ex);
+                "AI agent endpoint returned malformed JSON.", ex);
         }
     }
 

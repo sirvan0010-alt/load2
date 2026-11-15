@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "review/**"]
   pull_request:
   workflow_dispatch:
 
@@ -33,3 +33,20 @@ jobs:
 
       - name: Test Release (full suite, no quarantine filter)
         run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build --verbosity normal
+
+  build-gui:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore Windows Forms GUI
+        run: dotnet restore src/MailLoadTester.Gui/MailLoadTester.Gui.csproj
+
+      - name: Build Windows Forms GUI (Release)
+        run: dotnet build src/MailLoadTester.Gui/MailLoadTester.Gui.csproj -c Release --no-restore

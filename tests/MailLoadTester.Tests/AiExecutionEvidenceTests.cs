@@ -43,18 +43,22 @@ public sealed class AiExecutionEvidenceTests
         int requested = 10,
         int sent = 7,
         int failed = 2) =>
-        new()
-        {
-            Requested = requested,
-            Sent = sent,
-            Failed = failed,
-            Smtp4xx = 1,
-            Smtp5xx = 0,
-            Timeouts = 0,
-            Retries = 1,
-            ThroughputPerSec = 2.5,
-            P95LatencyMs = 120,
-            CircuitBreakerOpen = false,
-            Cancelled = false
-        };
+        new(
+            requested,
+            sent,
+            failed,
+            TimeSpan.FromSeconds(2),
+            string.Empty,
+            120,
+            10,
+            250,
+            100,
+            120,
+            180,
+            2.5,
+            Retries: 1,
+            Smtp4xx: 1,
+            Smtp5xx: 0,
+            Timeouts: 0,
+            CircuitBreakerOpen: false);
 }

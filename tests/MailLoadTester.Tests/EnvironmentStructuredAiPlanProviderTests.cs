@@ -87,7 +87,6 @@ public sealed class EnvironmentStructuredAiPlanProviderTests
             MaxRetries: 0,
             DryRun: false,
             Unauthorized: false);
-    }
 
     private sealed class CapturingHandler : HttpMessageHandler
     {

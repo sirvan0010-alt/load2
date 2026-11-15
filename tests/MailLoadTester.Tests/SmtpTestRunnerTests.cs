@@ -59,7 +59,7 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
-    public async Task AutoRestart_DoesNotResendAlreadyAcceptedLogicalMessage()
+    public async Task AutoRestart_RetriesSingleUnresolvedFailureWithoutResendingAcceptedMessages()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.AcceptFirstThenTransientThenAccept);
         var runner = new SmtpTestRunner();
