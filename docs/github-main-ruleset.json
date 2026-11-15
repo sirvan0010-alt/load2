@@ -56,9 +56,6 @@
             "context": "Dependency Review"
           },
           {
-            "context": "Workflow Hygiene"
-          },
-          {
             "context": "Repository Architecture"
           }
         ]
