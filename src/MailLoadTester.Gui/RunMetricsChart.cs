@@ -8,9 +8,6 @@ namespace MailLoadTester.Gui;
 /// </summary>
 internal sealed class RunMetricsChart : Control
 {
-    private const int MaxSamples = 120;
-    private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(10);
-
     private readonly RunMetricsChartSampler _sampler = new();
     private IReadOnlyList<RunMetricsChartSample> Samples => _sampler.Samples;
 
