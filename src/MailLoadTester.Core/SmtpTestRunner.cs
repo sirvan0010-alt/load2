@@ -1132,7 +1132,10 @@ public sealed class SmtpTestRunner
             QueueMetrics: queueMetrics.Snapshot(),
             RetryMetrics: retryMetrics.Snapshot(),
             OutcomeCounts: outcomeCounters.Snapshot(),
-            LatencyHistogram: latencyHistogram.Snapshot());
+            LatencyHistogram: latencyHistogram.Snapshot(),
+            CapacitySendAttempts: capacityGuard?.ReservedAttempts,
+            CapacityMimeBytesReserved: capacityGuard?.ReservedMimeBytes,
+            CapacityStopReason: capacityStopReason);
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
