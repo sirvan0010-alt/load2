@@ -431,6 +431,7 @@ public sealed partial class MainForm
         numProxyPort.ValueChanged += (_, _) => UpdateProxyStatus();
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
+        txtProxyList.TextChanged += (_, _) => UpdateProxyStatus();
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
@@ -710,6 +711,8 @@ public sealed partial class MainForm
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
         ApplyFallbackToolTips(this);
+        UpdateProxyStatus();
+        UpdateQueueFlow(null);
     }
 
     private static string LayoutPreferencesFile =>
