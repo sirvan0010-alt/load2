@@ -97,7 +97,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Účet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowErrorWithCopy(ex.Message, "Účet", ex.ToString());
         }
     }
 
@@ -118,7 +118,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Účet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowErrorWithCopy(ex.Message, "Účet", ex.ToString());
         }
     }
 
