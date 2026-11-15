@@ -517,7 +517,7 @@ public sealed partial class MainForm
         var bottomPanel = new Panel { Dock = DockStyle.Fill };
         // Resizable live workspace: drag the splitter to give more room to the
         // application log or to the delivery pipeline / worker status area.
-        var bottomSplit = new SplitContainer
+        bottomSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Size = new Size(1280, 600),
@@ -584,7 +584,7 @@ public sealed partial class MainForm
         bottomPanel.Controls.Add(bottomSplit);
 
         // Resize the configuration tabs and the live workspace independently.
-        var workspaceSplit = new SplitContainer
+        workspaceSplit = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Size = new Size(1280, 800),
@@ -615,6 +615,66 @@ public sealed partial class MainForm
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
         ApplyFallbackToolTips(this);
+    }
+
+    private static string LayoutPreferencesFile =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MailLoadTester", "ui-layout.json");
+
+    private sealed record UiLayoutPreferences(int WorkspaceSplitterDistance, int BottomSplitterDistance);
+
+    private void LoadLayoutPreferences()
+    {
+        try
+        {
+            var path = LayoutPreferencesFile;
+            if (!File.Exists(path))
+                return;
+
+            var preferences = System.Text.Json.JsonSerializer.Deserialize<UiLayoutPreferences>(File.ReadAllText(path));
+            if (preferences is null)
+                return;
+
+            if (workspaceSplit.Width > 0 && workspaceSplit.Height > 0)
+            {
+                var max = Math.Max(workspaceSplit.Panel1MinSize,
+                    workspaceSplit.Height - workspaceSplit.Panel2MinSize - workspaceSplit.SplitterWidth);
+                workspaceSplit.SplitterDistance = Math.Clamp(
+                    preferences.WorkspaceSplitterDistance, workspaceSplit.Panel1MinSize, max);
+            }
+
+            if (bottomSplit.Width > 0)
+            {
+                var max = Math.Max(bottomSplit.Panel1MinSize,
+                    bottomSplit.Width - bottomSplit.Panel2MinSize - bottomSplit.SplitterWidth);
+                bottomSplit.SplitterDistance = Math.Clamp(
+                    preferences.BottomSplitterDistance, bottomSplit.Panel1MinSize, max);
+            }
+        }
+        catch
+        {
+            // A damaged or inaccessible optional UI preference must never prevent startup.
+        }
+    }
+
+    private void SaveLayoutPreferences()
+    {
+        try
+        {
+            var path = LayoutPreferencesFile;
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            var preferences = new UiLayoutPreferences(
+                workspaceSplit.SplitterDistance,
+                bottomSplit.SplitterDistance);
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(preferences));
+        }
+        catch
+        {
+            // Layout persistence is best-effort and must not block application shutdown.
+        }
     }
 
     private TextBox AddLabeledText(Control parent, string label, string tip)
