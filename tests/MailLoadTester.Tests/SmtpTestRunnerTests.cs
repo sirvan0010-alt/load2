@@ -62,7 +62,9 @@ public sealed class SmtpTestRunnerTests
                 CapacityRun = new CapacityRunLimits(
                     Enabled: true,
                     MaxMessageCount: 2,
-                    TargetMimeBytes: oneMessageBytes + 1)
+                    // Leave room for one message, but far less than two. MIME headers
+                    // (e.g. Date) can vary slightly between independently built messages.
+                    TargetMimeBytes: oneMessageBytes + 100)
             },
             new Progress<ProgressUpdate>(),
             CancellationToken.None);
@@ -71,7 +73,7 @@ public sealed class SmtpTestRunnerTests
         Assert.Contains("Capacity stop", bounded.CapacityStopReason);
         Assert.Equal(1, bounded.SmtpSendAttempts);
         Assert.Equal(1, bounded.CapacitySendReservations);
-        Assert.Equal(oneMessageBytes, bounded.CapacityMimeBytesReserved);
+        Assert.InRange(bounded.CapacityMimeBytesReserved!.Value, oneMessageBytes, oneMessageBytes + 16);
         Assert.InRange(server.MessagesAccepted - acceptedBeforeBoundedRun, 0, 1);
         Assert.InRange(server.DataAttempts - dataAttemptsBeforeBoundedRun, 0, 1);
     }
