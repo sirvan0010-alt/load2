@@ -161,6 +161,12 @@ public sealed partial class MainForm
             catch { /* neblokovat start při chybě DNSBL */ }
         }
 
+        // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
+        _mailboxRunBaseline = null;
+        _mailboxLastSnapshot = null;
+        if (IsMailboxMonitorConfigured())
+            _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
+
         _isRunning = true;
         _mailboxQuotaStopTriggered = false;
         _lastRunReport = null;
@@ -203,6 +209,14 @@ public sealed partial class MainForm
             var result = await Task.Run(async () =>
                 await _runner.RunAsync(options, progress, _cts.Token), _cts.Token);
 
+            // Capture a final mailbox snapshot after any in-flight periodic poll completes.
+            // This is observational evidence only; concurrent mailbox activity can affect deltas.
+            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            result = result with
+            {
+                MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
+            };
+
             var runReport = RunReportBuilder.Create(
                 result.RunId ?? Guid.NewGuid().ToString("N"),
                 runStartedUtc,
@@ -223,6 +237,15 @@ public sealed partial class MainForm
             AppendLog($"\n=== VÝSLEDEK ===", Color.Cyan);
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
+            if (result.CapacitySendAttempts.HasValue)
+                AppendLog($"Kapacitní běh: SMTP SEND pokusy {result.CapacitySendAttempts.Value:N0}; rezervovaný MIME objem {FormatMailboxBytes(result.CapacityMimeBytesReserved)}.", Color.LightBlue);
+            if (result.MailboxRunDelta is { } mailboxDelta)
+            {
+                AppendLog($"IMAP změna během běhu: quota zprávy {FormatDelta(mailboxDelta.QuotaMessageCountDelta)}; quota objem {FormatByteDelta(mailboxDelta.QuotaStorageBytesDelta)}; INBOX {FormatDelta(mailboxDelta.InboxMessageCountDelta)}; Junk/Spam {FormatDelta(mailboxDelta.JunkMessageCountDelta)}.", Color.LightBlue);
+                AppendLog(mailboxDelta.Note, Color.DarkGray);
+            }
+            else if (IsMailboxMonitorConfigured())
+                AppendLog("IMAP změnu během běhu nelze vyčíslit: chybí platný počáteční nebo konečný snímek či podporované metriky.", Color.Orange);
             AppendLog(RunObservability.FormatSummaryLine(RunObservability.FromReport(runReport)), Color.LightBlue);
             if (result.LatencyHistogram is { TotalCount: > 0 } histogram)
             {
