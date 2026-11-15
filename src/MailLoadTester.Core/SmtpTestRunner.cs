@@ -8,6 +8,68 @@ namespace MailLoadTester;
 
 public sealed class SmtpTestRunner
 {
+    private readonly object _mailboxFeedbackSync = new();
+    private MailboxCapacityFeedbackController? _mailboxFeedbackController;
+    private SmartPaceController? _activePaceController;
+    private AdaptiveConcurrencyLimiter? _activeAdaptiveLimiter;
+    private MailboxCapacityFeedbackDecision? _currentMailboxFeedbackDecision;
+    private int _mailboxFeedbackStopThreshold = 80;
+
+    /// <summary>
+    /// Enables mailbox-driven down-only feedback for a Capacity Run and seeds it
+    /// with the pre-send IMAP baseline. No baseline means no mailbox feedback.
+    /// </summary>
+    public void SetMailboxFeedbackBaseline(MailboxMonitorSnapshot? baseline, int stopThresholdPercent, bool enabled)
+    {
+        lock (_mailboxFeedbackSync)
+        {
+            _mailboxFeedbackController = enabled ? new MailboxCapacityFeedbackController() : null;
+            _mailboxFeedbackController?.SetBaseline(baseline);
+            _mailboxFeedbackStopThreshold = Math.Clamp(stopThresholdPercent, 1, 100);
+            _currentMailboxFeedbackDecision = null;
+            _activePaceController = null;
+            _activeAdaptiveLimiter = null;
+        }
+    }
+
+    /// <summary>
+    /// Supplies a fresh IMAP observation. Only positive STORAGE growth near the
+    /// configured quota-stop threshold can slow a running Capacity Run.
+    /// </summary>
+    public void ObserveMailboxSnapshot(MailboxMonitorSnapshot snapshot)
+    {
+        SmartPaceController? pace;
+        AdaptiveConcurrencyLimiter? adaptive;
+        MailboxCapacityFeedbackDecision? decision;
+        lock (_mailboxFeedbackSync)
+        {
+            decision = _mailboxFeedbackController?.Observe(snapshot, _mailboxFeedbackStopThreshold);
+            if (decision is null) return;
+            _currentMailboxFeedbackDecision = decision;
+            pace = _activePaceController;
+            adaptive = _activeAdaptiveLimiter;
+        }
+
+        pace?.ApplyMailboxPressure(decision.Severity);
+        if (decision.Severity >= 2)
+            adaptive?.ApplyMailboxPressure();
+    }
+
+    private void RegisterMailboxFeedbackTargets(SmartPaceController pace, AdaptiveConcurrencyLimiter? adaptive)
+    {
+        MailboxCapacityFeedbackDecision? decision;
+        lock (_mailboxFeedbackSync)
+        {
+            _activePaceController = pace;
+            _activeAdaptiveLimiter = adaptive;
+            decision = _currentMailboxFeedbackDecision;
+        }
+
+        if (decision is null) return;
+        pace.ApplyMailboxPressure(decision.Severity);
+        if (decision.Severity >= 2)
+            adaptive?.ApplyMailboxPressure();
+    }
     /// <summary>
     /// Spustí test. Pokud je zapnutý AutoRestartOnFailure, test se automaticky
     /// zopakuje, pokud aktuální pokus skončí alespoň jednou nevyřešenou chybou
@@ -374,6 +436,7 @@ public sealed class SmtpTestRunner
                 failureRatePercent: options.CircuitBreakerFailurePercent)
             : null;
         var bandwidth = options.BandwidthLimitKbps > 0 ? new BandwidthLimiter(options.BandwidthLimitKbps) : null;
+        RegisterMailboxFeedbackTargets(pace, adaptive);
 
         MimeKit.FormatOptions? utf8Format = null;
         if (options.SmtpUtf8)
