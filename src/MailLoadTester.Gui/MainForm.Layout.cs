@@ -5,7 +5,7 @@ public sealed partial class MainForm
 
     private void InitializeComponent()
     {
-        toolTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 150, ReshowDelay = 50, ShowAlways = true };
+        toolTip = new ToolTip { AutoPopDelay = 3000, InitialDelay = 150, ReshowDelay = 50, ShowAlways = true };
 
         // === UI enhancement ===
         pnlSafetyBanner = new Panel
