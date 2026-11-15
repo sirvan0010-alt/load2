@@ -24,7 +24,8 @@ public sealed partial class MainForm
             u.Sent,
             u.Smtp4xx,
             u.Smtp5xx,
-            GetObservedQuotaMessageDelta(_mailboxLastSnapshot));
+            GetObservedQuotaMessageDelta(_mailboxLastSnapshot),
+            _mailboxLastSnapshot?.QuotaUsagePercent);
         lblCapacityRun.Text = u.CapacityMimeBytesReserved.HasValue
             ? $"MIME: {FormatMailboxBytes(u.CapacityMimeBytesReserved)} / {(u.CapacityMimeBytesTarget.HasValue ? FormatMailboxBytes(u.CapacityMimeBytesTarget) : "bez limitu")}"
             : string.Empty;
