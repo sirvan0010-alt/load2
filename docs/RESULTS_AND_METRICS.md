@@ -80,7 +80,7 @@ SMTP/IMAP graf zobrazuje:
 - pozorovanou změnu počtu zpráv podle IMAP kvóty za minutu;
 - absolutní využití IMAP STORAGE kvóty v procentech.
 
-Rychlosti jsou počítány z přibližně desetisekundového klouzavého okna. Po resetu čítačů na hranici AutoRestart se může zobrazit mezera; ta je přesnější než vykreslit zápornou rychlost.
+Vzorky grafu jsou omezeny přibližně na jeden za sekundu a historie na 120 vzorků. SMTP rychlosti se počítají z přibližně desetisekundového klouzavého okna. IMAP Δ/min je průměrná změna mezi dvěma odlišnými serverovými snapshoty (typicky s odstupem 30 sekund); poslední hodnota se drží do dalšího snapshotu. Při neúspěšném IMAP měření nebo chybějících datech se zobrazí mezera, nikoli nula. Po resetu SMTP čítačů na hranici AutoRestart se může zobrazit mezera; ta je přesnější než vykreslit zápornou rychlost.
 
 IMAP `Δ/min` je nezávislé pozorování změny schránky, nikoli počet zpráv prokazatelně uložených tímto během. Procento kvóty je absolutní stav serveru, nikoli rychlost.
 
