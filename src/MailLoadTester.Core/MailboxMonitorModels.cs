@@ -109,6 +109,7 @@ public sealed class MailboxCapacityFeedbackController
         if (previous is null
             || snapshot.CheckedAt <= previous.CheckedAt
             || !previous.QuotaUsedBytes.HasValue
+            || !previous.QuotaUsagePercent.HasValue
             || !snapshot.QuotaUsedBytes.HasValue
             || !snapshot.QuotaUsagePercent.HasValue)
         {
