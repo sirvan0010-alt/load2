@@ -185,6 +185,7 @@ public sealed partial class MainForm
         }
 
         _cts = new CancellationTokenSource();
+        StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
         _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var progress = new Progress<ProgressUpdate>(UpdateProgress);
@@ -263,6 +264,7 @@ public sealed partial class MainForm
         }
         finally
         {
+            StopMailboxMonitorPolling();
             _isRunning = false;
             btnStart.Enabled = true;
             btnStop.Enabled = false;
