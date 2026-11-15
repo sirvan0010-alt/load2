@@ -11,31 +11,8 @@ internal sealed class RunMetricsChart : Control
     private const int MaxSamples = 120;
     private static readonly TimeSpan RateWindow = TimeSpan.FromSeconds(10);
 
-    private sealed record RawSample(
-        DateTimeOffset At,
-        int SendAttempts,
-        int Accepted,
-        int Smtp4xx,
-        int Smtp5xx,
-        double? ObservedMailboxMessagesPerMinute,
-        double? QuotaUsagePercent);
-
-    private sealed record Sample(
-        DateTimeOffset At,
-        double? SendAttemptsPerMinute,
-        double? AcceptedPerMinute,
-        double? Smtp4xxPerMinute,
-        double? Smtp5xxPerMinute,
-        double? ObservedMailboxMessagesPerMinute,
-        double? QuotaUsagePercent);
-
-    private readonly List<RawSample> _rawSamples = new();
-    private readonly List<Sample> _samples = new();
-    private DateTimeOffset? _lastChartSampleAt;
-    private DateTimeOffset? _lastQuotaObservationAt;
-    private long? _lastQuotaMessageDelta;
-    private double? _latestObservedMailboxMessagesPerMinute;
-    private double? _latestQuotaUsagePercent;
+    private readonly RunMetricsChartSampler _sampler = new();
+    private IReadOnlyList<RunMetricsChartSample> Samples => _sampler.Samples;
 
     public RunMetricsChart()
     {
@@ -57,87 +34,23 @@ internal sealed class RunMetricsChart : Control
         long? observedMailboxMessageDelta,
         double? quotaUsagePercent)
     {
-        // IMAP observations arrive roughly every 30 seconds. Calculate their
-        // rate only between distinct server snapshots, never from repeated
-        // progress callbacks carrying the same cumulative delta.
-        if (quotaObservedAt.HasValue
-            && (!_lastQuotaObservationAt.HasValue || quotaObservedAt.Value > _lastQuotaObservationAt.Value))
-        {
-            if (_lastQuotaObservationAt.HasValue
-                && _lastQuotaMessageDelta.HasValue
-                && observedMailboxMessageDelta.HasValue)
-            {
-                var elapsed = (quotaObservedAt.Value - _lastQuotaObservationAt.Value).TotalMinutes;
-                _latestObservedMailboxMessagesPerMinute = elapsed > 0
-                    ? (observedMailboxMessageDelta.Value - _lastQuotaMessageDelta.Value) / elapsed
-                    : null;
-            }
-            else
-            {
-                _latestObservedMailboxMessagesPerMinute = null;
-            }
-
-            _lastQuotaObservationAt = quotaObservedAt.Value;
-            _lastQuotaMessageDelta = observedMailboxMessageDelta;
-            _latestQuotaUsagePercent = quotaUsagePercent is >= 0 and <= 100 ? quotaUsagePercent : null;
-        }
-
-        // Progress events can arrive for every message/state transition. Keep
-        // a one-second chart cadence so 120 samples represent about two minutes.
-        if (_lastChartSampleAt.HasValue
-            && at - _lastChartSampleAt.Value < TimeSpan.FromSeconds(1))
-        {
-            return;
-        }
-
-        _lastChartSampleAt = at;
-        var raw = new RawSample(
+        if (_sampler.AddSample(
             at,
-            Math.Max(0, sendAttempts),
-            Math.Max(0, accepted),
-            Math.Max(0, smtp4xx),
-            Math.Max(0, smtp5xx),
-            _latestObservedMailboxMessagesPerMinute,
-            _latestQuotaUsagePercent);
-
-        _rawSamples.Add(raw);
-        if (_rawSamples.Count > MaxSamples)
-            _rawSamples.RemoveRange(0, _rawSamples.Count - MaxSamples);
-
-        var cutoff = at - RateWindow;
-        var baseline = _rawSamples.LastOrDefault(sample => sample.At <= cutoff)
-            ?? _rawSamples[0];
-        var elapsedMinutes = (at - baseline.At).TotalMinutes;
-
-        double? NonNegativeRate(int current, int previous) =>
-            elapsedMinutes > 0 && current >= previous
-                ? (current - previous) / elapsedMinutes
-                : null;
-
-        _samples.Add(new Sample(
-            at,
-            NonNegativeRate(raw.SendAttempts, baseline.SendAttempts),
-            NonNegativeRate(raw.Accepted, baseline.Accepted),
-            NonNegativeRate(raw.Smtp4xx, baseline.Smtp4xx),
-            NonNegativeRate(raw.Smtp5xx, baseline.Smtp5xx),
-            raw.ObservedMailboxMessagesPerMinute,
-            raw.QuotaUsagePercent));
-
-        if (_samples.Count > MaxSamples)
-            _samples.RemoveRange(0, _samples.Count - MaxSamples);
-
-        Invalidate();
+            sendAttempts,
+            accepted,
+            smtp4xx,
+            smtp5xx,
+            quotaObservedAt,
+            observedMailboxMessageDelta,
+            quotaUsagePercent))
+        {
+            Invalidate();
+        }
     }
 
     public void ClearSamples()
     {
-        _rawSamples.Clear();
-        _samples.Clear();
-        _lastChartSampleAt = null;
-        _lastQuotaObservationAt = null;
-        _lastQuotaMessageDelta = null;
-        _latestObservedMailboxMessagesPerMinute = null;
-        _latestQuotaUsagePercent = null;
+        _sampler.Clear();
         Invalidate();
     }
 
@@ -159,14 +72,14 @@ internal sealed class RunMetricsChart : Control
         var plot = new Rectangle(54, 52, Math.Max(1, Width - 82), Math.Max(1, Height - 86));
         g.DrawRectangle(border, plot);
 
-        if (_samples.Count == 0)
+        if (Samples.Count == 0)
         {
             g.DrawString("Čekám na průběh SMTP testu…", Font, mutedBrush,
                 plot.Left + 10, plot.Top + plot.Height / 2 - 8);
             return;
         }
 
-        var values = _samples.SelectMany(sample => new double?[]
+        var values = Samples.SelectMany(sample => new double?[]
         {
             sample.SendAttemptsPerMinute,
             sample.AcceptedPerMinute,
@@ -213,8 +126,8 @@ internal sealed class RunMetricsChart : Control
             g.DrawString($"{tick * 25}%", Font, mutedBrush, plot.Right + 3, y - 6);
         }
 
-        var first = _samples[0].At.ToLocalTime().ToString("HH:mm:ss");
-        var last = _samples[^1].At.ToLocalTime().ToString("HH:mm:ss");
+        var first = Samples[0].At.ToLocalTime().ToString("HH:mm:ss");
+        var last = Samples[^1].At.ToLocalTime().ToString("HH:mm:ss");
         g.DrawString(first, Font, mutedBrush, plot.Left, plot.Bottom + 6);
         var lastSize = g.MeasureString(last, Font);
         g.DrawString(last, Font, mutedBrush, plot.Right - lastSize.Width, plot.Bottom + 6);
@@ -251,15 +164,15 @@ internal sealed class RunMetricsChart : Control
         Graphics g,
         Rectangle plot,
         Color color,
-        Func<Sample, double?> selector)
+        Func<RunMetricsChartSample, double?> selector)
     {
         using var pen = new Pen(color, 1.8f);
         using var brush = new SolidBrush(color);
         PointF? previous = null;
 
-        for (var index = 0; index < _samples.Count; index++)
+        for (var index = 0; index < Samples.Count; index++)
         {
-            var value = selector(_samples[index]);
+            var value = selector(Samples[index]);
             if (!value.HasValue)
             {
                 previous = null;
@@ -282,15 +195,15 @@ internal sealed class RunMetricsChart : Control
         double yMin,
         double yMax,
         Color color,
-        Func<Sample, double?> selector)
+        Func<RunMetricsChartSample, double?> selector)
     {
         using var pen = new Pen(color, 1.8f);
         using var brush = new SolidBrush(color);
         PointF? previous = null;
 
-        for (var index = 0; index < _samples.Count; index++)
+        for (var index = 0; index < Samples.Count; index++)
         {
-            var value = selector(_samples[index]);
+            var value = selector(Samples[index]);
             if (!value.HasValue)
             {
                 previous = null;
@@ -310,16 +223,16 @@ internal sealed class RunMetricsChart : Control
 
     private float GetX(Rectangle plot, int index)
     {
-        if (_samples.Count <= 1)
+        if (Samples.Count <= 1)
             return plot.Left;
 
-        var first = _samples[0].At;
-        var last = _samples[^1].At;
+        var first = Samples[0].At;
+        var last = Samples[^1].At;
         var duration = (last - first).TotalMilliseconds;
         if (duration <= 0)
-            return plot.Left + plot.Width * index / (float)(_samples.Count - 1);
+            return plot.Left + plot.Width * index / (float)(Samples.Count - 1);
 
-        var ratio = (_samples[index].At - first).TotalMilliseconds / duration;
+        var ratio = (Samples[index].At - first).TotalMilliseconds / duration;
         return plot.Left + plot.Width * (float)Math.Clamp(ratio, 0d, 1d);
     }
 }
