@@ -111,7 +111,12 @@ public sealed partial class MainForm
 
     private void WireMailboxMonitorEvents()
     {
-        btnMailboxRefresh.Click += async (_, _) => await RefreshMailboxMonitorAsync();
+        btnMailboxRefresh.Click += async (_, _) =>
+        {
+            await RefreshMailboxMonitorAsync();
+            if (_isRunning && IsMailboxMonitorConfigured())
+                EnsureMailboxMonitorTimerStarted();
+        };
         btnMailboxClear.Click += (_, _) => ClearMailboxMonitorCredentials();
     }
 
@@ -119,6 +124,7 @@ public sealed partial class MainForm
     {
         StopMailboxMonitorPolling();
         _mailboxMonitorCts?.Cancel();
+        chkMailboxStopAtQuota.Checked = false;
         txtMailboxHost.Clear();
         txtMailboxUsername.Clear();
         txtMailboxPassword.Clear();
@@ -143,12 +149,17 @@ public sealed partial class MainForm
         if (!IsMailboxMonitorConfigured())
             return;
 
+        EnsureMailboxMonitorTimerStarted();
+        _ = RefreshMailboxMonitorAsync();
+    }
+
+    private void EnsureMailboxMonitorTimerStarted()
+    {
         _mailboxMonitorTimer ??= new System.Windows.Forms.Timer();
         _mailboxMonitorTimer.Interval = 30_000;
         _mailboxMonitorTimer.Tick -= MailboxMonitorTimer_Tick;
         _mailboxMonitorTimer.Tick += MailboxMonitorTimer_Tick;
         _mailboxMonitorTimer.Start();
-        _ = RefreshMailboxMonitorAsync();
     }
 
     private async void MailboxMonitorTimer_Tick(object? sender, EventArgs e)
