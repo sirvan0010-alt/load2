@@ -4,6 +4,10 @@ This index separates current engineering guidance from historical audit records.
 
 ## Start here
 
+- [User guide](USER_GUIDE.md) — installation, first safe run, tabs, settings, Capacity Run, IMAP monitor and charts.
+- [Results and metrics](RESULTS_AND_METRICS.md) — SMTP Accepted vs mailbox storage, quotas, MIME accounting and graph interpretation.
+- [Safety and privacy](SAFETY_AND_PRIVACY.md) — authorization, limits, credentials, logs, reports and webhook handling.
+- [Troubleshooting](TROUBLESHOOTING.md) — SMTP, TLS, authentication, 4xx/5xx, Capacity Run and IMAP issues.
 - [Build and release guide](../README-BUILD.md) — Windows build, publish and installer commands.
 - [Development guide](DEVELOPMENT.md) — architecture, local validation and contribution workflow.
 - [AI guide](AI-GUIDE.md) — instructions for AI-assisted repository work.
