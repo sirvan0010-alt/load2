@@ -436,10 +436,10 @@ public sealed partial class MainForm
             AutoSize = true, Margin = new Padding(24, 0, 0, 10)
         };
         lnkDirectMxHelp.LinkClicked += (_, _) => MessageBox.Show(
-            "SMTP účet (doporučeno pro běžné použití)\\n" +
-            "Připojíš se k poskytovateli, například Gmailu, a odešleš zprávu přes ověřený účet. Adresa odesílatele musí být účet nebo povolený alias.\\n\\n" +
-            "Direct MX (jen pro vlastní doménu)\\n" +
-            "Aplikace kontaktuje přímo poštovní server příjemce. Potřebuješ doménu a správné DNS/e-mailové nastavení (zejména SPF, DKIM, DMARC a reverzní DNS/PTR). Bez toho bývá doručování nespolehlivé.\\n\\n" +
+            "SMTP účet (doporučeno pro běžné použití)\n" +
+            "Připojíš se k poskytovateli, například Gmailu, a odešleš zprávu přes ověřený účet. Adresa odesílatele musí být účet nebo povolený alias.\n\n" +
+            "Direct MX (jen pro vlastní doménu)\n" +
+            "Aplikace kontaktuje přímo poštovní server příjemce. Potřebuješ doménu a správné DNS/e-mailové nastavení (zejména SPF, DKIM, DMARC a reverzní DNS/PTR). Bez toho bývá doručování nespolehlivé.\n\n" +
             "Důležité: Direct MX neznamená anonymitu. Příjemce může z hlaviček a síťových záznamů zjistit odesílající IP/server. Adresa From je stále viditelná a musí být platná. Gmail SMTP ani Direct MX nezaručují skrytí identity odesílatele.",
             "SMTP vs. Direct MX", MessageBoxButtons.OK, MessageBoxIcon.Information);
         flAdv.Controls.Add(lnkDirectMxHelp);
