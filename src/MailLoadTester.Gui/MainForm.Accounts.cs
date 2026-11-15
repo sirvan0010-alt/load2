@@ -107,7 +107,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            ShowErrorWithCopy(ex.Message, "Účet", ex.ToString());
+            ShowErrorWithCopy(ex.Message, "SMTP účet", ex.ToString(), GuiErrorCodes.SmtpAccount);
         }
     }
 
@@ -128,7 +128,7 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            ShowErrorWithCopy(ex.Message, "Účet", ex.ToString());
+            ShowErrorWithCopy(ex.Message, "SMTP účet", ex.ToString(), GuiErrorCodes.SmtpAccount);
         }
     }
 
