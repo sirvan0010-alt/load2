@@ -1103,30 +1103,37 @@ public sealed class SmtpTestRunner
                                 retryable = true;
                                 Interlocked.Increment(ref retries);
                                 retryMetrics.RecordRetryableFailure();
-                                // A4: connection already discarded above — backoff without holding a lease.
+                                // Record every actual SMTP outcome, even when the shared retry
+                                // budget is exhausted and no further retry will be scheduled.
                                 var used = Interlocked.Increment(ref retriesUsed);
-                                if (used > retryBudget)
-                                {
+                                var retryBudgetExhausted = used > retryBudget;
+                                if (retryBudgetExhausted)
                                     retryMetrics.RecordBudgetExhausted();
-                                    break;
-                                }
-                                retryMetrics.RecordRetryAttempt(attempt + 1);
+                                else
+                                    retryMetrics.RecordRetryAttempt(attempt + 1);
+
                                 circuit?.RecordFailure(ex);
                                 adaptive?.RecordAttempt(false, sampleSmtpMs, serverPressure: IsAdaptiveServerPressure(ex));
                                 if (ex is SmtpCommandException sce)
                                 {
                                     var code = (int)sce.StatusCode;
                                     if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                                    else if (code >= 500) Interlocked.Increment(ref smtp5xx);
                                     observed?.Record(code, sce.Message);
                                     if (ObservedResponseCollector.IsGreylist(code, sce.Message))
                                         pace.RecordGreylist();
-                                    else
+                                    else if (code >= 400 && code < 500)
                                         pace.RecordTransientThrottle();
                                 }
                                 else if (ex is TimeoutException)
                                 {
                                     Interlocked.Increment(ref timeouts);
                                 }
+
+                                if (retryBudgetExhausted)
+                                    break;
+
+                                // A4: connection already discarded above — backoff without holding a lease.
                                 Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
                                     $"RETRY #{i} · W{workerId}", null, 3,
                                     $"Dočasná chyba · zpráva #{i} · W{workerId}",
