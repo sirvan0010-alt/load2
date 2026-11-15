@@ -276,15 +276,16 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>Shows an error in a persistent, selectable dialog with one-click copy.</summary>
-    private void ShowErrorWithCopy(string message, string title, string? technicalDetails = null)
+    private void ShowErrorWithCopy(string message, string title, string? technicalDetails = null, string errorCode = GuiErrorCodes.General)
     {
-        var copyText = string.IsNullOrWhiteSpace(technicalDetails)
-            ? message
-            : message + Environment.NewLine + Environment.NewLine + "Technické podrobnosti:" + Environment.NewLine + technicalDetails;
+        var copyText = $"Kód chyby: {errorCode}" + Environment.NewLine + message
+            + (string.IsNullOrWhiteSpace(technicalDetails)
+                ? string.Empty
+                : Environment.NewLine + Environment.NewLine + "Technické podrobnosti:" + Environment.NewLine + technicalDetails);
 
         using var dialog = new Form
         {
-            Text = title,
+            Text = $"{title} [{errorCode}]",
             Width = 720,
             Height = 360,
             MinimumSize = new Size(520, 260),
