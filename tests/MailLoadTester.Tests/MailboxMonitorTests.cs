@@ -8,13 +8,13 @@ public sealed class MailboxMonitorTests
     [Fact]
     public void GetUsagePercent_ConvertsQuotaKilobytesToPercentage()
     {
-        Assert.Equal(50d, MailboxMonitorMath.GetUsagePercent(512, 1024));
+        Assert.Equal(50d, MailboxMonitorMath.GetUsagePercentFromKiB(512, 1024));
     }
 
     [Fact]
     public void GetUsagePercent_DoesNotHideUsageAboveQuota()
     {
-        Assert.Equal(125d, MailboxMonitorMath.GetUsagePercent(125, 100));
+        Assert.Equal(125d, MailboxMonitorMath.GetUsagePercentFromKiB(125, 100));
     }
 
     [Theory]
@@ -23,7 +23,7 @@ public sealed class MailboxMonitorTests
     [InlineData(512u, 0u)]
     public void GetUsagePercent_ReturnsNullWhenQuotaIsUnavailable(uint? usedKiB, uint? limitKiB)
     {
-        Assert.Null(MailboxMonitorMath.GetUsagePercent(usedKiB, limitKiB));
+        Assert.Null(MailboxMonitorMath.GetUsagePercentFromKiB(usedKiB, limitKiB));
     }
 
     [Fact]
