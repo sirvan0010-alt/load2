@@ -83,6 +83,52 @@ public sealed class SmtpTestRunnerTests
     }
 
     [Fact]
+    public async Task MailboxFeedback_SlowsActiveCapacityRunAndReducesAdaptiveConcurrency()
+    {
+        await using var server = new ScriptedSmtpServer(SmtpBehavior.DelayData, TimeSpan.FromMilliseconds(500));
+        var runner = new SmtpTestRunner();
+        var start = DateTimeOffset.UtcNow;
+        static MailboxMonitorSnapshot Quota(long used, DateTimeOffset at)
+            => new(0, 0, 0, used, 10_000, null, null, at, "quota available");
+
+        runner.SetMailboxFeedbackBaseline(Quota(7_000, start), stopThresholdPercent: 80, enabled: true);
+        using var cts = new CancellationTokenSource();
+        var run = runner.RunAsync(
+            CreateOptions(server.Port, messageCount: 20, maxRetries: 0, maxConcurrency: 4) with
+            {
+                UseAdaptiveConcurrency = true,
+                CapacityRun = new CapacityRunLimits(
+                    Enabled: true,
+                    MaxMessageCount: 20,
+                    TargetMimeBytes: 10_000_000,
+                    MaxMessagesPerMinute: 30)
+            },
+            new Progress<ProgressUpdate>(),
+            cts.Token);
+
+        for (var i = 0; i < 100 && runner.CurrentAdaptiveConcurrency is null; i++)
+            await Task.Delay(20);
+
+        Assert.Equal(4, runner.CurrentAdaptiveConcurrency);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 2_000,
+            "The configured 30 messages/minute ceiling must remain active.");
+
+        Assert.Null(runner.ObserveMailboxSnapshot(Quota(7_100, start.AddSeconds(30))));
+        var moderate = runner.ObserveMailboxSnapshot(Quota(7_200, start.AddSeconds(60)));
+        Assert.Equal(1, moderate!.Severity);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 3_000);
+
+        var critical = runner.ObserveMailboxSnapshot(Quota(7_600, start.AddSeconds(90)));
+        Assert.Equal(2, critical!.Severity);
+        Assert.True(runner.CurrentMailboxPaceIntervalMs >= 6_000);
+        Assert.Equal(3, runner.CurrentAdaptiveConcurrency);
+
+        cts.Cancel();
+        var result = await run;
+        Assert.True(result.Cancelled);
+    }
+
+    [Fact]
     public async Task Permanent5xx_DoesNotRetry()
     {
         await using var server = new ScriptedSmtpServer(SmtpBehavior.FailPermanent);
