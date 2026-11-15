@@ -137,6 +137,24 @@ public sealed class SmartPaceControllerTests
     }
 
     [Fact]
+    public async Task LastEffectiveInterval_IncludesWarmupAndMailboxPressureFloor()
+    {
+        var warmup = new SmartPaceController(BaseOptions(500) with
+        {
+            EnableWarmup = true,
+            WarmupPhases = "10;20"
+        });
+
+        await using (await warmup.AcquireSendSlotAsync(CancellationToken.None)) { }
+        Assert.Equal(1_000, warmup.LastEffectiveIntervalMs);
+
+        var mailboxPressure = new SmartPaceController(BaseOptions(0));
+        mailboxPressure.ApplyMailboxPressure(1);
+        await using (await mailboxPressure.AcquireSendSlotAsync(CancellationToken.None)) { }
+        Assert.Equal(1_000, mailboxPressure.LastEffectiveIntervalMs);
+    }
+
+    [Fact]
     public async Task MailboxPressureFloor_CannotBeUndercutByJitter()
     {
         var pace = new SmartPaceController(BaseOptions(500, jitter: true) with { JitterPercent = 90 });
