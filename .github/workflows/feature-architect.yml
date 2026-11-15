@@ -1,8 +1,6 @@
 name: Feature Architect — Improvement Proposals
 
 on:
-  push:
-    branches: [ "main", "fix/**", "review/**", "feature/**" ]
   workflow_dispatch:
     inputs:
       focus:
