@@ -113,6 +113,7 @@ public sealed partial class MainForm : Form
     private Button btnMailboxRefresh = null!, btnMailboxClear = null!;
     private ProgressBar progressMailboxQuota = null!;
     private Label lblMailboxPercent = null!, lblMailboxMessages = null!, lblMailboxUnread = null!;
+    private Label lblMailboxInboxCount = null!, lblMailboxJunk = null!;
     private Label lblMailboxUsage = null!, lblMailboxQuota = null!, lblMailboxInboxSize = null!;
     private Label lblMailboxStatus = null!, lblMailboxLastRefresh = null!;
 
