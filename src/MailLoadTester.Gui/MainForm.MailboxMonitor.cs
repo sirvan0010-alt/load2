@@ -336,6 +336,7 @@ public sealed partial class MainForm
                     _lastRunAccepted,
                     _lastRunSmtp4xx,
                     _lastRunSmtp5xx,
+                    snapshot.CheckedAt,
                     GetObservedQuotaMessageDelta(snapshot),
                     snapshot.QuotaUsagePercent);
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked)
@@ -366,7 +367,17 @@ public sealed partial class MainForm
             {
                 lblMailboxStatus.Text = "IMAP kontrola selhala: " + ex.Message;
                 lblMailboxStatus.ForeColor = Color.DarkRed;
-                _mailboxUsageChart.AddSample(DateTimeOffset.UtcNow, null);
+                var failedAt = DateTimeOffset.UtcNow;
+                runMetricsChart?.AddSample(
+                    failedAt,
+                    _lastRunSmtpSendAttempts,
+                    _lastRunAccepted,
+                    _lastRunSmtp4xx,
+                    _lastRunSmtp5xx,
+                    failedAt,
+                    null,
+                    null);
+                _mailboxUsageChart.AddSample(failedAt, null);
             }
             return null;
         }
