@@ -40,8 +40,9 @@ public sealed partial class MainForm
             "1) Záložka Test — zapni Test mode a vyplň Allowed domains (např. example.com).\n" +
             "2) Záložka SMTP Server — host, port 587, StartTls, případně jméno a heslo.\n" +
             "3) Záložka Zpráva — From / To (To musí být na povolené doméně), krátký předmět.\n" +
-            "4) Počet zpráv = 1, paralelismus = 1. Volitelně Test spojení.\n" +
-            "5) START. Sleduj log dole a záložku SMTP log.\n\n" +
+            "4) Nejdřív použij Odeslat 1 testovací e-mail — po potvrzení odešle jednu skutečnou zprávu.\n" +
+            "5) Teprve po úspěšném doručení spusť START s počtem 1 a paralelismem 1.\n" +
+            "6) Aplikační log a SMTP události najdeš dole vedle sebe.\n\n" +
             "TIPY\n" +
             "• Tooltip = najeď myší na popisek pole.\n" +
             "• Oranžový banner = Test mode vypnutý (ostré odesílání).\n" +
