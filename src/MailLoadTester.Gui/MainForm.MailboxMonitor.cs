@@ -416,6 +416,12 @@ public sealed partial class MainForm
         lblMailboxStatus.ForeColor = percent.HasValue ? Color.DarkGreen : Color.DarkOrange;
     }
 
+    private static string FormatDelta(long? value)
+        => value.HasValue ? (value.Value > 0 ? "+" : "") + value.Value.ToString("N0") : "nedostupné";
+
+    private static string FormatByteDelta(long? bytes)
+        => bytes.HasValue ? (bytes.Value > 0 ? "+" : "") + FormatMailboxBytes(bytes.Value) : "nedostupné";
+
     private static string FormatMailboxBytes(long? bytes)
     {
         if (!bytes.HasValue)
