@@ -683,6 +683,8 @@ public sealed class SmtpTestRunner
                     ledger.TryMarkAccepted(1);
                     Interlocked.Increment(ref sent);
                     outcomeCounters.Record(SmtpOutcome.Success);
+                    if (!multiAccount)
+                        endpointHealth.RecordSuccess(endpointKey);
                     validationRecipientCommitted = true;
                     pace.CommitRecipient(validationRecipient);
                     pace.RecordSuccess(validationRecipient);
@@ -726,6 +728,8 @@ public sealed class SmtpTestRunner
                     startupValidationFailed = true;
                     lastError = Validation.ExplainSmtpError(ex);
                     outcomeCounters.Record(ex);
+                    if (!multiAccount)
+                        endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(ex));
                     if (ex is SmtpCommandException smtpError)
                     {
                         var code = (int)smtpError.StatusCode;
