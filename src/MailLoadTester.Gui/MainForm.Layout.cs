@@ -523,10 +523,12 @@ public sealed partial class MainForm
         lblStatus = new ToolStripStatusLabel { Text = "Připraveno", Spring = true };
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
+        lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
         statusStrip.Items.Add(lblSentFailed);
+        statusStrip.Items.Add(lblCapacityRun);
         Controls.Add(statusStrip);
 
         // Give controls that are created outside the labeled helpers a useful fallback hint.
