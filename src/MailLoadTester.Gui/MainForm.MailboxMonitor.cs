@@ -33,7 +33,7 @@ public sealed partial class MainForm
         actionPanel.Controls.Add(btnMailboxClear);
         connectionFlow.Controls.Add(actionPanel);
 
-        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Volitelně zastaví právě běžící SMTP test, až když IMAP server poskytne skutečnou STORAGE kvótu a její využití dosáhne nastaveného limitu. Bez dostupné kvóty se automatické zastavení neaktivuje.");
+        chkMailboxStopAtQuota = AddCheckBox(connectionFlow, "Zastavit SMTP test při dosažení kvóty", false, "Volitelně zastaví právě běžící SMTP test, až když IMAP server poskytne skutečnou STORAGE kvótu a její využití dosáhne nastaveného limitu. Bez dostupné kvóty se automatické zastavení neaktivuje. Kontrola probíhá po 30 sekundách, takže limit může být mezi kontrolami překročen.");
         numMailboxStopPercent = AddLabeledNumeric(connectionFlow, "Limit zaplnění (%):", 1, 100, 80, "Automatické zastavení při dosažení této hodnoty skutečné IMAP STORAGE kvóty. Výchozí hodnota je 80 %.");
         connectionGroup.Controls.Add(connectionFlow);
         layout.Controls.Add(connectionGroup, 0, 0);
