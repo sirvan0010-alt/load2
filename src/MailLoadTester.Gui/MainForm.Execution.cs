@@ -251,6 +251,11 @@ public sealed partial class MainForm
         btnStop.Enabled = true;
         rtbLog.Clear();
         smtpLogTab?.ClearLog();
+        runMetricsChart?.ClearSamples();
+        _lastRunSmtpSendAttempts = 0;
+        _lastRunSmtp4xx = 0;
+        _lastRunSmtp5xx = 0;
+        _lastRunAccepted = 0;
         progressBar.Value = 0;
         lblStatus.Text = "Běží…";
         lblEta.Text = "ETA: počítám…";
