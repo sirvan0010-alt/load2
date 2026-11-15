@@ -13,6 +13,7 @@ public sealed class SmartPaceController
     private int _successCount;
     private int _messagesInCurrentBurst;
     private int _currentIntervalMs;
+    private int _mailboxMinimumIntervalMs;
     private int _warmupPhaseIndex;
     private int _warmupMessagesInPhase;
     private readonly ConcurrentDictionary<string, RecipientWindow> _recipientWindows = new(StringComparer.OrdinalIgnoreCase);
@@ -151,6 +152,8 @@ public sealed class SmartPaceController
                         var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
                         intervalMs = (int)Math.Max(0, intervalMs * factor);
                     }
+                    // Jitter may never undercut a mailbox-pressure slowdown.
+                    intervalMs = Math.Max(intervalMs, _mailboxMinimumIntervalMs);
 
                     var now = Stopwatch.GetTimestamp();
                     if (intervalMs <= 0 || _lastActualSendTicks == 0)
@@ -363,6 +366,7 @@ public sealed class SmartPaceController
             var candidate = Math.Max(floorMs, scaled);
             var max = _options.MaxIntervalMs > 0 ? _options.MaxIntervalMs : 60_000;
             _currentIntervalMs = Math.Max(current, Math.Min(max, candidate));
+            _mailboxMinimumIntervalMs = Math.Max(_mailboxMinimumIntervalMs, _currentIntervalMs);
         }
     }
 
