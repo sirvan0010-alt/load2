@@ -108,6 +108,7 @@ public sealed partial class MainForm
              "smtp.mail.yahoo.com", "smtp.mail.me.com", "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"],
             "Začni psát adresu SMTP serveru nebo vyber poskytovatele z nabídky. Výběr automaticky nastaví běžný port, TLS a zapne SMTP autentizaci. Vše lze ručně změnit.");
         txtHost.SelectionChangeCommitted += (_, _) => ApplySmtpHostPreset();
+        txtHost.DropDown += (_, _) => EnsureSmtpHostSuggestionsVisible();
         flConn.Controls.Add(new Label
         {
             Text = "Zadej skutečný SMTP server svého poskytovatele. Příklad smtp.example.com je pouze ukázková hodnota.",
@@ -211,8 +212,11 @@ public sealed partial class MainForm
         });
         txtTo = AddLabeledText(flAddr, "Komu:", "Hlavní příjemce. Více adres odděl čárkou nebo novým řádkem.");
         txtTo.Multiline = true; txtTo.Height = 50;
+        AddAddressSuggestionButton(flAddr, txtTo, "Vybrat adresu pro Komu  ▾");
         txtCc = AddLabeledText(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
+        AddAddressSuggestionButton(flAddr, txtCc, "Vybrat adresu pro CC  ▾");
         txtBcc = AddLabeledText(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
+        AddAddressSuggestionButton(flAddr, txtBcc, "Vybrat adresu pro BCC  ▾");
         flAddr.Controls.Add(new Label
         {
             Text = "CC = viditelná kopie · BCC = skrytá kopie. Obojí je volitelné; nevyužíváš-li je, nech pole prázdná.",
@@ -787,6 +791,19 @@ public sealed partial class MainForm
         parent.Controls.Add(txt);
         SetFieldToolTip(lbl, txt, tip);
         return txt;
+    }
+
+    private void EnsureSmtpHostSuggestionsVisible()
+    {
+        // Keep the provider list explicit even when Windows autocomplete is disabled
+        // by accessibility settings or keyboard navigation.
+        if (txtHost.Items.Count == 0)
+            txtHost.Items.AddRange(new object[]
+            {
+                "smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com",
+                "smtp.office365.com", "smtp.mail.yahoo.com", "smtp.mail.me.com",
+                "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"
+            });
     }
 
     private ComboBox AddLabeledEditableCombo(Control parent, string label, string[] suggestions, string tip)
