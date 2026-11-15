@@ -573,14 +573,31 @@ public sealed partial class MainForm
 
     private void ApplyFallbackToolTips(Control parent)
     {
-        foreach (Control child in parent.Controls)
+        for (var i = 0; i < parent.Controls.Count; i++)
         {
+            var child = parent.Controls[i];
             if (string.IsNullOrWhiteSpace(toolTip.GetToolTip(child)))
             {
+                var context = parent.Controls
+                    .Cast<Control>()
+                    .Take(i)
+                    .OfType<Label>()
+                    .LastOrDefault()?.Text.Trim().TrimEnd(':');
+                if (string.IsNullOrWhiteSpace(context) && parent is GroupBox groupBox)
+                    context = groupBox.Text;
+
                 if (child is Button button)
                     toolTip.SetToolTip(button, $"Akce: {button.Text.Trim().Trim('…', '.')}. Kliknutím tuto funkci spustíš.");
+                else if (child is TextBox)
+                    toolTip.SetToolTip(child, $"Textové pole{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" pro {context}")}. Zadej požadovanou hodnotu.");
+                else if (child is NumericUpDown numeric)
+                    toolTip.SetToolTip(numeric, $"Číselné nastavení{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Rozsah: {numeric.Minimum} až {numeric.Maximum}. Aktuální hodnota: {numeric.Value}.");
+                else if (child is ComboBox)
+                    toolTip.SetToolTip(child, $"Výběr možnosti{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Vyber jednu z nabízených hodnot.");
+                else if (child is ListBox)
+                    toolTip.SetToolTip(child, $"Seznam položek{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Vyber položku pro další práci.");
                 else if (child is GroupBox group)
-                    toolTip.SetToolTip(group, $"Skupina nastavení: {group.Text}.");
+                    toolTip.SetToolTip(group, $"Skupina souvisejících nastavení: {group.Text}.");
             }
 
             if (child.HasChildren)
