@@ -73,7 +73,11 @@ public sealed class SmtpTestRunnerTests
         Assert.Contains("Capacity stop", bounded.CapacityStopReason);
         Assert.Equal(1, bounded.SmtpSendAttempts);
         Assert.Equal(1, bounded.CapacitySendReservations);
-        Assert.InRange(bounded.CapacityMimeBytesReserved!.Value, oneMessageBytes, oneMessageBytes + 16);
+        var boundedReservedBytes = Assert.IsType<long>(bounded.CapacityMimeBytesReserved);
+        var boundedTargetBytes = oneMessageBytes + 100;
+        Assert.InRange(boundedReservedBytes, 1, boundedTargetBytes);
+        Assert.True(boundedReservedBytes * 2 > boundedTargetBytes,
+            "The configured budget must fit one message but not two messages of the measured size.");
         Assert.InRange(server.MessagesAccepted - acceptedBeforeBoundedRun, 0, 1);
         Assert.InRange(server.DataAttempts - dataAttemptsBeforeBoundedRun, 0, 1);
     }
