@@ -181,7 +181,21 @@ public sealed partial class MainForm
 
         var gbAddr = new GroupBox { Text = "Adresy", Dock = DockStyle.Fill };
         var flAddr = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        txtFrom = AddLabeledText(flAddr, "Od:", "Odesílatel (např. test@example.com).");
+        var lblFrom = new Label { Text = "Od:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        flAddr.Controls.Add(lblFrom);
+        txtFrom = new ComboBox
+        {
+            Width = 360,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+        flAddr.Controls.Add(txtFrom);
+        SetFieldToolTip(lblFrom, txtFrom,
+            "Skutečná e-mailová adresa odesílatele, např. vase.adresa@gmail.com — nikoli SMTP server smtp.gmail.com. " +
+            "Pokud se přihlašuješ SMTP e-mailovou adresou, aplikace ji nabídne v seznamu a při prázdném poli ji předvyplní. " +
+            "Můžeš vybrat návrh nebo napsat jinou adresu ručně.");
         txtTo = AddLabeledText(flAddr, "Komu:", "Příjemci oddělení čárkou nebo novým řádkem.");
         txtTo.Multiline = true; txtTo.Height = 50;
         txtCc = AddLabeledText(flAddr, "CC:", "Kopie — oddělené čárkou.");
