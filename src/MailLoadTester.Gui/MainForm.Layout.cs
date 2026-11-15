@@ -103,7 +103,13 @@ public sealed partial class MainForm
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        txtHost = AddLabeledText(flConn, "SMTP Host:", "Např. smtp.gmail.com nebo IP adresa serveru.");
+        txtHost = AddLabeledText(flConn, "SMTP Host:", "Adresa SMTP serveru poskytovatele, nikoli e-mailová adresa. Např. smtp.seznam.cz nebo smtp.gmail.com.");
+        flConn.Controls.Add(new Label
+        {
+            Text = "Zadej skutečný SMTP server svého poskytovatele. Příklad smtp.example.com je pouze ukázková hodnota.",
+            AutoSize = true, MaximumSize = new Size(420, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
+        });
         numPort = AddLabeledNumeric(flConn, "Port:", 1, 65535, 587, "25=plain, 587=STARTTLS, 465=Implicit TLS");
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
@@ -847,7 +853,7 @@ public sealed partial class MainForm
 
     private void SetDefaults()
     {
-        txtHost.Text = "smtp.example.com";
+        txtHost.Text = "";
         txtFrom.Text = "";
         txtTo.Text = "";
         txtSubject.Text = "MailLoadTester test";
