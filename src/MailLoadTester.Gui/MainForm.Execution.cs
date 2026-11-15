@@ -284,6 +284,10 @@ public sealed partial class MainForm
         if (!_cts.IsCancellationRequested)
             StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
+        _runner.SetMailboxFeedbackBaseline(
+            _mailboxRunBaseline,
+            (int)numMailboxStopPercent.Value,
+            enabled: options.CapacityRun is { Enabled: true });
         _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var progress = new Progress<ProgressUpdate>(UpdateProgress);
 
