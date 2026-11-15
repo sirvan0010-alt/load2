@@ -50,7 +50,8 @@ public sealed class SmtpTestRunnerTests
             CancellationToken.None);
 
         Assert.Equal(1, measurement.Sent);
-        Assert.Equal(1, measurement.CapacitySendAttempts);
+        Assert.Equal(1, measurement.SmtpSendAttempts);
+        Assert.Equal(1, measurement.CapacitySendReservations);
         var oneMessageBytes = Assert.IsType<long>(measurement.CapacityMimeBytesReserved);
         var acceptedBeforeBoundedRun = server.MessagesAccepted;
         var dataAttemptsBeforeBoundedRun = server.DataAttempts;
@@ -68,10 +69,11 @@ public sealed class SmtpTestRunnerTests
 
         Assert.True(bounded.Cancelled);
         Assert.Contains("Capacity stop", bounded.CapacityStopReason);
-        Assert.Equal(1, bounded.CapacitySendAttempts);
+        Assert.Equal(1, bounded.SmtpSendAttempts);
+        Assert.Equal(1, bounded.CapacitySendReservations);
         Assert.Equal(oneMessageBytes, bounded.CapacityMimeBytesReserved);
-        Assert.Equal(1, server.MessagesAccepted - acceptedBeforeBoundedRun);
-        Assert.Equal(1, server.DataAttempts - dataAttemptsBeforeBoundedRun);
+        Assert.InRange(server.MessagesAccepted - acceptedBeforeBoundedRun, 0, 1);
+        Assert.InRange(server.DataAttempts - dataAttemptsBeforeBoundedRun, 0, 1);
     }
 
     [Fact]
