@@ -84,7 +84,7 @@ public sealed partial class MainForm
                     c.BackColor = dark ? Color.FromArgb(55, 55, 62) : SystemColors.Control;
                     c.ForeColor = fg;
                     break;
-                case TabPage or GroupBox or Panel or FlowLayoutPanel or TableLayoutPanel or TabControl:
+                case TabPage or GroupBox or Panel or FlowLayoutPanel or TableLayoutPanel or TabControl or SplitContainer or UserControl:
                     if (c is not StatusStrip)
                     {
                         c.BackColor = bg;
