@@ -37,6 +37,39 @@ public sealed class CapacityRunControlsTests
     }
 
     [Fact]
+    public void Preview_EstimatesEachAttachmentSeparatelyAndCapsLogicalMessageCount()
+    {
+        var sizes = new long[] { 57, 58, 1024 };
+
+        var estimate = CapacityRunPreview.Estimate(
+            sizes,
+            requestedMessageCount: 20,
+            maxMessageCount: 12);
+
+        var expectedPerMessage = 16 * 1024L
+            + MailboxCapacityMath.EstimateBase64EncodedBytes(57)
+            + MailboxCapacityMath.EstimateBase64EncodedBytes(58)
+            + MailboxCapacityMath.EstimateBase64EncodedBytes(1024);
+        Assert.Equal(expectedPerMessage, estimate.EstimatedMimeBytesPerMessage);
+        Assert.Equal(12, estimate.LogicalMessageCount);
+        Assert.Equal(expectedPerMessage * 12, estimate.EstimatedMimeBytesForLogicalMessages);
+        Assert.True(estimate.IsComplete);
+    }
+
+    [Fact]
+    public void Preview_MarksUnparsedTemplateContentAsIncomplete()
+    {
+        var estimate = CapacityRunPreview.Estimate(
+            Array.Empty<long>(),
+            requestedMessageCount: 3,
+            maxMessageCount: 3,
+            hasUnaccountedContent: true);
+
+        Assert.False(estimate.IsComplete);
+        Assert.Contains("neúplný", estimate.Note, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Guard_ReservesCumulativeMimeBytesAtomicallyAndNeverOvershootsTarget()
     {
         var guard = new CapacityRunGuard(new CapacityRunLimits(
