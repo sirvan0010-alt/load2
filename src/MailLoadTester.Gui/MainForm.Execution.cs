@@ -477,7 +477,9 @@ public sealed partial class MainForm
                 WebhookUrl = string.Empty,
                 CapacityRun = null,
                 DurationSeconds = 0,
-                EmlTemplatePath = null
+                EmlTemplatePath = null,
+                Accounts = null,
+                DirectMxDelivery = false
             };
             Validation.Validate(options);
         }
