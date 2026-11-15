@@ -512,12 +512,10 @@ public sealed partial class MainForm
         tabPace.Controls.Add(flPace);
         tabs.TabPages.Add(tabPace);
 
-        // Záložka rychlého SMTP logu (DataGrid, max 1000 řádků, thread-safe)
-        var tabSmtpLog = new TabPage("SMTP log") { Padding = new Padding(4) };
+        // SMTP event log is hosted beside the application log in the live workspace,
+        // not buried among configuration tabs.
         smtpLogTab = new SmtpLogTab();
-        toolTip.SetToolTip(smtpLogTab, "Živý přehled SMTP výsledků. Zobrazuje nejvýše 1 000 posledních řádků; čekající fronta je také omezená. Nejde o trvalý diskový log.");
-        tabSmtpLog.Controls.Add(smtpLogTab);
-        tabs.TabPages.Add(tabSmtpLog);
+        toolTip.SetToolTip(smtpLogTab, "Živý přehled SMTP odesílání. Zobrazuje nejvýše 1 000 posledních událostí; nejde o trvalý diskový protokol.");
         InitializeMailboxMonitorTab();
 
         // === Bottom area ===
@@ -544,7 +542,14 @@ public sealed partial class MainForm
             ScrollBars = RichTextBoxScrollBars.Vertical
         };
         toolTip.SetToolTip(rtbLog, "Průběžný aplikační log pouze v paměti. Při novém běhu se vymaže a při delším běhu se automaticky zkracuje na posledních přibližně 800 tisíc znaků; nevytváří samostatný diskový soubor.");
-        bottomSplit.Panel1.Controls.Add(rtbLog);
+        var logTabs = new TabControl { Dock = DockStyle.Fill };
+        var appLogPage = new TabPage("Aplikační log") { Padding = new Padding(3) };
+        var smtpLogPage = new TabPage("SMTP události") { Padding = new Padding(3) };
+        appLogPage.Controls.Add(rtbLog);
+        smtpLogPage.Controls.Add(smtpLogTab);
+        logTabs.TabPages.Add(appLogPage);
+        logTabs.TabPages.Add(smtpLogPage);
+        bottomSplit.Panel1.Controls.Add(logTabs);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
 
