@@ -16,7 +16,7 @@ public sealed partial class MainForm : Form
     private bool _darkMode;
 
     // SMTP tab
-    private TextBox txtHost = null!;
+    private ComboBox txtHost = null!;
     private NumericUpDown numPort = null!;
     private ComboBox cmbSecurity = null!;
     private CheckBox chkIgnoreCert = null!;
