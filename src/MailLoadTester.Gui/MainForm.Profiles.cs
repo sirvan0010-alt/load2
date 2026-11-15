@@ -70,6 +70,7 @@ public sealed partial class MainForm
             numCapacityTargetMiB.Value = Math.Clamp((decimal)(o.CapacityRun?.TargetMimeBytes ?? 0) / (1024m * 1024m), numCapacityTargetMiB.Minimum, numCapacityTargetMiB.Maximum);
             numCapacityMaxMessageMiB.Value = Math.Clamp((decimal)(o.CapacityRun?.MaxMimeMessageBytes ?? 0) / (1024m * 1024m), numCapacityMaxMessageMiB.Minimum, numCapacityMaxMessageMiB.Maximum);
             numCapacityMaxPerMinute.Value = Math.Clamp(o.CapacityRun?.MaxMessagesPerMinute ?? 0, numCapacityMaxPerMinute.Minimum, numCapacityMaxPerMinute.Maximum);
+            chkCapacityStartupValidation.Checked = o.CapacityRun?.ValidateBeforeRun ?? false;
             chkDryRun.Checked = o.DryRun;
             chkTestMode.Checked = o.TestMode;
             txtAllowedDomains.Text = o.AllowedDomains;
