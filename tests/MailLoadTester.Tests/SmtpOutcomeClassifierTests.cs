@@ -96,6 +96,51 @@ public class SmtpOutcomeClassifierTests
         Assert.Equal(2, s.Throttled);
     }
 
+    [Theory]
+    [InlineData(552, "552 5.2.2 mailbox full")]
+    [InlineData(452, "452 4.2.2 mailbox full")]
+    public void MailboxFull_IsDistinctAndNeverRetried(int code, string response)
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(code, response);
+        if (code >= 500)
+        {
+            Assert.Equal(SmtpOutcome.MailboxFull, outcome);
+            Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+        }
+        else
+        {
+            Assert.Equal(SmtpOutcome.Transient, outcome);
+            Assert.True(SmtpOutcomeClassifier.IsRetryable(outcome));
+        }
+    }
+
+    [Fact]
+    public void MessageTooLarge_IsNotRetried()
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(552, "552 5.3.4 message size exceeds fixed maximum message size");
+        Assert.Equal(SmtpOutcome.MessageTooLarge, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
+    [Fact]
+    public void EnhancedPolicyStatus_IsStopAndReview()
+    {
+        var outcome = SmtpOutcomeClassifier.ClassifySmtp(550, "550 5.7.1 message rejected by policy");
+        Assert.Equal(SmtpOutcome.PolicyRejected, outcome);
+        Assert.False(SmtpOutcomeClassifier.IsRetryable(outcome));
+    }
+
+    [Fact]
+    public void MailboxFullAndMessageTooLarge_AreCountedSeparately()
+    {
+        var counters = new SmtpOutcomeCounters();
+        counters.Record(SmtpOutcome.MailboxFull);
+        counters.Record(SmtpOutcome.MessageTooLarge);
+        var snapshot = counters.Snapshot();
+        Assert.Equal(1, snapshot.MailboxFull);
+        Assert.Equal(1, snapshot.MessageTooLarge);
+    }
+
     [Fact]
     public void RetryPolicy_delegates_to_classifier()
     {
