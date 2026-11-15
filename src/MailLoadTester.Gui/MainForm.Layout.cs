@@ -367,9 +367,9 @@ public sealed partial class MainForm
         toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranu pro daný typ serveru. Poté můžete cokoliv upravit ručně.");
         flPace.Controls.Add(cmbProviderPreset);
 
-        chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu snižuje detekci robotického vzoru.");
+        chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu slouží k modelování nepravidelného provozu v autorizovaném testu. Neobchází antispamové filtry a nezaručuje doručení do Inboxu.");
         numJitterPercent = AddLabeledNumeric(flPace, "Jitter (± %):", 0, 50, 15, "15 % při 1000 ms = 850–1150 ms.");
-        chkBurst = AddCheckBox(flPace, "Burst + pause", false, "Po N zprávách delší pauza – podobá se lidskému chování.");
+        chkBurst = AddCheckBox(flPace, "Burst + pause", false, "Po zadaném počtu zpráv vloží delší pauzu. Slouží k simulaci dávkových scénářů a ověřování limitů serveru.");
         numBurstSize = AddLabeledNumeric(flPace, "Velikost burstu:", 1, 100, 10, "Počet zpráv v jedné dávce.");
         numBurstPause = AddLabeledNumeric(flPace, "Pauza po burstu (s):", 1, 3600, 30, "Délka pauzy po dokončení burstu.");
         chkBackoff = AddCheckBox(flPace, "Progressive backoff", true, "Po chybách 4xx/5xx nebo po N úspěšných zprávách zpomalovat.");
@@ -382,7 +382,7 @@ public sealed partial class MainForm
         chkTimeWindow = AddCheckBox(flPace, "Omezit na denní dobu", false, "Odesílat jen v zadaném intervalu hodin.");
         numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "");
         numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "");
-        chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupné zvyšování rychlosti.");
+        chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupně zvyšuje tempo řízeného testu. Neobchází pravidla poskytovatele ani nezaručuje doručení do Inboxu.");
         txtWarmupPhases = AddLabeledText(flPace, "Fáze (zprávy; oddělené):", "Např. 50;150;500 – počet zpráv v jednotlivých fázích.");
         txtWarmupPhases.Text = "50;150;500";
         chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "451/452/try again – odložený retry.");
