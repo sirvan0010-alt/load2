@@ -32,4 +32,6 @@ public readonly record struct ProgressUpdate(
     /// <summary>Observed transient SMTP 4xx responses.</summary>
     int Smtp4xx = 0,
     /// <summary>Observed permanent SMTP 5xx responses.</summary>
-    int Smtp5xx = 0);
+    int Smtp5xx = 0,
+    /// <summary>Current adaptive concurrency limit; null when adaptive control is disabled.</summary>
+    int? AdaptiveConcurrency = null);
