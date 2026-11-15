@@ -287,7 +287,7 @@ public sealed partial class MainForm
         _runner.SetMailboxFeedbackBaseline(
             _mailboxRunBaseline,
             (int)numMailboxStopPercent.Value,
-            enabled: options.CapacityRun is { Enabled: true });
+            enabled: options.CapacityRun is { Enabled: true } && chkMailboxStopAtQuota.Checked);
         _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var progress = new Progress<ProgressUpdate>(UpdateProgress);
 
