@@ -188,7 +188,7 @@ public sealed class MailboxMonitorService
 
             try
             {
-                var children = await folder.GetSubfoldersAsync(false, cancellationToken).ConfigureAwait(false);
+                var children = await folder.GetSubfoldersAsync(false, StatusItems.None, cancellationToken).ConfigureAwait(false);
                 foreach (var child in children)
                     pending.Enqueue(child);
             }
