@@ -155,7 +155,10 @@ public sealed partial class MainForm
         numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
         btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
         flAuth.Controls.Add(btnTestConnection);
-        toolTip.SetToolTip(btnTestConnection, "Ověří spojení k serveru bez odeslání zprávy.");
+        toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
+        btnSendTest = new Button { Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36, Margin = new Padding(0, 8, 0, 0) };
+        flAuth.Controls.Add(btnSendTest);
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu na první adresu v poli Komu. Nepoužívá zátěžový režim.");
         gbAuth.Controls.Add(flAuth);
         tblSmtp.Controls.Add(gbAuth, 1, 0);
 
@@ -708,6 +711,7 @@ public sealed partial class MainForm
         chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
         chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
+        btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numRandomAttachmentSizeMb.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numConcurrency.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
