@@ -652,11 +652,20 @@ public sealed class SmtpTestRunner
                         Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
                             "Odesílám malou validační zprávu", "Čekám na SMTP odpověď",
                             MessageStep.SmtpSend, 1, 0, DeliveryStepKind.Data, null);
-                        Interlocked.Increment(ref smtpSendAttempts);
-                        if (utf8Format != null)
-                            await validationClient.SendAsync(utf8Format, validationMessage, ct).ConfigureAwait(false);
-                        else
-                            await validationClient.SendAsync(validationMessage, ct).ConfigureAwait(false);
+                        var validationSendSw = Stopwatch.StartNew();
+                        try
+                        {
+                            Interlocked.Increment(ref smtpSendAttempts);
+                            if (utf8Format != null)
+                                await validationClient.SendAsync(utf8Format, validationMessage, ct).ConfigureAwait(false);
+                            else
+                                await validationClient.SendAsync(validationMessage, ct).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            validationSendSw.Stop();
+                            smtpSends.Add(validationSendSw.Elapsed.TotalMilliseconds);
+                        }
                     }
 
                     ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
@@ -680,9 +689,9 @@ public sealed class SmtpTestRunner
                     pace.CommitRecipient(validationRecipient);
                     pace.RecordSuccess(validationRecipient);
                     validationSw.Stop();
+                    Interlocked.Add(ref activeTicks, validationSw.ElapsedTicks);
                     latencies.Add(validationSw.Elapsed.TotalMilliseconds);
                     latencyHistogram.Add(validationSw.Elapsed.TotalMilliseconds);
-                    smtpSends.Add(validationSw.Elapsed.TotalMilliseconds);
                     Report(1, 0, $"STARTUP VALIDATION ACCEPTED → {validationRecipient}", null, 3,
                         "Validační zpráva přijata SMTP serverem", "Spouštím hlavní test",
                         MessageStep.Succeeded, 1, 0, DeliveryStepKind.Quit, true,
