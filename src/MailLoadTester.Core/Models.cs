@@ -169,7 +169,9 @@ public sealed record MailTestResult(
     /// <summary>Reason the capacity guard stopped the run, if it did.</summary>
     string? CapacityStopReason = null,
     /// <summary>Independent IMAP before/after observations; not causal proof of messages stored by this run.</summary>
-    MailboxRunDelta? MailboxRunDelta = null);
+    MailboxRunDelta? MailboxRunDelta = null,
+    /// <summary>True when the opt-in startup validation message failed; AutoRestart must not retry it.</summary>
+    bool StartupValidationFailed = false);
 
 public static class Validation
 {
