@@ -722,12 +722,20 @@ public sealed class SmtpTestRunner
                                         await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
                                     {
                                         samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
-                                        if (capacityGuard != null
-                                            && !capacityGuard.TryReserve(serializedMimeBytes, out var capacityReason))
+                                        if (capacityGuard != null)
                                         {
-                                            Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
-                                            batchCts.Cancel();
-                                            throw new OperationCanceledException(capacityReason, workerCt);
+                                            // MailKit refreshes capabilities after connection/authentication.
+                                            // SIZE is a per-message server ceiling, never a mailbox quota.
+                                            long? serverMaxMessageBytes = client!.Capabilities.HasFlag(SmtpCapabilities.Size)
+                                                && client.MaxSize > 0
+                                                    ? client.MaxSize
+                                                    : null;
+                                            if (!capacityGuard.TryReserve(serializedMimeBytes, serverMaxMessageBytes, out var capacityReason))
+                                            {
+                                                Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
+                                                batchCts.Cancel();
+                                                throw new OperationCanceledException(capacityReason, workerCt);
+                                            }
                                         }
                                         var smtpT0 = Stopwatch.GetTimestamp();
                                         try
