@@ -198,7 +198,15 @@ public sealed partial class MainForm
         }
 
         _cts = new CancellationTokenSource();
-        StartMailboxMonitorPolling();
+        if (_mailboxRunBaseline is not null && chkMailboxStopAtQuota.Checked
+            && MailboxMonitorMath.ShouldStop(_mailboxRunBaseline.QuotaUsagePercent, (int)numMailboxStopPercent.Value))
+        {
+            _mailboxQuotaStopTriggered = true;
+            AppendLog($"IMAP výchozí stav již dosahuje limitu { (int)numMailboxStopPercent.Value } %. SMTP test nebude spuštěn.", Color.OrangeRed);
+            _cts.Cancel();
+        }
+        if (!_cts.IsCancellationRequested)
+            StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
         _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var progress = new Progress<ProgressUpdate>(UpdateProgress);
@@ -206,8 +214,10 @@ public sealed partial class MainForm
         try
         {
             var runStartedUtc = DateTimeOffset.UtcNow;
+            // Do not pass the run token to Task.Run itself: even if the baseline quota
+            // check cancelled before scheduling, the runner must execute its cleanup/result path.
             var result = await Task.Run(async () =>
-                await _runner.RunAsync(options, progress, _cts.Token), _cts.Token);
+                await _runner.RunAsync(options, progress, _cts.Token), CancellationToken.None);
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
