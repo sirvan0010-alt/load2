@@ -1,0 +1,72 @@
+name: Windows package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: |
+          dotnet restore src/MailLoadTester.Core/MailLoadTester.Core.csproj
+          dotnet restore tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj
+          dotnet restore src/MailLoadTester.Gui/MailLoadTester.Gui.csproj
+
+      - name: Build Core and tests
+        run: |
+          dotnet build src/MailLoadTester.Core/MailLoadTester.Core.csproj -c Release --no-restore
+          dotnet build tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-restore
+
+      - name: Run tests
+        run: dotnet test tests/MailLoadTester.Tests/MailLoadTester.Tests.csproj -c Release --no-build
+
+      - name: Publish self-contained Windows application
+        run: dotnet publish src/MailLoadTester.Gui/MailLoadTester.Gui.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o publish
+
+      - name: Add quick-start instructions and checksum
+        shell: pwsh
+        run: |
+          @'
+          MAILLOADTESTER - WINDOWS QUICK START
+
+          1. Extract this ZIP to any folder (for example Downloads).
+          2. Double-click MailLoadTester.exe.
+          3. Enter the SMTP server, port, TLS mode and test mailbox details in the app.
+          4. Start with Test Mode or Dry-run before sending real messages.
+
+          This is a self-contained Windows x64 build. The .NET runtime and .NET SDK
+          do not need to be installed separately.
+
+          Only test systems and recipients you are explicitly authorized to test.
+          '@ | Set-Content -Path publish\START-HERE.txt -Encoding UTF8
+          $exe = Get-FileHash publish\MailLoadTester.exe -Algorithm SHA256
+          "$($exe.Hash)  MailLoadTester.exe" | Set-Content -Path publish\SHA256SUMS.txt -Encoding ASCII
+          Compress-Archive -Path publish\* -DestinationPath MailLoadTester-win-x64.zip -Force
+
+      - name: Upload ready-to-run Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MailLoadTester-win-x64
+          path: MailLoadTester-win-x64.zip
+          if-no-files-found: error
+          retention-days: 30
