@@ -17,7 +17,7 @@ internal sealed class RunMetricsChart : Control
         int Accepted,
         int Smtp4xx,
         int Smtp5xx,
-        long? ObservedMailboxMessageDelta,
+        double? ObservedMailboxMessagesPerMinute,
         double? QuotaUsagePercent);
 
     private sealed record Sample(
@@ -121,7 +121,7 @@ internal sealed class RunMetricsChart : Control
             NonNegativeRate(raw.Accepted, baseline.Accepted),
             NonNegativeRate(raw.Smtp4xx, baseline.Smtp4xx),
             NonNegativeRate(raw.Smtp5xx, baseline.Smtp5xx),
-            raw.ObservedMailboxMessageDelta is double observedRate ? observedRate : null,
+            raw.ObservedMailboxMessagesPerMinute,
             raw.QuotaUsagePercent));
 
         if (_samples.Count > MaxSamples)
