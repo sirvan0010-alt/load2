@@ -242,6 +242,7 @@ public sealed partial class MainForm
             {
                 lblMailboxStatus.Text = "IMAP kontrola selhala: " + ex.Message;
                 lblMailboxStatus.ForeColor = Color.DarkRed;
+                _mailboxUsageChart.AddSample(DateTimeOffset.UtcNow, null);
             }
         }
         finally
