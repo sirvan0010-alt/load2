@@ -53,7 +53,8 @@ public sealed class ProfileStoreTests
                 MaxMessageCount: 321,
                 TargetMimeBytes: 12_345_678,
                 MaxMimeMessageBytes: 1_234_567,
-                MaxMessagesPerMinute: 42)
+                MaxMessagesPerMinute: 42,
+                ValidateBeforeRun: true)
         };
 
         try
