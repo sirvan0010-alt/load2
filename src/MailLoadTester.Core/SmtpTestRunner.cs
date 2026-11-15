@@ -731,7 +731,7 @@ public sealed class SmtpTestRunner
                     startupValidationFailed = true;
                     lastError = Validation.ExplainSmtpError(ex);
                     outcomeCounters.Record(ex);
-                    if (!multiAccount)
+                    if (!multiAccount && SmtpOutcomeClassifier.Classify(ex) != SmtpOutcome.Authentication)
                         endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(ex));
                     if (ex is SmtpCommandException smtpError)
                     {
@@ -1226,7 +1226,8 @@ public sealed class SmtpTestRunner
                             else
                                 outcomeCounters.Record(SmtpOutcome.Unknown);
                             ledger.MarkFailed(i);
-                            if (lastEx != null && !multiAccount)
+                            if (lastEx != null && !multiAccount
+                                && SmtpOutcomeClassifier.Classify(lastEx) != SmtpOutcome.Authentication)
                                 endpointHealth.RecordFailure(endpointKey, TransportHealthRegistry.ClassifyFailure(lastEx));
                             var f = Interlocked.Increment(ref failed);
                             Interlocked.Exchange(ref lastError, explained);
