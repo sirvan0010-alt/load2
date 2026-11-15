@@ -329,6 +329,14 @@ public sealed partial class MainForm
                 return null;
 
             RenderMailboxMonitorSnapshot(snapshot);
+            if (_isRunning)
+                runMetricsChart?.AddSample(
+                    snapshot.CheckedAt,
+                    _lastRunSmtpSendAttempts,
+                    _lastRunAccepted,
+                    _lastRunSmtp4xx,
+                    _lastRunSmtp5xx,
+                    GetObservedQuotaMessageDelta(snapshot));
             if (enforceQuotaStop && _isRunning && chkMailboxStopAtQuota.Checked)
             {
                 var feedback = _runner?.ObserveMailboxSnapshot(snapshot);
@@ -370,6 +378,14 @@ public sealed partial class MainForm
             if (!IsDisposed && !_closeApproved)
                 btnMailboxRefresh.Enabled = true;
         }
+    }
+
+    private long? GetObservedQuotaMessageDelta(MailboxMonitorSnapshot? snapshot)
+    {
+        if (_mailboxRunBaseline?.QuotaMessageCount is uint before
+            && snapshot?.QuotaMessageCount is uint after)
+            return (long)after - before;
+        return null;
     }
 
     private async Task<MailboxMonitorSnapshot?> CaptureFinalMailboxSnapshotAsync()
