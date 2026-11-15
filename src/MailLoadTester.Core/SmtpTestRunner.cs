@@ -612,21 +612,20 @@ public sealed class SmtpTestRunner
                         "Toto je jedna malá validační zpráva. Pokud její odeslání selže, zátěžový test nebude spuštěn.",
                         false,
                         Array.Empty<RandomTestData.GeneratedAttachment>());
+                    // Keep this message genuinely small and addressed only to the
+                    // selected validation recipient: no user CC/BCC, custom headers,
+                    // attachments, EML template, random payload or mutating plugins.
+                    var validationOptions = options with
+                    {
+                        CcRecipients = Array.Empty<string>(),
+                        BccRecipients = Array.Empty<string>(),
+                        CustomHeaders = new Dictionary<string, string>()
+                    };
                     using var validationMessage = BuildMessage(
-                        options, validationData, validationRecipient,
+                        validationOptions, validationData, validationRecipient,
                         Array.Empty<AttachmentSource>(),
                         Array.Empty<(string FileName, string Extension, byte[] Content)>(),
                         0, false);
-
-                    if (payloadPipeline.Count > 0)
-                    {
-                        var validationContext = new MailPayloadPluginContext(
-                            TestId: 0,
-                            Recipient: validationRecipient,
-                            AttemptIndex: 0,
-                            CancellationToken: ct);
-                        await payloadPipeline.ApplyAsync(validationMessage, validationContext).ConfigureAwait(false);
-                    }
 
                     var validationMimeBytes = CapacityRunMimeSizer.MeasurePreparedMimeBytes(
                         validationClient, validationMessage, utf8Format);
