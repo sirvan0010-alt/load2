@@ -1,4 +1,5 @@
 using MailLoadTester;
+using System.Text.Json;
 using Xunit;
 
 namespace MailLoadTester.Tests;
@@ -63,6 +64,14 @@ public sealed class MailboxMonitorTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMonitorMath.ShouldStop(80, threshold));
     }
+    [Fact]
+    public void Options_RedactPasswordFromToStringAndJsonSerialization()
+    {
+        var options = new MailboxMonitorOptions("imap.example.com", 993, MailboxMonitorSecurity.ImplicitTls, "user@example.com", "secret-value");
+        Assert.DoesNotContain("secret-value", options.ToString());
+        Assert.DoesNotContain("secret-value", JsonSerializer.Serialize(options));
+    }
+
     [Fact]
     public void ValidateOptions_RejectsUnsupportedSecurityMode()
     {
