@@ -147,7 +147,7 @@ public sealed class SmtpTestRunner
             aggregatedEndpointHealth =
                 AutoRestartMetrics.AggregateEndpointHealth(aggregatedEndpointHealth, result.EndpointHealth);
 
-            if (result.Cancelled) break;
+            if (result.Cancelled || result.StartupValidationFailed) break;
 
             // Restart only from the current attempt's unresolved failures. The ledger
             // keeps previously accepted logical messages out of the retry population.
@@ -445,6 +445,7 @@ public sealed class SmtpTestRunner
         // RateLimiter zde nepřidává druhé čekání.
         var rateLimiter = new RateLimiter(0);
         bool cancelled = false;
+        bool startupValidationFailed = false;
         string? capacityStopReason = null;
         var adaptive = options.UseAdaptiveConcurrency
             ? new AdaptiveConcurrencyLimiter(options.MaxConcurrency, min: 1, max: options.MaxConcurrency)
@@ -567,7 +568,186 @@ public sealed class SmtpTestRunner
                 }
             }
 
-            for (int batchStart = 1; batchStart <= options.MessageCount; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
+            var startupValidationEnabled = options.CapacityRun is { Enabled: true, ValidateBeforeRun: true };
+            if (startupValidationEnabled && ledger.GetState(1) != DeliveryState.Accepted)
+            {
+                var validationRecipient = options.Recipients[0];
+                Report(0, 0, "STARTUP VALIDATION: sending one small validation message before workers…", null, 2,
+                    "Úvodní validační zpráva", "Při selhání se zátěžový test nespustí");
+                try
+                {
+                    await pace.WaitBeforeSendAsync(validationRecipient, ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    pace.ReleaseRecipient(validationRecipient);
+                    throw;
+                }
+
+                var validationRecipientCommitted = false;
+                SmtpClient? validationClient = null;
+                SmtpConnectionPool? validationPool = null;
+                SmtpAccountLease? validationAccountLease = null;
+                var validationSw = Stopwatch.StartNew();
+                try
+                {
+                    var poolWaitStart = Stopwatch.GetTimestamp();
+                    if (multiAccount)
+                    {
+                        validationAccountLease = await accountHub!.RentAsync(ct).ConfigureAwait(false);
+                        validationClient = validationAccountLease.Client;
+                        validationPool = validationAccountLease.Pool;
+                    }
+                    else
+                    {
+                        validationPool = pool!;
+                        validationClient = await validationPool.RentAsync(ct).ConfigureAwait(false);
+                    }
+                    poolWaits.Add(TicksToMs(Stopwatch.GetTimestamp() - poolWaitStart));
+                    ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
+
+                    var validationData = new RandomTestData.GeneratedMessageContent(
+                        options.DisplayName,
+                        "MailLoadTester – úvodní validace",
+                        "Toto je jedna malá validační zpráva. Pokud její odeslání selže, zátěžový test nebude spuštěn.",
+                        false,
+                        Array.Empty<RandomTestData.GeneratedAttachment>());
+                    using var validationMessage = BuildMessage(
+                        options, validationData, validationRecipient,
+                        Array.Empty<AttachmentSource>(),
+                        Array.Empty<(string FileName, string Extension, byte[] Content)>(),
+                        0, false);
+
+                    if (payloadPipeline.Count > 0)
+                    {
+                        var validationContext = new MailPayloadPluginContext(
+                            TestId: 0,
+                            Recipient: validationRecipient,
+                            AttemptIndex: 0,
+                            CancellationToken: ct);
+                        await payloadPipeline.ApplyAsync(validationMessage, validationContext).ConfigureAwait(false);
+                    }
+
+                    var validationMimeBytes = CapacityRunMimeSizer.MeasurePreparedMimeBytes(
+                        validationClient, validationMessage, utf8Format);
+                    if (bandwidth != null)
+                        await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, validationMimeBytes), ct).ConfigureAwait(false);
+
+                    await using (await pace.AcquireSendSlotAsync(ct).ConfigureAwait(false))
+                    {
+                        long? serverMaxMessageBytes = validationClient.Capabilities.HasFlag(SmtpCapabilities.Size)
+                            && validationClient.MaxSize > 0
+                                ? validationClient.MaxSize
+                                : null;
+                        if (capacityGuard == null || !capacityGuard.TryReserve(
+                            validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
+                        {
+                            var reason = capacityGuard == null
+                                ? "Startup validation requires enabled Capacity Run accounting."
+                                : validationCapacityReason;
+                            Interlocked.CompareExchange(ref capacityStopReason, "Capacity stop: " + reason, null);
+                            throw new InvalidOperationException("Capacity stop: " + reason);
+                        }
+
+                        Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
+                            "Odesílám malou validační zprávu", "Čekám na SMTP odpověď",
+                            MessageStep.SmtpSend, 1, 0, DeliveryStepKind.Data, null);
+                        Interlocked.Increment(ref smtpSendAttempts);
+                        if (utf8Format != null)
+                            await validationClient.SendAsync(utf8Format, validationMessage, ct).ConfigureAwait(false);
+                        else
+                            await validationClient.SendAsync(validationMessage, ct).ConfigureAwait(false);
+                    }
+
+                    ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
+                    if (validationAccountLease != null)
+                    {
+                        accountHub!.ReportSendSuccess(validationAccountLease.Account);
+                        validationAccountLease.Return();
+                        validationAccountLease = null;
+                    }
+                    else
+                    {
+                        validationPool.Return(validationClient);
+                    }
+                    validationClient = null;
+
+                    ledger.TryClaim(1);
+                    ledger.TryMarkAccepted(1);
+                    Interlocked.Increment(ref sent);
+                    outcomeCounters.Record(SmtpOutcome.Success);
+                    validationRecipientCommitted = true;
+                    pace.CommitRecipient(validationRecipient);
+                    pace.RecordSuccess(validationRecipient);
+                    validationSw.Stop();
+                    latencies.Add(validationSw.Elapsed.TotalMilliseconds);
+                    latencyHistogram.Add(validationSw.Elapsed.TotalMilliseconds);
+                    smtpSends.Add(validationSw.Elapsed.TotalMilliseconds);
+                    Report(1, 0, $"STARTUP VALIDATION ACCEPTED → {validationRecipient}", null, 3,
+                        "Validační zpráva přijata SMTP serverem", "Spouštím hlavní test",
+                        MessageStep.Succeeded, 1, 0, DeliveryStepKind.Quit, true,
+                        includeObserved: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (validationAccountLease != null)
+                    {
+                        validationAccountLease.Discard();
+                        validationAccountLease = null;
+                    }
+                    else if (validationClient != null)
+                    {
+                        validationPool?.Discard(validationClient);
+                    }
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    if (validationAccountLease != null)
+                    {
+                        validationAccountLease.Discard(ex);
+                        validationAccountLease = null;
+                    }
+                    else if (validationClient != null)
+                    {
+                        validationPool?.Discard(validationClient);
+                    }
+
+                    ledger.TryClaim(1);
+                    ledger.MarkFailed(1);
+                    Interlocked.Increment(ref failed);
+                    startupValidationFailed = true;
+                    lastError = Validation.ExplainSmtpError(ex);
+                    outcomeCounters.Record(ex);
+                    if (ex is SmtpCommandException smtpError)
+                    {
+                        var code = (int)smtpError.StatusCode;
+                        if (code >= 400 && code < 500) Interlocked.Increment(ref smtp4xx);
+                        else if (code >= 500) Interlocked.Increment(ref smtp5xx);
+                        observed?.Record(code, smtpError.Message);
+                    }
+                    else if (ex is TimeoutException)
+                    {
+                        Interlocked.Increment(ref timeouts);
+                    }
+                    Report(0, 1, "STARTUP VALIDATION FAILED: " + lastError, null, 3,
+                        "Úvodní validace selhala", "Zátěžový test nebyl spuštěn",
+                        MessageStep.FailedFinal, 1, 0, DeliveryStepKind.Error, false,
+                        includeObserved: true);
+                }
+                finally
+                {
+                    if (validationAccountLease != null)
+                        validationAccountLease.Return();
+                    if (!validationRecipientCommitted)
+                        pace.ReleaseRecipient(validationRecipient);
+                }
+            }
+
+            if (startupValidationEnabled && !startupValidationFailed && fsm.Phase == TestPhase.ConnectingSmtp)
+                fsm.Transition(TestPhase.Sending, "Startup validation accepted; starting load workers");
+
+            for (int batchStart = startupValidationEnabled ? 2 : 1; batchStart <= options.MessageCount && !startupValidationFailed; batchStart += options.BatchMode ? options.BatchSize : options.MessageCount)
             {
                 ct.ThrowIfCancellationRequested();
                 int batchEnd = options.BatchMode
@@ -1224,7 +1404,8 @@ public sealed class SmtpTestRunner
             SmtpSendAttempts: smtpSendAttempts,
             CapacitySendReservations: capacityGuard?.ReservedAttempts,
             CapacityMimeBytesReserved: capacityGuard?.ReservedMimeBytes,
-            CapacityStopReason: capacityStopReason);
+            CapacityStopReason: capacityStopReason,
+            StartupValidationFailed: startupValidationFailed);
     }
 
     static double TicksToMs(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
