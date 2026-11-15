@@ -206,6 +206,7 @@ public sealed partial class MainForm
                 && MailboxMonitorMath.ShouldStop(snapshot.QuotaUsagePercent, (int)numMailboxStopPercent.Value)
                 && _cts is { IsCancellationRequested: false })
             {
+                _mailboxQuotaStopTriggered = true;
                 lblMailboxStatus.Text += " Dosažen nastavený limit; SMTP test zastavuji.";
                 AppendLog($"Mailbox Monitor: využití kvóty {snapshot.QuotaUsagePercent:F1} % dosáhlo limitu {(int)numMailboxStopPercent.Value} %. Zastavuji SMTP test.", Color.OrangeRed);
                 _cts.Cancel();
@@ -248,7 +249,9 @@ public sealed partial class MainForm
         {
             lblMailboxPercent.Text = "—";
             progressMailboxQuota.Value = 0;
-            lblMailboxUsage.Text = "Obsazeno (kvóta): nedostupné";
+            lblMailboxUsage.Text = snapshot.QuotaUsedBytes.HasValue
+                ? "Využití (bez dostupného limitu): " + FormatMailboxBytes(snapshot.QuotaUsedBytes)
+                : "Obsazeno (kvóta): nedostupné";
             lblMailboxQuota.Text = "Kvóta: server ji neposkytuje nebo nemá kladný limit";
         }
 
