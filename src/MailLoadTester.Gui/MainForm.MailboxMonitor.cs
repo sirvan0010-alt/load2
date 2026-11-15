@@ -147,7 +147,11 @@ public sealed partial class MainForm
     private void StartMailboxMonitorPolling()
     {
         if (!IsMailboxMonitorConfigured())
+        {
+            if (chkMailboxStopAtQuota.Checked)
+                lblMailboxStatus.Text = "Pozor: automatické zastavení podle kvóty není aktivní, protože nejsou vyplněné IMAP údaje. SMTP test poběží bez ověření zaplnění.";
             return;
+        }
 
         EnsureMailboxMonitorTimerStarted();
         _ = RefreshMailboxMonitorAsync();
