@@ -82,6 +82,81 @@ public sealed partial class MainForm
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value));
     }
 
+    private void UpdateCapacityEstimate(MailTestOptions options)
+    {
+        if (options.CapacityRun is not { Enabled: true } limits)
+        {
+            lblCapacityEstimate.Text = "Capacity Run je vypnutý.";
+            return;
+        }
+
+        try
+        {
+            var paths = (options.Attachments ?? Array.Empty<string>())
+                .Concat(options.InlineAttachments ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var attachmentSizes = new List<long>(paths.Length);
+            foreach (var path in paths)
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists)
+                    throw new FileNotFoundException("Příloha pro odhad neexistuje.", path);
+                attachmentSizes.Add(info.Length);
+            }
+
+            var randomCount = 0;
+            long randomAttachmentBytes = 0;
+            if (options.GenerateRandomAttachments)
+            {
+                var safety = AttachmentPlanner.EstimateRandomAttachments(
+                    options.RandomAttachmentSizeMb,
+                    options.MaxRandomAttachments,
+                    options.MaxConcurrency);
+                if (!safety.IsSafe)
+                {
+                    lblCapacityEstimate.Text = "Odhad není úplný: plán náhodných příloh je blokován bezpečnostním limitem RAM. " + safety.Explanation;
+                    return;
+                }
+
+                var randomSizeMb = AttachmentPlanner.ResolveRandomAttachmentSizeMb(
+                    options.RandomAttachmentSizeMb,
+                    options.MaxRandomAttachments,
+                    options.MaxConcurrency);
+                randomCount = Math.Clamp(options.MaxRandomAttachments, 1, 5);
+                randomAttachmentBytes = checked((long)randomSizeMb * 1024L * 1024L);
+            }
+
+            var hasUnaccountedContent = !string.IsNullOrWhiteSpace(options.EmlTemplatePath)
+                || options.RandomTestData
+                || options.GenerateRandomHtml;
+            var estimate = CapacityRunPreview.Estimate(
+                attachmentSizes,
+                options.MessageCount,
+                limits.MaxMessageCount,
+                randomCount,
+                randomAttachmentBytes,
+                hasUnaccountedContent);
+
+            var warnings = new List<string>();
+            if (limits.MaxMimeMessageBytes > 0 && estimate.EstimatedMimeBytesPerMessage > limits.MaxMimeMessageBytes)
+                warnings.Add("odhad jedné zprávy překračuje nastavený limit");
+            if (limits.TargetMimeBytes > 0 && estimate.EstimatedMimeBytesForLogicalMessages > limits.TargetMimeBytes)
+                warnings.Add("odhad celkového objemu překračuje nastavený rozpočet ještě před retry");
+
+            var warningText = warnings.Count == 0 ? string.Empty : " VAROVÁNÍ: " + string.Join("; ", warnings) + ".";
+            lblCapacityEstimate.Text =
+                $"Odhad MIME: {FormatMailboxBytes(estimate.EstimatedMimeBytesPerMessage)} / zpráva; " +
+                $"{FormatMailboxBytes(estimate.EstimatedMimeBytesForLogicalMessages)} pro {estimate.LogicalMessageCount:N0} zpráv bez retry. " +
+                estimate.Note + warningText;
+        }
+        catch (Exception ex)
+        {
+            lblCapacityEstimate.Text = "Odhad MIME není k dispozici: " + ex.Message;
+        }
+    }
+
     private async Task OnStartAsync()
     {
         if (_isRunning) return;
@@ -90,6 +165,7 @@ public sealed partial class MainForm
         {
             options = BuildOptions();
             Validation.Validate(options);
+            UpdateCapacityEstimate(options);
         }
         catch (Exception ex)
         {
