@@ -415,11 +415,22 @@ public sealed partial class MainForm
         // --- Tab: Proxy ---
         var tabProxy = new TabPage("Proxy") { Padding = new Padding(12) };
         var flProxy = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (jedna)", false, "Jedna SOCKS5 proxy níže. Pro více serverů použij seznam rotace.");
+        chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
+        lblProxyStatus = new Label
+        {
+            AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
+            Margin = new Padding(0, 4, 0, 12), BorderStyle = BorderStyle.FixedSingle,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
+        };
+        flProxy.Controls.Add(lblProxyStatus);
+        chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
+        txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
+        txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
+        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9050, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
+        numProxyPort.ValueChanged += (_, _) => UpdateProxyStatus();
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
-        txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (např. 127.0.0.1).");
-        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 1080, "SOCKS5 proxy port (Tor používá 9050).");
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
@@ -639,6 +650,22 @@ public sealed partial class MainForm
                 pnlCheck.Controls.Add(new Label { Text = "→", AutoSize = true, ForeColor = Color.Gray, Padding = new Padding(0, 3, 0, 3) });
         }
         rightPanel.Controls.Add(pnlCheck);
+
+        var lblQueueTitle = new Label
+        {
+            Text = "Živá cesta zprávy",
+            AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Dock = DockStyle.Top, Padding = new Padding(0, 8, 0, 4)
+        };
+        pnlQueueFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top, Height = 44, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, AutoScroll = true, Padding = new Padding(3),
+            BackColor = Color.FromArgb(245, 247, 250)
+        };
+        BuildQueueFlow();
+        rightPanel.Controls.Add(pnlQueueFlow);
+        rightPanel.Controls.Add(lblQueueTitle);
 
         bottomSplit.Panel2.Controls.Add(rightPanel);
         bottomPanel.Controls.Add(bottomSplit);
