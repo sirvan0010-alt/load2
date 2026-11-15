@@ -274,6 +274,7 @@ public sealed class SmtpTestRunner
         var suppressedReports = 0;
         const int MinReportIntervalMs = 125;
         int smtpSendAttempts = 0, smtp4xx = 0, smtp5xx = 0;
+        AdaptiveConcurrencyLimiter? adaptive = null;
 
         void Report(int s, int f, string status, double? eta, int phase, string current, string next,
             MessageStep? step = null, int? messageIndex = null, int? workerId = null,
@@ -312,7 +313,8 @@ public sealed class SmtpTestRunner
                     : null,
                 SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
                 Smtp4xx: Volatile.Read(ref smtp4xx),
-                Smtp5xx: Volatile.Read(ref smtp5xx)));
+                Smtp5xx: Volatile.Read(ref smtp5xx),
+                AdaptiveConcurrency: adaptive?.Current));
             UpdateDashboard(s, f, status, eta, fsm.Phase.ToString());
         }
 
@@ -342,7 +344,8 @@ public sealed class SmtpTestRunner
                     step, ok, pace.StatusText, pace.CurrentIntervalMs, null,
                     SmtpSendAttempts: Volatile.Read(ref smtpSendAttempts),
                     Smtp4xx: Volatile.Read(ref smtp4xx),
-                    Smtp5xx: Volatile.Read(ref smtp5xx)));
+                    Smtp5xx: Volatile.Read(ref smtp5xx),
+                    AdaptiveConcurrency: adaptive?.Current));
             }
         }
 
@@ -447,7 +450,7 @@ public sealed class SmtpTestRunner
         bool cancelled = false;
         bool startupValidationFailed = false;
         string? capacityStopReason = null;
-        var adaptive = options.UseAdaptiveConcurrency
+        adaptive = options.UseAdaptiveConcurrency
             ? new AdaptiveConcurrencyLimiter(options.MaxConcurrency, min: 1, max: options.MaxConcurrency)
             : null;
         var circuit = options.UseCircuitBreaker
