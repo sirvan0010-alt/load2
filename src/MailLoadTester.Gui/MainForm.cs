@@ -22,7 +22,7 @@ public sealed partial class MainForm : Form
     private CheckBox chkAuth = null!;
     private ComboBox cmbAuthMethod = null!;
     private TextBox txtUser = null!, txtPass = null!;
-    private Button btnTestConnection = null!;
+    private Button btnTestConnection = null!, btnSendTest = null!;
     private TextBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
