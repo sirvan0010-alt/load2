@@ -279,18 +279,22 @@ public sealed partial class MainForm : Form
     private void UpdateAddressSuggestionButton(Button? button)
     {
         if (button is null || button.IsDisposed) return;
-        button.Enabled = _knownEmailAddresses.Count > 0;
-        toolTip.SetToolTip(button, button.Enabled
-            ? "Otevře seznam známých e-mailových adres. Kliknutím vložíš adresu do pole."
-            : "Nejdříve zadej e-mail do pole Od, Komu, CC nebo BCC, případně nastav SMTP účet.");
+        button.Enabled = true;
+        toolTip.SetToolTip(button, "Otevře rozbalovací seznam známých e-mailových adres z přihlášení, SMTP účtů a již vyplněných adres.");
     }
 
     private void ShowAddressSuggestionMenu(Button button, TextBox target)
     {
         RefreshEmailAddressSuggestions();
-        if (_knownEmailAddresses.Count == 0) return;
 
         var menu = new ContextMenuStrip();
+        if (_knownEmailAddresses.Count == 0)
+        {
+            menu.Items.Add(new ToolStripMenuItem("Zatím nejsou uložené žádné e-mailové adresy") { Enabled = false });
+            menu.Show(button, new Point(0, button.Height));
+            return;
+        }
+
         foreach (var address in _knownEmailAddresses)
         {
             var item = new ToolStripMenuItem(address);
