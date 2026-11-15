@@ -33,7 +33,7 @@ public sealed record MailboxMonitorSnapshot(
 
 public static class MailboxMonitorMath
 {
-    public static double? GetUsagePercent(uint? usedKiB, uint? limitKiB)
+    public static double? GetUsagePercentFromKiB(uint? usedKiB, uint? limitKiB)
     {
         if (!usedKiB.HasValue || !limitKiB.HasValue || limitKiB.Value == 0)
             return null;
