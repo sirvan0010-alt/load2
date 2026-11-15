@@ -149,6 +149,7 @@ public sealed partial class MainForm : Form
     private CancellationTokenSource? _cts;
     private SmtpTestRunner? _runner;
     private bool _isRunning;
+    private int _activeRunMessageCount;
     private TaskCompletionSource<bool>? _runCompletion;
     private CancellationTokenSource? _testConnectionCts;
     private TaskCompletionSource<bool>? _testConnectionCompletion;
