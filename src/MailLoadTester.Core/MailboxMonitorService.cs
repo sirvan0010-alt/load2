@@ -17,7 +17,7 @@ public sealed class MailboxMonitorService
             throw new ArgumentOutOfRangeException(nameof(options), "IMAP port must be between 1 and 65535.");
         if (!Enum.IsDefined(options.Security))
             throw new ArgumentException("Unsupported IMAP security mode.", nameof(options));
-        if (string.IsNullOrWhiteSpace(options.Username) || string.IsNullOrEmpty(options.Password))
+        if (string.IsNullOrWhiteSpace(options.Username) || string.IsNullOrWhiteSpace(options.Password))
             throw new ArgumentException("IMAP username and password are required.", nameof(options));
     }
 
