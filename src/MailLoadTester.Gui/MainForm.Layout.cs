@@ -286,6 +286,16 @@ public sealed partial class MainForm
         numConcurrency = AddLabeledNumeric(flParams, "Paralelismus:", 1, 20, 1, "Kolik zpráv se odesílá současně (1–20).");
         numInterval = AddLabeledNumeric(flParams, "Interval (ms):", 0, 3600000, 0, "GLOBÁLNÍ rozestup mezi odesláními (ne per-worker). 1000 ms ≈ max 1 msg/s i při 20 workerech.");
         numRetries = AddLabeledNumeric(flParams, "Retry:", 0, 5, 0, "Kolikrát zkusit znovu při dočasné chybě (0–5).");
+        chkCapacityRun = AddCheckBox(flParams, "Zapnout Capacity Run – bezpečnostní limity", false,
+            "Zapne pevné limity běhu. MIME bajty se měří až po sestavení zprávy a pluginech, těsně před SMTP SEND. Souhrnný rozpočet započítává i opakované pokusy. Nejde o velikost uloženou ve schránce.");
+        numCapacityMaxMessages = AddLabeledNumeric(flParams, "Capacity: max. zpráv:", 1, 10000, 1000,
+            "Horní limit logických zpráv pro tento běh. Skutečný počet je nejvýše také hodnota Počet zpráv.");
+        numCapacityTargetMiB = AddLabeledNumeric(flParams, "Capacity: celkový MIME limit (MiB):", 0, 1048576, 0,
+            "Maximální součet serializovaných MIME bajtů napříč všemi SEND pokusy včetně retry. 0 = bez limitu.");
+        numCapacityMaxMessageMiB = AddLabeledNumeric(flParams, "Capacity: max. MIME zpráva (MiB):", 0, 1048576, 0,
+            "Maximální serializovaná velikost jedné MIME zprávy. 0 = bez limitu. Později lze doplnit automatické převzetí limitu SMTP SIZE.");
+        numCapacityMaxPerMinute = AddLabeledNumeric(flParams, "Capacity: max. zpráv/min:", 0, 60000, 0,
+            "Pevný strop globálního tempa včetně retry. 0 = bez dodatečného stropu; nikdy nezrychlí již pomalejší interval.");
         gbParams.Controls.Add(flParams);
         tblTest.Controls.Add(gbParams, 0, 0);
 
