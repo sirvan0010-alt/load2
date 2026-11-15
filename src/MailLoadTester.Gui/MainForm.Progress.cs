@@ -81,11 +81,16 @@ public sealed partial class MainForm
                     var end = tail.IndexOfAny([' ', '(']);
                     recipient = end >= 0 ? tail[..end] : tail;
                 }
-                smtpLogTab?.AddLogEntry(
-                    recipient,
-                    logStatus,
-                    $"#{u.MessageIndex?.ToString() ?? "?"} · W{u.WorkerId?.ToString() ?? "—"} · {message}",
-                    logColor);
+                var detail = $"#{u.MessageIndex?.ToString() ?? "?"} · W{u.WorkerId?.ToString() ?? "—"} · {message}";
+                smtpLogTab?.AddLogEntry(recipient, logStatus, detail, logColor);
+
+                // Keep the main application log useful without writing every success
+                // line during a high-volume run. Errors/retries are never sampled out.
+                var shouldWriteMainLog = u.MessageStep.Value is
+                    MessageStep.FailedTransient or MessageStep.FailedFinal or MessageStep.Cancelled
+                    || (u.MessageStep.Value == MessageStep.Succeeded && (u.Sent <= 10 || u.Sent % 10 == 0));
+                if (shouldWriteMainLog)
+                    AppendLog($"{logStatus}: {detail}", logColor);
             }
 
             int stepIdx = u.MessageStep.Value switch
