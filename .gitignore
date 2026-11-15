@@ -3,3 +3,22 @@
 # AutoPush temporary files
 autopush-log.txt
 mail-guardian/
+
+# .NET / Visual Studio build output
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# Local publish and installer output
+publish/
+installer/Output/
+
+# Local credentials and certificates (never commit real secrets)
+.env
+.env.*
+*.pfx
+*.p12
+*.key
