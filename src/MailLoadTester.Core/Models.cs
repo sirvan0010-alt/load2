@@ -358,6 +358,9 @@ public static class Validation
             if (o.ProxyPort is < 1 or > 65535)
                 throw new ArgumentException("SOCKS5 proxy port musí být 1–65535.");
         }
+        if ((o.UseSocks5Proxy || !string.IsNullOrWhiteSpace(o.ProxyList))
+            && (!string.IsNullOrWhiteSpace(o.Ipv4Rotation) || !string.IsNullOrWhiteSpace(o.Ipv6Prefix)))
+            throw new ArgumentException("Rotace zdrojových IP adres není kompatibilní s proxy. Proxy určuje vzdálenou síťovou cestu; případnou lokální Source IP lze nastavit samostatně.");
         if (o.RequireTor)
         {
             if (!o.UseSocks5Proxy)
