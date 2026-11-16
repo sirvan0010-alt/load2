@@ -161,6 +161,16 @@ public sealed partial class MainForm
         txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
         txtPass = AddLabeledText(flAuth, "Heslo / app-password:", "Heslo SMTP účtu nebo heslo aplikace. U OAuth2 vlož platný access token; aplikace jej sama nezískává.");
         txtPass.PasswordChar = '●';
+        var lnkCredentialHelp = new LinkLabel
+        {
+            Text = "Jak získat heslo / přihlásit účet?",
+            AutoSize = true,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        lnkCredentialHelp.LinkClicked += (_, _) => ShowSmtpCredentialHelp();
+        flAuth.Controls.Add(lnkCredentialHelp);
+        toolTip.SetToolTip(lnkCredentialHelp, "Zobrazí návod pro rozpoznaného poskytovatele a otevře jeho oficiální stránku.");
         cmbSmtpProvider.SelectionChangeCommitted += (_, _) => ApplySelectedSmtpProviderProfile();
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
         txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
@@ -491,7 +501,7 @@ public sealed partial class MainForm
         };
         lblProxyStatus = new Label
         {
-            AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
+            AutoSize = true, MaximumSize = new Size(720, 0), Padding = new Padding(10, 8, 10, 8),
             Margin = new Padding(0, 4, 0, 12), BorderStyle = BorderStyle.FixedSingle,
             TextAlign = ContentAlignment.MiddleLeft,
             Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
@@ -553,13 +563,22 @@ public sealed partial class MainForm
             finally { btnVerifyTor.Enabled = true; }
         };
         flProxy.Controls.Add(btnVerifyTor);
-        flProxy.Controls.Add(new Label
+        var lblTorHelp = new Label
         {
             AutoSize = true,
             MaximumSize = new Size(720, 0),
             ForeColor = SystemColors.GrayText,
             Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; tlačítko automaticky zkusí běžné porty 9050 a 9150. Tor mění síťovou trasu a výstupní IP, nikoli identitu SMTP účtu nebo adresu From; poskytovatel i příjemce je stále uvidí."
-        });
+        };
+        flProxy.Controls.Add(lblTorHelp);
+        void ResizeProxyHelp()
+        {
+            var availableWidth = Math.Max(260, flProxy.ClientSize.Width - flProxy.Padding.Horizontal - 28);
+            lblProxyStatus.MaximumSize = new Size(availableWidth, 0);
+            lblTorHelp.MaximumSize = new Size(availableWidth, 0);
+        }
+        flProxy.SizeChanged += (_, _) => ResizeProxyHelp();
+        ResizeProxyHelp();
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
         txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
