@@ -44,7 +44,8 @@ public sealed class GoogleOAuthClient
     public Uri BuildAuthorizationUri(
         Uri loopbackRedirectUri,
         GoogleOAuthPkceChallenge pkce,
-        string scopes = DefaultScopes)
+        string scopes = DefaultScopes,
+        bool forceConsent = false)
     {
         ArgumentNullException.ThrowIfNull(loopbackRedirectUri);
         ArgumentNullException.ThrowIfNull(pkce);
@@ -65,8 +66,9 @@ public sealed class GoogleOAuthClient
             ["response_type"] = "code",
             ["scope"] = scopes,
             ["access_type"] = "offline",
-            ["prompt"] = "consent",
-            ["include_granted_scopes"] = "true",
+            // Avoid creating a fresh refresh token on every ordinary sign-in.
+            // Force consent only when a user explicitly needs to re-authorize.
+            ["prompt"] = forceConsent ? "consent select_account" : "select_account",
             ["state"] = pkce.State,
             ["code_challenge"] = pkce.CodeChallenge,
             ["code_challenge_method"] = "S256"
