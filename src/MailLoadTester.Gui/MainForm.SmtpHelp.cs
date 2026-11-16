@@ -10,6 +10,21 @@ public sealed partial class MainForm
         if (cmbSmtpProvider is null || lblSmtpProviderGuidance is null)
             return;
 
+        // If only the mailbox address is known, fill the matching standard SMTP
+        // endpoint once. Never overwrite a non-empty, manually entered SMTP host.
+        if (string.IsNullOrWhiteSpace(txtHost.Text))
+        {
+            var emailProfile = SmtpProviderProfiles.FindByEmail(txtUser.Text);
+            if (emailProfile is not null)
+            {
+                txtHost.Text = emailProfile.Host;
+                numPort.Value = Math.Clamp(emailProfile.Port, (int)numPort.Minimum, (int)numPort.Maximum);
+                cmbSecurity.SelectedItem = emailProfile.Security.ToString();
+                chkAuth.Checked = true;
+                cmbAuthMethod.SelectedItem = emailProfile.AuthMethod.ToString();
+            }
+        }
+
         var profile = GetDetectedSmtpProvider();
         if (profile is null)
         {
