@@ -18,6 +18,15 @@ public sealed class GoogleOAuthLoopbackFlowTests
     }
 
     [Fact]
+    public void Callback_ToStringDoesNotExposeAuthorizationCode()
+    {
+        var callback = new GoogleOAuthCallback("short-lived-auth-code");
+
+        Assert.DoesNotContain("short-lived-auth-code", callback.ToString());
+        Assert.Contains("[REDACTED]", callback.ToString());
+    }
+
+    [Fact]
     public void ParseCallback_RejectsMismatchedState()
     {
         Assert.Throws<InvalidOperationException>(() =>
