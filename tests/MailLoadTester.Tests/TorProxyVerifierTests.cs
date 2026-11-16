@@ -1,4 +1,5 @@
 using Xunit;
+using MailKit.Net.Proxy;
 
 namespace MailLoadTester.Tests;
 
@@ -48,6 +49,14 @@ public sealed class TorProxyVerifierTests
     {
         Assert.Throws<ArgumentException>(() =>
             TorProxyVerifier.ValidateEndpoint(new ProxyEndpoint(ProxyType.Http, "127.0.0.1", 9050)));
+    }
+
+    [Fact]
+    public void SmtpHostnamesRemainHostnamesForRemoteSocksDnsResolution()
+    {
+        Assert.Equal(
+            Socks5Client.Socks5AddressType.Domain,
+            Socks5Client.GetAddressType("smtp.gmail.com", out _));
     }
 
     [Fact]
