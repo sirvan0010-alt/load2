@@ -487,6 +487,12 @@ public sealed partial class MainForm
                 if (lblMailboxStatus is not null)
                     lblMailboxStatus.Text = "IMAP monitoring paused — strict Tor mode is selected.";
             }
+            if (!chkRequireTor.Checked)
+            {
+                _torVerified = false;
+                _torExitIp = null;
+                SetTorIndicator(TorIndicatorState.Off);
+            }
             UpdateProxyStatus();
         };
         lblProxyStatus = new Label
@@ -501,6 +507,9 @@ public sealed partial class MainForm
         btnVerifyTor.Click += async (_, _) =>
         {
             btnVerifyTor.Enabled = false;
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(TorIndicatorState.Checking);
             chkSocks5.Checked = true;
             lblProxyStatus.Text = "Ověřuji SOCKS5 spojení a Tor exit IP…";
             try
@@ -535,6 +544,9 @@ public sealed partial class MainForm
                 if (result is null)
                     throw lastError ?? new InvalidOperationException("Tor nebyl nalezen na portech 9050 ani 9150.");
 
+                _torVerified = true;
+                _torExitIp = result.ExitIp;
+                SetTorIndicator(TorIndicatorState.Verified, result.ExitIp);
                 chkRequireTor.Checked = true;
                 var strictModeEnabled = chkRequireTor.Checked;
                 lblProxyStatus.Text = strictModeEnabled
@@ -546,6 +558,9 @@ public sealed partial class MainForm
             catch (Exception ex)
             {
                 chkRequireTor.Checked = false;
+                _torVerified = false;
+                _torExitIp = null;
+                SetTorIndicator(TorIndicatorState.Failed);
                 lblProxyStatus.Text = "TOR OVĚŘENÍ SELHALO — " + ex.Message;
                 lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
                 lblProxyStatus.ForeColor = Color.DarkRed;
@@ -571,6 +586,8 @@ public sealed partial class MainForm
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
+        txtProxyUser.TextChanged += (_, _) => InvalidateTorVerification();
+        txtProxyPass.TextChanged += (_, _) => InvalidateTorVerification();
         tabProxy.Controls.Add(flProxy);
         tabs.TabPages.Add(tabProxy);
 
@@ -830,6 +847,15 @@ public sealed partial class MainForm
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
         lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
+        torStatusIndicator = new TorStatusIndicator();
+        torStatusHost = new ToolStripControlHost(torStatusIndicator)
+        {
+            AutoSize = false,
+            Size = new Size(84, 24),
+            Margin = new Padding(2, 0, 6, 0),
+            ToolTipText = "Tor není ověřen."
+        };
+        statusStrip.Items.Add(torStatusHost);
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
