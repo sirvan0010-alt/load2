@@ -136,6 +136,23 @@ public sealed class GoogleOAuthClientTests
         Assert.Equal("123", user.Subject);
     }
 
+    [Fact]
+    public async Task Revoke_SendsRefreshTokenToGoogleRevocationEndpoint()
+    {
+        string? capturedBody = null;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            Assert.Equal("https://oauth2.googleapis.com/revoke", request.RequestUri!.ToString());
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+        var client = new GoogleOAuthClient(ClientId, http);
+
+        await client.RevokeAsync("refresh-token-value");
+
+        Assert.Equal("token=refresh-token-value", capturedBody);
+    }
+
     private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
