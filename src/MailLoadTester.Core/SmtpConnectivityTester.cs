@@ -56,12 +56,11 @@ public static class SmtpConnectivityTester
 
         var socketOpts = ToSocketOptions(o.Security);
         var localEp = IpBindingHelper.ResolveLocalEndPoint(o.SourceIp, o.IpVersion);
-        if (client.ProxyClient is not null)
+        var configuredProxy = client.ProxyClient;
+        if (configuredProxy is not null)
         {
             if (localEp is not null)
-            {
-                client.ProxyClient.LocalEndPoint = localEp;
-            }
+                configuredProxy.LocalEndPoint = localEp;
             await client.ConnectAsync(o.SmtpHost, o.Port, socketOpts, ct).ConfigureAwait(false);
         }
         else if (localEp != null)
