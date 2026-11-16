@@ -76,16 +76,20 @@ public sealed class GoogleOAuthLoopbackFlow
                 throw new GoogleOAuthAuthorizationException(ex.Message);
             }
 
+            // The callback has been validated. Acknowledge it immediately so the
+            // browser never waits on the token exchange; the app reports any later
+            // token-endpoint error. The response also removes OAuth query parameters
+            // (including the one-time authorization code) from the visible address bar.
+            stage = "potvrzení callbacku v prohlížeči";
+            await WriteBrowserResponseAsync(stream, HttpStatusCode.OK,
+                "Google přihlášení bylo přijato. Vraťte se do aplikace MailLoadTester.",
+                timeoutCts.Token).ConfigureAwait(false);
+
             stage = "výměna autorizačního kódu";
             var tokens = await client.ExchangeCodeAsync(
                 callback.Code, redirectUri, pkce.CodeVerifier, timeoutCts.Token).ConfigureAwait(false);
             stage = "ověření Google účtu";
             var user = await client.GetUserAsync(tokens.AccessToken, timeoutCts.Token).ConfigureAwait(false);
-
-            stage = "odpověď do prohlížeče";
-            await WriteBrowserResponseAsync(stream, HttpStatusCode.OK,
-                "Přihlášení bylo dokončeno. Můžete zavřít toto okno a vrátit se do MailLoadTester.",
-                timeoutCts.Token).ConfigureAwait(false);
 
             return new GoogleOAuthAuthorizationResult(user, tokens);
         }
@@ -202,7 +206,8 @@ public sealed class GoogleOAuthLoopbackFlow
         var body = Encoding.UTF8.GetBytes(
             "<!doctype html><html lang=\"cs\"><meta charset=\"utf-8\"><title>MailLoadTester</title>" +
             "<body style=\"font:16px Segoe UI,sans-serif;max-width:620px;margin:12vh auto;padding:24px\">" +
-            "<h2>MailLoadTester</h2><p>" + WebUtility.HtmlEncode(message) + "</p></body></html>");
+            "<h2>MailLoadTester</h2><p>" + WebUtility.HtmlEncode(message) + "</p>" +
+            "<script>history.replaceState(null,document.title,location.pathname);</script></body></html>");
         var reason = status == HttpStatusCode.OK ? "OK" : "Bad Request";
         var header = Encoding.ASCII.GetBytes(
             $"HTTP/1.1 {(int)status} {reason}\r\nContent-Type: text/html; charset=utf-8\r\n" +
