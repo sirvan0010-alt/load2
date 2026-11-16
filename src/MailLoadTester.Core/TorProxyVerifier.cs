@@ -25,6 +25,9 @@ public static class TorProxyVerifier
         if (!options.RequireTor)
             throw new ArgumentException("Tor verification requires RequireTor=true.", nameof(options));
 
+        if (!options.UseSocks5Proxy)
+            throw new ArgumentException("Režim Tor vyžaduje zapnutou SOCKS5 proxy.", nameof(options));
+
         var validation = ValidateEndpoint(new ProxyEndpoint(
             ProxyType.Socks5,
             options.ProxyHost,
