@@ -59,7 +59,7 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                 throw new ArgumentException("ProxyList je vyplněný, ale neobsahuje žádný platný proxy endpoint.");
             _proxyRotator = new ProxyRotator(list, options.ProxyListRandom, TimeSpan.FromMinutes(Math.Max(1, options.ProxyBanMinutes)));
         }
-        else if (options.UseSocks5Proxy && !string.IsNullOrWhiteSpace(options.ProxyHost))
+        else if (options.UseSocks5Proxy)
         {
             var single = new ProxyEndpoint(ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
                 string.IsNullOrEmpty(options.ProxyUsername) ? null : options.ProxyUsername,
