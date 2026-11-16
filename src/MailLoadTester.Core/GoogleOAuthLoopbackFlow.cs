@@ -213,7 +213,10 @@ public sealed class GoogleOAuthLoopbackFlow
     }
 }
 
-public sealed record GoogleOAuthCallback(string Code);
+public sealed record GoogleOAuthCallback(string Code)
+{
+    public override string ToString() => "GoogleOAuthCallback { Code = [REDACTED] }";
+}
 
 public sealed record GoogleOAuthAuthorizationResult(
     GoogleOAuthUser User,
