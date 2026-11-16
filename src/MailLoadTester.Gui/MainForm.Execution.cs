@@ -617,8 +617,19 @@ public sealed partial class MainForm
                 cts.Token);
             var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
-                    report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            {
+                if (!string.IsNullOrEmpty(report.Error) && report.FailureKind.HasValue)
+                {
+                    var details = string.Join(Environment.NewLine, report.Steps);
+                    ShowErrorWithCopy(result, "SMTP / diagnostika", details,
+                        GuiErrorCodes.ForTransportFailure(report.FailureKind.Value));
+                }
+                else
+                {
+                    MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
+                        report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+            }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
