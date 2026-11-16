@@ -105,7 +105,8 @@ public sealed partial class MainForm
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
-                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked),
+            RequireTor: chkRequireTor.Checked);
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
@@ -201,6 +202,9 @@ public sealed partial class MainForm
             return;
         }
 
+        // Local DNS preflight is deliberately skipped in strict Tor mode.
+        if (!options.RequireTor)
+        {
         // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET)
         try
         {
@@ -247,8 +251,14 @@ public sealed partial class MainForm
             if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
         }
 
+        }
+        else
+        {
+            AppendLog("Tor mode: local SPF/DMARC and RBL DNS checks skipped to avoid DNS outside the SOCKS5 tunnel.", Color.LightGreen);
+        }
+
         // Volitelná RBL kontrola source IP
-        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
+        if (!options.RequireTor && chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
         {
             try
             {
@@ -268,7 +278,7 @@ public sealed partial class MainForm
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
-        if (IsMailboxMonitorConfigured())
+        if (!options.RequireTor && IsMailboxMonitorConfigured())
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
@@ -342,7 +352,7 @@ public sealed partial class MainForm
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
-            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            var finalMailboxSnapshot = options.RequireTor ? null : await CaptureFinalMailboxSnapshotAsync();
             result = result with
             {
                 MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
