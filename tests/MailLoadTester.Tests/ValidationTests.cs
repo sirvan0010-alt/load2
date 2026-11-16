@@ -188,6 +188,15 @@ public class ValidationTests
 
 
     [Fact]
+    public void ProxyModeRejectsSourceIpRotation()
+    {
+        var ipv4 = Base(useSocks5: true, proxyHost: "127.0.0.1", ipv4Rotation: "192.0.2.10");
+        var ipv6 = Base(useSocks5: true, proxyHost: "127.0.0.1", ipv6Prefix: "2001:db8::");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv4));
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv6));
+    }
+
+    [Fact]
     public void TorModeRequiresSocks5()
     {
         var o = Base(requireTor: true);
