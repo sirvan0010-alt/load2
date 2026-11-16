@@ -14,6 +14,8 @@ Therefore:
 - Keep the existing SMTP transport for providers and credentials that support normal SMTP authentication (including provider app passwords).
 - Add Google account sign-in as a distinct Gmail API transport, not as a disguised SMTP mode.
 - Use the Gmail API `users.messages.send` endpoint for Google-authenticated sends.
+- `gmail.send` is classified by Google as a **sensitive** scope (not non-sensitive and not restricted); a public app should plan for sensitive-scope OAuth verification. It avoids the much broader restricted `mail.google.com` scope and its additional security-assessment requirements.
+- Gmail API sending is not an SMTP test. It does not measure SMTP connection/authentication/SMTP command behavior, and Gmail API quotas and anti-abuse limits must be respected; the app must not use the API path to evade Gmail sending limits.
 - Label metrics and UI honestly: Gmail API sends are not SMTP sessions and must not be reported as SMTP protocol tests.
 - Do not silently fall back from Gmail API to SMTP or to password authentication.
 
