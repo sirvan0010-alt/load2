@@ -188,6 +188,13 @@ public class ValidationTests
 
 
     [Fact]
+    public void ValidationRejectsCommentOnlyProxyList()
+    {
+        var o = Base(proxyList: "# no endpoints");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+    }
+
+    [Fact]
     public void ProxyModeRejectsSourceIpRotation()
     {
         var ipv4 = Base(useSocks5: true, proxyHost: "127.0.0.1", ipv4Rotation: "192.0.2.10");
