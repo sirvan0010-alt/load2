@@ -907,7 +907,7 @@ public sealed partial class MainForm
         numPort.Value = profile.Port;
         cmbSecurity.SelectedItem = profile.Security.ToString();
         chkAuth.Checked = true;
-        cmbAuthMethod.SelectedItem = "Auto";
+        cmbAuthMethod.SelectedItem = profile.AuthMethod.ToString();
         lblSmtpProviderGuidance.Text = profile.Guidance;
     }
 
