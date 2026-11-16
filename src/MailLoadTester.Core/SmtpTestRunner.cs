@@ -96,7 +96,7 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
-        if (options.RequireTor)
+        if (options.RequireTor && !options.DryRun)
         {
             var torCheck = await TorProxyVerifier.VerifyAsync(options, ct).ConfigureAwait(false);
             if (!torCheck.IsTor)
