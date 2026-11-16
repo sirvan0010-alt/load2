@@ -32,6 +32,20 @@ public sealed class ProxyRotatorTests
     }
 
     [Fact]
+    public void RejectsNoneProxyTypeInsteadOfAllowingDirectFallback()
+    {
+        Assert.Throws<ArgumentException>(() => ProxyClientFactory.ParseList("None:127.0.0.1:9050"));
+        Assert.Throws<ArgumentException>(() => ProxyClientFactory.Create(
+            new ProxyEndpoint(ProxyType.None, "127.0.0.1", 9050)));
+    }
+
+    [Fact]
+    public void RejectsProxyListContainingOnlyComments()
+    {
+        Assert.Throws<ArgumentException>(() => ProxyClientFactory.ParseList("# no endpoints"));
+    }
+
+    [Fact]
     public void BanDetector_Matches_550()
     {
         Assert.True(IpBanDetector.IsLikelyIpOrProxyBan("550 5.7.1 Blocked"));
