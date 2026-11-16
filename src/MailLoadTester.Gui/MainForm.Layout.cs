@@ -266,7 +266,7 @@ public sealed partial class MainForm
         InitAccountsTab(tabs);
 
         // --- Tab: Zpráva ---
-        var tabMsg = new TabPage("E-mail (Od / Komu)") { Padding = new Padding(12) };
+        var tabMsg = new TabPage("E-mail (Od / obsah)") { Padding = new Padding(12) };
         var tblMsg = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
