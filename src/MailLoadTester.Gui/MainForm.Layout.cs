@@ -146,30 +146,6 @@ public sealed partial class MainForm
 
         var gbAuth = new GroupBox { Text = "Autentizace & Certifikáty", Dock = DockStyle.Fill };
         var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
-        cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
-        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
-        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
-        txtPass.PasswordChar = '●';
-        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
-        txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
-        txtClientCertPass.PasswordChar = '●';
-        numConnectTimeout = AddLabeledNumeric(flAuth, "Connect timeout (ms):", 1000, 300000, 20000, "Max čas na navázání TCP spojení.");
-        numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
-        btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
-        flAuth.Controls.Add(btnTestConnection);
-        toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
-        btnSendTest = new Button
-        {
-            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
-            Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
-            Cursor = Cursors.Hand
-        };
-        btnSendTest.FlatAppearance.BorderSize = 0;
-        flAuth.Controls.Add(btnSendTest);
-        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
-
         var googleSeparator = new Label
         {
             Text = "──────── Gmail přes Google (samostatně od SMTP) ────────",
@@ -221,6 +197,31 @@ public sealed partial class MainForm
         toolTip.SetToolTip(btnGoogleSignIn, "Otevře přihlášení Google v systémovém prohlížeči. Není potřeba zadávat heslo aplikace ani Client Secret.");
         toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
         toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
+        chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
+        cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
+        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
+        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
+        txtPass.PasswordChar = '●';
+        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
+        txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
+        txtClientCertPass.PasswordChar = '●';
+        numConnectTimeout = AddLabeledNumeric(flAuth, "Connect timeout (ms):", 1000, 300000, 20000, "Max čas na navázání TCP spojení.");
+        numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
+        btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
+        flAuth.Controls.Add(btnTestConnection);
+        toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
+        btnSendTest = new Button
+        {
+            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
+            Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
+            Cursor = Cursors.Hand
+        };
+        btnSendTest.FlatAppearance.BorderSize = 0;
+        flAuth.Controls.Add(btnSendTest);
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
+
+
         gbAuth.Controls.Add(flAuth);
         tblSmtp.Controls.Add(gbAuth, 1, 0);
 
