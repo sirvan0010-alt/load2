@@ -128,11 +128,6 @@ public sealed class SmartPaceController
     }
 
     /// <summary>
-    /// Reserves a global SEND start slot. The gate serializes only timestamp
-    /// reservation, never the SMTP network transfer itself; otherwise one slow
-    /// DATA operation would block every worker and defeat MaxConcurrency.
-    /// </summary>
-    /// <summary>
     /// Legacy reservation-only API. It serializes slot timestamps but cannot guarantee
     /// the order in which callers invoke their subsequent network operation. Production
     /// SMTP sends should use ExecuteSendAsync instead.
