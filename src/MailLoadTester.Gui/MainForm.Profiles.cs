@@ -29,6 +29,13 @@ public sealed partial class MainForm
             var profile = await ProfileStore.LoadAsync(dlg.FileName);
             var o = profile.Options;
             txtHost.Text = o.SmtpHost;
+            var smtpProvider = SmtpProviderProfiles.FindByHost(o.SmtpHost);
+            var smtpProviderIndex = smtpProvider is null
+                ? -1
+                : SmtpProviderProfiles.All.ToList().FindIndex(p => p.Id == smtpProvider.Id);
+            cmbSmtpProvider.SelectedIndex = smtpProviderIndex;
+            lblSmtpProviderGuidance.Text = smtpProvider?.Guidance
+                ?? "Vlastní SMTP server. Zkontroluj host, port a zabezpečení podle dokumentace poskytovatele.";
             numPort.Value = Math.Clamp(o.Port, numPort.Minimum, numPort.Maximum);
             cmbSecurity.SelectedItem = o.Security.ToString();
             chkIgnoreCert.Checked = o.IgnoreCertificateErrors;
