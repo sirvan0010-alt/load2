@@ -661,8 +661,8 @@ public sealed class SmtpTestRunner
                             beforeStart: () =>
                             {
                                 long? serverMaxMessageBytes = validationClient!.Capabilities.HasFlag(SmtpCapabilities.Size)
-                                    && validationClient.MaxSize > 0
-                                        ? validationClient.MaxSize
+                                    && validationClient!.MaxSize > 0
+                                        ? validationClient!.MaxSize
                                         : null;
                                 if (capacityGuard == null)
                                     throw new InvalidOperationException("Startup validation requires enabled Capacity Run accounting.");
