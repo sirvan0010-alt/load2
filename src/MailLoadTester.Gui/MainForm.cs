@@ -25,6 +25,8 @@ public sealed partial class MainForm : Form
     private ComboBox txtUser = null!;
     private TextBox txtPass = null!;
     private Button btnTestConnection = null!, btnSendTest = null!;
+    private Button btnGoogleSignIn = null!, btnGoogleSignOut = null!, btnSendGoogleTest = null!;
+    private Label lblGoogleAccountStatus = null!;
     private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
@@ -191,7 +193,12 @@ public sealed partial class MainForm : Form
         UpdateSafetyBanner();
         ApplyTheme(false);
         FormClosing += MainForm_FormClosing;
-        Shown += (_, _) => LoadLayoutPreferences();
+        Shown += async (_, _) =>
+        {
+            LoadLayoutPreferences();
+            await InitializeGoogleOAuthAsync();
+        };
+        FormClosed += (_, _) => DisposeGoogleOAuthResources();
         FormClosed += (_, _) => SaveLayoutPreferences();
     }
 
