@@ -97,9 +97,10 @@ public sealed partial class MainForm
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
-        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
@@ -225,6 +226,41 @@ public sealed partial class MainForm
         gbAuth.Controls.Add(flAuth);
         tblSmtp.Controls.Add(gbAuth, 1, 0);
 
+        // Keep the primary recipient visible beside SMTP/authentication settings.
+        // The same To field is shared by the SMTP one-message action and Gmail API.
+        var gbRecipient = new GroupBox { Text = "Příjemce e-mailu", Dock = DockStyle.Fill };
+        var flRecipient = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            Padding = new Padding(8)
+        };
+        txtTo = AddEditableAddressCombo(
+            flRecipient,
+            "Komu:",
+            "PŘÍJEMCE E-MAILU pro SMTP i Gmail API. Více adres odděl čárkou nebo středníkem.");
+        flRecipient.Controls.Add(new Label
+        {
+            Text = "Zadej cílovou e-mailovou adresu. Toto pole používá také tlačítko Odeslat 1 zprávu přes Gmail API.",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 10)
+        });
+        var lblRecipientNote = new Label
+        {
+            Text = "Předmět a tělo zprávy nastav na kartě E-mail (Od / Komu).",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 4, 0, 8)
+        };
+        flRecipient.Controls.Add(lblRecipientNote);
+        gbRecipient.Controls.Add(flRecipient);
+        tblSmtp.Controls.Add(gbRecipient, 2, 0);
+
         tabSmtp.Controls.Add(tblSmtp);
         tabs.TabPages.Add(tabSmtp);
         InitAccountsTab(tabs);
@@ -244,7 +280,7 @@ public sealed partial class MainForm
             AutoSize = true, MaximumSize = new Size(380, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        txtTo = AddEditableAddressCombo(flAddr, "Komu:", "PŘÍJEMCE E-MAILU. Začni psát adresu a vyber návrh; více adres odděl čárkou nebo středníkem.");
+        // The shared To field is placed in the third column of the SMTP Server tab.
         txtCc = AddEditableAddressCombo(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
         txtBcc = AddEditableAddressCombo(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
         flAddr.Controls.Add(new Label
