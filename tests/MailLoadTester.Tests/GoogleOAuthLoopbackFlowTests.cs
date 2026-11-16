@@ -128,7 +128,8 @@ public sealed class GoogleOAuthLoopbackFlowTests
         Assert.Equal("refresh-token", result.Tokens.RefreshToken);
         Assert.Contains("code_verifier=", tokenRequestBody);
         Assert.DoesNotContain("client_secret", tokenRequestBody);
-        Assert.Contains("Přihlášení bylo dokončeno", browserResponse);
+        Assert.StartsWith("HTTP/1.1 200 OK", browserResponse);
+        Assert.Contains("<title>MailLoadTester</title>", browserResponse);
     }
 
     [Fact]
