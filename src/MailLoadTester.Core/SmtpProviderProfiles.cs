@@ -18,7 +18,7 @@ public static class SmtpProviderProfiles
     public static IReadOnlyList<SmtpProviderProfile> All { get; } =
     [
         new("Gmail", "Gmail / Google Workspace", "smtp.gmail.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
-            "Použij celou e-mailovou adresu a heslo aplikace, případně OAuth 2.0 access token. Aplikace sama OAuth token nezískává."),
+            "Použij celou e-mailovou adresu a 16znakové heslo aplikace (vyžaduje dvoufázové ověření). OAuth2 access token lze zadat ručně, ale aplikace jej zatím sama nezískává."),
         new("Microsoft365", "Microsoft 365", "smtp.office365.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.OAuth2,
             "SMTP AUTH musí být povolené pro organizaci i schránku. Microsoft doporučuje OAuth 2.0. Do pole Heslo vlož platný access token; aplikace jej sama nezískává."),
         new("Outlook", "Outlook.com / Hotmail", "smtp-mail.outlook.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.OAuth2,
