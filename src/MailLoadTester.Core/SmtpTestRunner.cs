@@ -96,6 +96,13 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
+        if (options.RequireTor && !options.DryRun)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(options, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
+        }
+
         options = CapacityRunPlanner.Apply(options);
         var ledger = new DeliveryLedger(options.MessageCount);
         var capacityGuard = options.CapacityRun is { Enabled: true } limits
@@ -450,6 +457,7 @@ public sealed class SmtpTestRunner
         bool cancelled = false;
         bool startupValidationFailed = false;
         string? capacityStopReason = null;
+        var capacityStopReported = 0;
         adaptive = options.UseAdaptiveConcurrency
             ? new AdaptiveConcurrencyLimiter(options.MaxConcurrency, min: 1, max: options.MaxConcurrency)
             : null;
@@ -635,38 +643,41 @@ public sealed class SmtpTestRunner
                     if (bandwidth != null)
                         await bandwidth.ThrottleAsync((int)Math.Min(int.MaxValue, validationMimeBytes), ct).ConfigureAwait(false);
 
-                    await using (var validationSendLease =
-                        await pace.AcquireSendSlotAsync(ct).ConfigureAwait(false))
+                    Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
+                        "Odesílám malou validační zprávu", "Čekám na SMTP odpověď",
+                        MessageStep.SmtpSend, 1, 0, DeliveryStepKind.Data, null);
+                    long validationSmtpStartTicks = 0;
+                    try
                     {
-                        long? serverMaxMessageBytes = validationClient.Capabilities.HasFlag(SmtpCapabilities.Size)
-                            && validationClient.MaxSize > 0
-                                ? validationClient.MaxSize
-                                : null;
-                        if (capacityGuard == null)
-                            throw new InvalidOperationException("Startup validation requires enabled Capacity Run accounting.");
-                        if (!capacityGuard.TryReserve(validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
-                        {
-                            Interlocked.CompareExchange(ref capacityStopReason, validationCapacityReason, null);
-                            throw new InvalidOperationException(validationCapacityReason);
-                        }
-
-                        Report(0, 0, "STARTUP VALIDATION: SMTP SEND…", null, 3,
-                            "Odesílám malou validační zprávu", "Čekám na SMTP odpověď",
-                            MessageStep.SmtpSend, 1, 0, DeliveryStepKind.Data, null);
-                        var validationSendSw = Stopwatch.StartNew();
-                        try
-                        {
-                            Interlocked.Increment(ref smtpSendAttempts);
-                            if (utf8Format != null)
-                                await validationClient.SendAsync(utf8Format, validationMessage, ct).ConfigureAwait(false);
-                            else
-                                await validationClient.SendAsync(validationMessage, ct).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            validationSendSw.Stop();
-                            smtpSends.Add(validationSendSw.Elapsed.TotalMilliseconds);
-                        }
+                        await pace.ExecuteSendAsync(
+                            sendAsync: () =>
+                            {
+                                Interlocked.Increment(ref smtpSendAttempts);
+                                return utf8Format != null
+                                    ? validationClient!.SendAsync(utf8Format, validationMessage, ct)
+                                    : validationClient!.SendAsync(validationMessage, ct);
+                            },
+                            ct: ct,
+                            beforeStart: () =>
+                            {
+                                long? serverMaxMessageBytes = validationClient!.Capabilities.HasFlag(SmtpCapabilities.Size)
+                                    && validationClient!.MaxSize > 0
+                                        ? validationClient!.MaxSize
+                                        : null;
+                                if (capacityGuard == null)
+                                    throw new InvalidOperationException("Startup validation requires enabled Capacity Run accounting.");
+                                if (!capacityGuard.TryReserve(validationMimeBytes, serverMaxMessageBytes, out var validationCapacityReason))
+                                {
+                                    Interlocked.CompareExchange(ref capacityStopReason, validationCapacityReason, null);
+                                    throw new InvalidOperationException(validationCapacityReason);
+                                }
+                            },
+                            onStarted: startedAt => validationSmtpStartTicks = startedAt).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (validationSmtpStartTicks != 0)
+                            smtpSends.Add(TicksToMs(Stopwatch.GetTimestamp() - validationSmtpStartTicks));
                     }
 
                     ReportPathEvents(0, 0, 1, 0, validationClient, validationPool);
@@ -1001,48 +1012,49 @@ public sealed class SmtpTestRunner
                                         $"SMTP SEND · zpráva #{i} · W{workerId}", "OK nebo retry",
                                         MessageStep.SmtpSend, i, workerId);
 
-                                    // BUG-009/BUG-007: global pacing is acquired only after
-                                    // adaptive concurrency + SMTP pool admission and immediately
-                                    // before the actual SMTP SEND. Every retry reaches this gate
-                                    // again, so retries cannot bypass global spacing.
+                                    // The send delegate itself is invoked under the global start gate.
+                                    // The gate is released as soon as MailKit returns its Task, so
+                                    // SMTP DATA transfers still overlap while actual invocation times stay ordered.
                                     var paceT0 = Stopwatch.GetTimestamp();
-                                    await using (var sendLease =
-                                        await pace.AcquireSendSlotAsync(workerCt).ConfigureAwait(false))
+                                    long smtpT0 = 0;
+                                    try
                                     {
-                                        samplePaceMs = TicksToMs(Stopwatch.GetTimestamp() - paceT0);
-                                        if (capacityGuard != null)
-                                        {
-                                            // MailKit refreshes capabilities after connection/authentication.
-                                            // SIZE is a per-message server ceiling, never a mailbox quota.
-                                            long? serverMaxMessageBytes = client!.Capabilities.HasFlag(SmtpCapabilities.Size)
-                                                && client.MaxSize > 0
-                                                    ? client.MaxSize
-                                                    : null;
-                                            if (!capacityGuard.TryReserve(serializedMimeBytes, serverMaxMessageBytes, out var capacityReason))
+                                        await pace.ExecuteSendAsync(
+                                            sendAsync: () =>
                                             {
-                                                Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
-                                                Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
-                                                    "CAPACITY STOP: " + capacityReason, null, 3,
-                                                    "Capacity guard", "Run stopped",
-                                                    includeObserved: true);
-                                                batchCts.Cancel();
-                                                throw new OperationCanceledException(capacityReason, workerCt);
-                                            }
-                                        }
-                                        var smtpT0 = Stopwatch.GetTimestamp();
-                                        try
-                                        {
-                                            Interlocked.Increment(ref smtpSendAttempts);
-                                            if (utf8Format != null)
-                                                await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
-                                            else
-                                                await client.SendAsync(message, workerCt).ConfigureAwait(false);
-                                        }
-                                        finally
-                                        {
-                                            // Preserve duration even when SMTP rejects or times out during DATA.
+                                                Interlocked.Increment(ref smtpSendAttempts);
+                                                return utf8Format != null
+                                                    ? client!.SendAsync(utf8Format, message, workerCt)
+                                                    : client!.SendAsync(message, workerCt);
+                                            },
+                                            ct: workerCt,
+                                            beforeStart: () =>
+                                            {
+                                                if (capacityGuard != null)
+                                                {
+                                                    // SIZE is a per-message server ceiling, never a mailbox quota.
+                                                    long? serverMaxMessageBytes = client!.Capabilities.HasFlag(SmtpCapabilities.Size)
+                                                        && client.MaxSize > 0
+                                                            ? client.MaxSize
+                                                            : null;
+                                                    if (!capacityGuard.TryReserve(serializedMimeBytes, serverMaxMessageBytes, out var capacityReason))
+                                                    {
+                                                        Interlocked.CompareExchange(ref capacityStopReason, capacityReason, null);
+                                                        throw new OperationCanceledException(capacityReason, workerCt);
+                                                    }
+                                                }
+                                            },
+                                            onStarted: startedAt =>
+                                            {
+                                                samplePaceMs = TicksToMs(startedAt - paceT0);
+                                                smtpT0 = startedAt;
+                                            }).ConfigureAwait(false);
+                                    }
+                                    finally
+                                    {
+                                        // Preserve duration even when SMTP rejects or times out during DATA.
+                                        if (smtpT0 != 0)
                                             sampleSmtpMs = TicksToMs(Stopwatch.GetTimestamp() - smtpT0);
-                                        }
                                     }
 
                                     ReportPathEvents(Volatile.Read(ref sent), Volatile.Read(ref failed), i, workerId, client, pool!);
@@ -1071,6 +1083,16 @@ public sealed class SmtpTestRunner
                             }
                             catch (OperationCanceledException)
                             {
+                                if (!string.IsNullOrWhiteSpace(capacityStopReason))
+                                {
+                                    batchCts.Cancel();
+                                    if (Interlocked.Exchange(ref capacityStopReported, 1) == 0)
+                                        Report(Volatile.Read(ref sent), Volatile.Read(ref failed),
+                                            "CAPACITY STOP: " + capacityStopReason, null, 3,
+                                            "Capacity guard", "Run stopped",
+                                            includeObserved: true);
+                                }
+
                                 if (client is not null)
                                 {
                                     if (accountLease != null)

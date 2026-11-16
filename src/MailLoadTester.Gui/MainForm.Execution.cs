@@ -105,7 +105,56 @@ public sealed partial class MainForm
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
-                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked),
+            RequireTor: chkRequireTor.Checked);
+    }
+
+    private async Task<bool> VerifyTorForUiAsync(MailTestOptions options)
+    {
+        if (!options.RequireTor || options.DryRun)
+        {
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(TorIndicatorState.Off);
+            return true;
+        }
+
+        SetTorIndicator(TorIndicatorState.Checking);
+        if (lblProxyStatus is not null)
+        {
+            lblProxyStatus.Text = "Ověřuji Tor před spuštěním SMTP…";
+            lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
+            lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+        }
+
+        try
+        {
+            var check = await TorProxyVerifier.VerifyAsync(options, CancellationToken.None);
+            if (!check.IsTor)
+                throw new InvalidOperationException(check.Message);
+
+            _torVerified = true;
+            _torExitIp = check.ExitIp;
+            SetTorIndicator(TorIndicatorState.Verified, check.ExitIp);
+            UpdateProxyStatus();
+            AppendLog($"Tor ověřen před spuštěním. Výstupní IP: {check.ExitIp}. SMTP poběží přes lokální SOCKS5.", Color.MediumPurple);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(TorIndicatorState.Failed);
+            if (lblProxyStatus is not null)
+            {
+                lblProxyStatus.Text = "TOR NENÍ OVĚŘEN — SMTP se nespustí. " + ex.Message;
+                lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
+                lblProxyStatus.ForeColor = Color.DarkRed;
+            }
+            ShowErrorWithCopy("Tor se nepodařilo ověřit. SMTP test nebyl spuštěn a přímé připojení nebylo použito.\n" + ex.Message,
+                "Tor není dostupný", ex.ToString(), GuiErrorCodes.Validation);
+            return false;
+        }
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
@@ -201,6 +250,9 @@ public sealed partial class MainForm
             return;
         }
 
+        // Local DNS preflight is deliberately skipped in strict Tor mode.
+        if (!options.RequireTor)
+        {
         // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET)
         try
         {
@@ -247,8 +299,14 @@ public sealed partial class MainForm
             if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
         }
 
+        }
+        else
+        {
+            AppendLog("Tor mode: local SPF/DMARC and RBL DNS checks skipped to avoid DNS outside the SOCKS5 tunnel.", Color.LightGreen);
+        }
+
         // Volitelná RBL kontrola source IP
-        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
+        if (!options.RequireTor && chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
         {
             try
             {
@@ -265,10 +323,27 @@ public sealed partial class MainForm
             catch { /* neblokovat start při chybě DNSBL */ }
         }
 
+        if (options.RequireTor)
+        {
+            // Stop any previously scheduled IMAP polling and cancel an in-flight refresh
+            // before opening the strict Tor SMTP run.
+            StopMailboxMonitorPolling();
+            if (_mailboxRefreshInProgress)
+            {
+                _mailboxMonitorCts?.Cancel();
+                var pendingMailboxRefresh = _mailboxMonitorCompletion;
+                if (pendingMailboxRefresh is not null)
+                    await pendingMailboxRefresh.Task;
+            }
+        }
+
+        if (!await VerifyTorForUiAsync(options))
+            return;
+
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
-        if (IsMailboxMonitorConfigured())
+        if (!options.RequireTor && IsMailboxMonitorConfigured())
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
@@ -342,7 +417,7 @@ public sealed partial class MainForm
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
-            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            var finalMailboxSnapshot = options.RequireTor ? null : await CaptureFinalMailboxSnapshotAsync();
             result = result with
             {
                 MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
@@ -408,8 +483,25 @@ public sealed partial class MainForm
             {
                 try
                 {
-                    await WebhookNotifier.NotifyAsync(txtWebhookUrl.Text, result, _cts?.Token ?? CancellationToken.None);
-                    AppendLog("Webhook notifikace odeslána.", Color.LightGreen);
+                    var webhookToken = _cts?.Token ?? CancellationToken.None;
+                    MailKit.Net.Proxy.IProxyClient? webhookProxy = null;
+                    if (options.RequireTor)
+                    {
+                        var torCheck = await TorProxyVerifier.VerifyAsync(options, webhookToken);
+                        if (!torCheck.IsTor)
+                            throw new InvalidOperationException($"Tor nebyl ověřen pro webhook. {torCheck.Message}");
+                        webhookProxy = ProxyClientFactory.Create(new ProxyEndpoint(
+                            ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
+                            string.IsNullOrWhiteSpace(options.ProxyUsername) ? null : options.ProxyUsername,
+                            string.IsNullOrWhiteSpace(options.ProxyPassword) ? null : options.ProxyPassword))
+                            ?? throw new InvalidOperationException("Tor SOCKS5 klient nebyl vytvořen; přímé webhook spojení je zakázáno.");
+                    }
+
+                    await WebhookNotifier.NotifyAsync(
+                        txtWebhookUrl.Text, result, webhookToken, webhookProxy, options.RequireTor);
+                    AppendLog(options.RequireTor
+                        ? "Webhook notifikace odeslána přes ověřený Tor SOCKS5 tunel."
+                        : "Webhook notifikace odeslána.", Color.LightGreen);
                 }
                 catch (OperationCanceledException)
                 {
@@ -524,6 +616,9 @@ public sealed partial class MainForm
         if (confirm != DialogResult.Yes)
             return;
 
+        if (!await VerifyTorForUiAsync(options))
+            return;
+
         _isRunning = true;
         btnStart.Enabled = false;
         btnStop.Enabled = true;
@@ -617,8 +712,19 @@ public sealed partial class MainForm
                 cts.Token);
             var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
-                    report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            {
+                if (!string.IsNullOrEmpty(report.Error) && report.FailureKind.HasValue)
+                {
+                    var details = string.Join(Environment.NewLine, report.Steps);
+                    ShowErrorWithCopy(result, "SMTP / diagnostika", details,
+                        GuiErrorCodes.ForTransportFailure(report.FailureKind.Value));
+                }
+                else
+                {
+                    MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
+                        report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+            }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -627,7 +733,8 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(),
+                    GuiErrorCodes.ForTransportFailure(TransportFailureClassifier.Classify(ex)));
         }
         finally
         {

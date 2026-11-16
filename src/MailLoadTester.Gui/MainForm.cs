@@ -17,6 +17,8 @@ public sealed partial class MainForm : Form
 
     // SMTP tab
     private ComboBox txtHost = null!;
+    private ComboBox cmbSmtpProvider = null!;
+    private Label lblSmtpProviderGuidance = null!;
     private NumericUpDown numPort = null!;
     private ComboBox cmbSecurity = null!;
     private CheckBox chkIgnoreCert = null!;
@@ -59,11 +61,16 @@ public sealed partial class MainForm : Form
 
     // Proxy tab
     private CheckBox chkSocks5 = null!;
+    private CheckBox chkRequireTor = null!;
     private TextBox txtProxyHost = null!;
     private NumericUpDown numProxyPort = null!;
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
     private TextBox txtProxyList = null!;
     private Label lblProxyStatus = null!;
+    private TorStatusIndicator? torStatusIndicator;
+    private ToolStripControlHost? torStatusHost;
+    private bool _torVerified;
+    private string? _torExitIp;
     private FlowLayoutPanel pnlQueueFlow = null!;
     private readonly Dictionary<string, Label> _queueFlowLabels = new(StringComparer.Ordinal);
     // Options without dedicated controls (persist via profile / defaults)

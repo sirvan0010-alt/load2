@@ -103,10 +103,20 @@ public sealed partial class MainForm
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+        flConn.Controls.Add(new Label { Text = "Poskytovatel SMTP:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) });
+        cmbSmtpProvider = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
+        cmbSmtpProvider.Items.AddRange(SmtpProviderProfiles.All.Select(p => (object)p.DisplayName).ToArray());
+        flConn.Controls.Add(cmbSmtpProvider);
+        lblSmtpProviderGuidance = new Label
+        {
+            AutoSize = true, MaximumSize = new Size(420, 0), ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 8), Text = "Vyber poskytovatele pro automatické nastavení serveru, portu a TLS. Přihlašovací údaje zadáš samostatně."
+        };
+        flConn.Controls.Add(lblSmtpProviderGuidance);
         txtHost = AddLabeledEditableCombo(flConn, "SMTP Host:",
             ["smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com", "smtp.office365.com",
              "smtp.mail.yahoo.com", "smtp.mail.me.com", "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"],
-            "Začni psát adresu SMTP serveru nebo vyber poskytovatele z nabídky. Výběr automaticky nastaví běžný port, TLS a zapne SMTP autentizaci. Vše lze ručně změnit.");
+            "SMTP server. Výběr poskytovatele výše nastaví doporučené připojení; server lze ručně upravit.");
         txtHost.SelectionChangeCommitted += (_, _) => ApplySmtpHostPreset();
         txtHost.DropDown += (_, _) => EnsureSmtpHostSuggestionsVisible();
         flConn.Controls.Add(new Label
@@ -149,8 +159,9 @@ public sealed partial class MainForm
         chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
         txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
-        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
+        txtPass = AddLabeledText(flAuth, "Heslo / app-password:", "Heslo SMTP účtu nebo heslo aplikace. U OAuth2 vlož platný access token; aplikace jej sama nezískává.");
         txtPass.PasswordChar = '●';
+        cmbSmtpProvider.SelectionChangeCommitted += (_, _) => ApplySelectedSmtpProviderProfile();
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
         txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
         txtClientCertPass.PasswordChar = '●';
@@ -455,6 +466,35 @@ public sealed partial class MainForm
         var tabProxy = new TabPage("Proxy") { Padding = new Padding(12) };
         var flProxy = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
+        chkRequireTor = AddCheckBox(flProxy, "Vyžadovat ověřený Tor (bez přímého fallbacku)", false,
+            "Před testem ověří výstupní IP přes check.torproject.org. Pokud Tor nefunguje nebo není potvrzen, SMTP test se nespustí. Vyžaduje lokální Tor SOCKS5 na 127.0.0.1 / ::1.");
+        chkRequireTor.CheckedChanged += (_, _) =>
+        {
+            if (chkRequireTor.Checked)
+            {
+                if (!btnDiscoverRecipientMx.Enabled || !btnDiscoverSubmission.Enabled || !btnCheckRbl.Enabled)
+                {
+                    chkRequireTor.Checked = false;
+                    MessageBox.Show(
+                        "Nejprve dokonči probíhající MX/SMTP/RBL diagnostiku. Tyto starší diagnostické akce nepoužívají Tor tunel.",
+                        "Tor režim", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                chkSocks5.Checked = true;
+                StopMailboxMonitorPolling();
+                _mailboxMonitorCts?.Cancel();
+                if (lblMailboxStatus is not null)
+                    lblMailboxStatus.Text = "IMAP monitoring paused — strict Tor mode is selected.";
+            }
+            if (!chkRequireTor.Checked)
+            {
+                _torVerified = false;
+                _torExitIp = null;
+                SetTorIndicator(TorIndicatorState.Off);
+            }
+            UpdateProxyStatus();
+        };
         lblProxyStatus = new Label
         {
             AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
@@ -463,6 +503,79 @@ public sealed partial class MainForm
             Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
         };
         flProxy.Controls.Add(lblProxyStatus);
+        var btnVerifyTor = new Button { Text = "Ověřit Tor a výstupní IP", AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
+        btnVerifyTor.Click += async (_, _) =>
+        {
+            btnVerifyTor.Enabled = false;
+            _torVerified = false;
+            _torExitIp = null;
+            chkSocks5.Checked = true;
+            SetTorIndicator(TorIndicatorState.Checking);
+            lblProxyStatus.Text = "Ověřuji SOCKS5 spojení a Tor exit IP…";
+            try
+            {
+                var proxyHost = string.IsNullOrWhiteSpace(txtProxyHost.Text) ? "127.0.0.1" : txtProxyHost.Text.Trim();
+                txtProxyHost.Text = proxyHost;
+                var proxyUser = string.IsNullOrWhiteSpace(txtProxyUser.Text) ? null : txtProxyUser.Text;
+                var proxyPass = string.IsNullOrWhiteSpace(txtProxyPass.Text) ? null : txtProxyPass.Text;
+                TorProxyVerificationResult? result = null;
+                Exception? lastError = null;
+                var portsToTry = new[] { (int)numProxyPort.Value, 9050, 9150 }.Distinct();
+                foreach (var port in portsToTry)
+                {
+                    try
+                    {
+                        var endpoint = new ProxyEndpoint(ProxyType.Socks5, proxyHost, port, proxyUser, proxyPass);
+                        var candidate = await TorProxyVerifier.VerifyAsync(endpoint, CancellationToken.None);
+                        if (candidate.IsTor)
+                        {
+                            result = candidate;
+                            numProxyPort.Value = port;
+                            SetTorIndicator(TorIndicatorState.Checking);
+                            break;
+                        }
+                        lastError = new InvalidOperationException(candidate.Message);
+                    }
+                    catch (Exception ex)
+                    {
+                        lastError = ex;
+                    }
+                }
+
+                if (result is null)
+                    throw lastError ?? new InvalidOperationException("Tor nebyl nalezen na portech 9050 ani 9150.");
+
+                _torVerified = true;
+                _torExitIp = result.ExitIp;
+                SetTorIndicator(TorIndicatorState.Verified, result.ExitIp);
+                chkRequireTor.Checked = true;
+                var strictModeEnabled = chkRequireTor.Checked;
+                lblProxyStatus.Text = strictModeEnabled
+                    ? $"TOR OVĚŘEN A POVINNÝ — 127.0.0.1:{numProxyPort.Value}, výstupní IP: {result.ExitIp}. SMTP DNS cílového hostu bude předáno přes SOCKS5."
+                    : $"Tor exit IP {result.ExitIp} je ověřena, ale přísný režim nebyl zapnut. Dokonči probíhající přímou diagnostiku a ověření zopakuj.";
+                lblProxyStatus.BackColor = strictModeEnabled ? Color.FromArgb(215, 245, 220) : Color.FromArgb(250, 220, 220);
+                lblProxyStatus.ForeColor = strictModeEnabled ? Color.DarkGreen : Color.DarkRed;
+            }
+            catch (Exception ex)
+            {
+                chkRequireTor.Checked = false;
+                _torVerified = false;
+                _torExitIp = null;
+                SetTorIndicator(TorIndicatorState.Failed);
+                lblProxyStatus.Text = "TOR OVĚŘENÍ SELHALO — " + ex.Message;
+                lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
+                lblProxyStatus.ForeColor = Color.DarkRed;
+            }
+            finally { btnVerifyTor.Enabled = true; }
+        };
+        flProxy.Controls.Add(btnVerifyTor);
+        flProxy.Controls.Add(new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(720, 0),
+            ForeColor = SystemColors.GrayText,
+            Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; tlačítko automaticky zkusí běžné porty 9050 a 9150. Tor mění síťovou trasu a výstupní IP, nikoli identitu SMTP účtu nebo adresu From; poskytovatel i příjemce je stále uvidí."
+        });
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
         txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
@@ -474,6 +587,8 @@ public sealed partial class MainForm
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
+        txtProxyUser.TextChanged += (_, _) => { InvalidateTorVerification(); UpdateProxyStatus(); };
+        txtProxyPass.TextChanged += (_, _) => { InvalidateTorVerification(); UpdateProxyStatus(); };
         tabProxy.Controls.Add(flProxy);
         tabs.TabPages.Add(tabProxy);
 
@@ -529,15 +644,15 @@ public sealed partial class MainForm
         var tabPace = new TabPage("Tempo a ochrana") { Padding = new Padding(8) };
         var flPace = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
 
-        var lblPreset = new Label { Text = "Předvolba poskytovatele:", AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
+        var lblPreset = new Label { Text = "Profil tempa a ochrany:", AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
         flPace.Controls.Add(lblPreset);
         cmbProviderPreset = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320 };
         foreach (var p in ProviderPresets.All)
             cmbProviderPreset.Items.Add(p.DisplayName);
         cmbProviderPreset.SelectedIndex = 2; // Standard
         cmbProviderPreset.SelectedIndexChanged += (s, e) => ApplyProviderPreset();
-        toolTip.SetToolTip(lblPreset, "Předvolba upraví několik parametrů tempa a ochrany podle typu cílového SMTP serveru.");
-        toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranu pro daný typ serveru. Poté můžete cokoliv upravit ručně.");
+        toolTip.SetToolTip(lblPreset, "Tento profil upravuje pouze tempo a ochranné limity testu. Server, port a TLS nastavuje profil poskytovatele na záložce SMTP Server.");
+        toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranné limity. Nemění SMTP host, port ani přihlašovací údaje.");
         flPace.Controls.Add(cmbProviderPreset);
 
         chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu slouží k modelování nepravidelného provozu v autorizovaném testu. Neobchází antispamové filtry a nezaručuje doručení do Inboxu.");
@@ -733,6 +848,15 @@ public sealed partial class MainForm
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
         lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
+        torStatusIndicator = new TorStatusIndicator();
+        torStatusHost = new ToolStripControlHost(torStatusIndicator)
+        {
+            AutoSize = false,
+            Size = new Size(84, 24),
+            Margin = new Padding(2, 0, 6, 0),
+            ToolTipText = "Tor není ověřen."
+        };
+        statusStrip.Items.Add(torStatusHost);
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
@@ -876,21 +1000,28 @@ public sealed partial class MainForm
 
     private void ApplySmtpHostPreset()
     {
-        var host = txtHost.Text.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(host)) return;
+        var profile = SmtpProviderProfiles.FindByHost(txtHost.Text);
+        if (profile is null) return;
+        ApplySmtpProviderProfile(profile);
+        var index = SmtpProviderProfiles.All.ToList().FindIndex(p => p.Id == profile.Id);
+        if (index >= 0) cmbSmtpProvider.SelectedIndex = index;
+    }
 
-        // Submission defaults for common providers. The operator can still edit
-        // port/security/authentication after selecting a suggestion.
-        if (host is "smtp.seznam.cz" or "smtp.gmail.com" or "smtp-mail.outlook.com"
-            or "smtp.office365.com" or "smtp.mail.yahoo.com" or "smtp.mail.me.com"
-            or "smtp.zoho.com" or "smtp.zoho.eu" or "smtp.fastmail.com")
-        {
-            numPort.Value = 587;
-            cmbSecurity.SelectedItem = "StartTls";
-            chkAuth.Checked = true;
-            if (cmbAuthMethod.SelectedItem is null)
-                cmbAuthMethod.SelectedItem = "Auto";
-        }
+    private void ApplySelectedSmtpProviderProfile()
+    {
+        var index = cmbSmtpProvider.SelectedIndex;
+        if (index < 0 || index >= SmtpProviderProfiles.All.Count) return;
+        ApplySmtpProviderProfile(SmtpProviderProfiles.All[index]);
+    }
+
+    private void ApplySmtpProviderProfile(SmtpProviderProfile profile)
+    {
+        txtHost.Text = profile.Host;
+        numPort.Value = profile.Port;
+        cmbSecurity.SelectedItem = profile.Security.ToString();
+        chkAuth.Checked = true;
+        cmbAuthMethod.SelectedItem = profile.AuthMethod.ToString();
+        lblSmtpProviderGuidance.Text = profile.Guidance;
     }
 
     private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip, int decimalPlaces = 0)

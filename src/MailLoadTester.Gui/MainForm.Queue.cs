@@ -70,6 +70,37 @@ public sealed partial class MainForm
             _queueFlowLabels["VÝSLEDEK"].BackColor = Color.LightGray;
     }
 
+    private void SetTorIndicator(TorIndicatorState state, string? exitIp = null)
+    {
+        if (torStatusIndicator is null || torStatusIndicator.IsDisposed)
+            return;
+
+        torStatusIndicator.ExitIp = exitIp;
+        torStatusIndicator.State = state;
+        if (torStatusHost is not null)
+        {
+            torStatusHost.ToolTipText = state switch
+            {
+                TorIndicatorState.Verified => $"Tor ověřen přes check.torproject.org. Výstupní IP: {exitIp}.",
+                TorIndicatorState.Checking => "Ověřuji lokální SOCKS5 a Tor výstupní IP…",
+                TorIndicatorState.Failed => "Tor ověření selhalo. Přímé připojení není povoleno.",
+                _ => "Tor není aktivní ani ověřen."
+            };
+        }
+    }
+
+    private void InvalidateTorVerification()
+    {
+        if (_torVerified)
+        {
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(chkRequireTor?.Checked == true
+                ? TorIndicatorState.Checking
+                : TorIndicatorState.Off);
+        }
+    }
+
     private void UpdateProxyStatus(bool smtpProxyWasUsed = false)
     {
         if (lblProxyStatus is null || lblProxyStatus.IsDisposed)
@@ -78,11 +109,32 @@ public sealed partial class MainForm
         var listConfigured = !string.IsNullOrWhiteSpace(txtProxyList?.Text);
         var singleConfigured = chkSocks5?.Checked == true;
         var enabled = listConfigured || singleConfigured;
+        if (chkRequireTor?.Checked == true)
+        {
+            if (_torVerified && !string.IsNullOrWhiteSpace(_torExitIp))
+            {
+                lblProxyStatus.Text = $"● TOR OVĚŘEN — 127.0.0.1:{numProxyPort.Value}, výstupní IP: {_torExitIp}. Při výpadku bez přímého fallbacku.";
+                lblProxyStatus.BackColor = Color.FromArgb(225, 215, 250);
+                lblProxyStatus.ForeColor = Color.FromArgb(82, 35, 145);
+                SetTorIndicator(TorIndicatorState.Verified, _torExitIp);
+            }
+            else
+            {
+                lblProxyStatus.Text = "● TOR POVINNÝ, ALE NEOVĚŘENÝ — před spuštěním se ověří Tor exit IP; při chybě se SMTP nespustí.";
+                lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
+                lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+                if (torStatusIndicator?.State != TorIndicatorState.Checking)
+                    SetTorIndicator(TorIndicatorState.Off);
+            }
+            return;
+        }
+
         if (!enabled)
         {
             lblProxyStatus.Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí.";
             lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
             lblProxyStatus.ForeColor = Color.DarkRed;
+            SetTorIndicator(TorIndicatorState.Off);
             return;
         }
 
@@ -98,5 +150,6 @@ public sealed partial class MainForm
             : $"● {kind} nakonfigurována — spojení a výstupní IP zatím NEOVĚŘENY.";
         lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
         lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+        SetTorIndicator(TorIndicatorState.Off);
     }
 }

@@ -77,3 +77,25 @@ Pokud je zapnutá startup validation, chyba jediné validační zprávy zastaví
 ## Logování
 
 SMTP session log je ve výchozím stavu vypnutý. Při zapnutí může obsahovat adresy, hlavičky a obsah zpráv. Před sdílením logu jej zkontroluj a případné citlivé údaje odstraň.
+
+## Tor / SOCKS5 se nepřipojí
+
+1. Stáhni Tor Browser pouze z [oficiální stránky Tor Project](https://www.torproject.org/download/), nainstaluj jej a spusť.
+2. V úvodním okně Tor Browseru klikni na **Connect** a počkej na dokončení připojení k síti Tor. Pouhé spuštění okna bez dokončeného připojení nestačí.
+3. Ověř, že SOCKS5 poslouchá na `127.0.0.1`. Tor Browser obvykle používá port `9150`, samostatná služba Tor obvykle `9050`; tlačítko ověření zkusí oba porty.
+3. Pokud používáš vlastní port, nastav jej v proxy konfiguraci a ověření zopakuj.
+4. Použij IP adresu loopback, nikoli název `localhost` nebo vzdálený proxy host.
+5. Pokud check API nevrátí `IsTor=true`, přísný režim zůstane vypnutý a test se nesmí spustit.
+
+Při výpadku Tor se SMTP spojení nesmí přepnout na přímou síť. Zkontroluj stav Tor Browseru/služby a znovu ověř výstupní IP. Někteří SMTP poskytovatelé mohou Tor exit IP odmítat; při 5.7.x odmítnutí respektuj politiku poskytovatele, nepřecházej na rotaci IP.
+
+V přísném Tor režimu jsou IMAP monitoring, lokální SPF/DMARC, MX discovery a RBL lookup pozastavené. Webhook musí být dostupný přes Tor SOCKS5; lokální a neveřejné webhook cíle jsou odmítnuty.
+
+
+### Indikátor Tor v MailLoadTester
+
+- **Fialová svítící cibulka TOR ON** – poslední ověření potvrdilo Tor exit node. Před každým reálným během se kontrola opakuje.
+- **Šedá TOR** – Tor není ověřen nebo není vyžadován.
+- **Oranžová TOR…** – probíhá ověřování.
+- **Červená TOR OFF** – ověření selhalo; reálný test se nespustí.
+- Změna proxy hostu, portu, přihlašovacích údajů nebo vypnutí Tor režimu zneplatní předchozí ověření. Zavření Tor Browseru ukončí jeho lokální SOCKS5 proxy.

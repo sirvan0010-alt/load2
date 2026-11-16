@@ -128,12 +128,13 @@ public sealed class SmartPaceController
     }
 
     /// <summary>
-    /// Reserves a global SEND start slot. The gate serializes only timestamp
-    /// reservation, never the SMTP network transfer itself; otherwise one slow
-    /// DATA operation would block every worker and defeat MaxConcurrency.
+    /// Legacy reservation-only API. It serializes slot timestamps but cannot guarantee
+    /// the order in which callers invoke their subsequent network operation. Production
+    /// SMTP sends should use ExecuteSendAsync instead.
     /// </summary>
     public async ValueTask<SendPaceLease> AcquireSendSlotAsync(CancellationToken ct)
     {
+        var jitterFactor = CreateJitterFactor();
         await _sendGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -143,26 +144,7 @@ public sealed class SmartPaceController
                 TimeSpan delay;
                 lock (_lock)
                 {
-                    var intervalMs = _currentIntervalMs;
-                    if (_options.EnableWarmup && intervalMs > 0)
-                    {
-                        var phases = GetWarmupPhases();
-                        if (_warmupPhaseIndex < phases.Length)
-                        {
-                            var factor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
-                            intervalMs = (int)(intervalMs * factor);
-                        }
-                    }
-                    if (_options.EnableJitter && _options.JitterPercent > 0 && intervalMs > 0)
-                    {
-                        var jitter = _options.JitterPercent / 100.0;
-                        var factor = 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
-                        intervalMs = (int)Math.Max(0, intervalMs * factor);
-                    }
-                    // Jitter may never undercut a mailbox-pressure slowdown.
-                    intervalMs = Math.Max(intervalMs, _mailboxMinimumIntervalMs);
-                    _lastEffectiveIntervalMs = intervalMs;
-
+                    var intervalMs = GetEffectiveIntervalMsLocked(jitterFactor);
                     var now = Stopwatch.GetTimestamp();
                     if (intervalMs <= 0 || _lastActualSendTicks == 0)
                     {
@@ -186,10 +168,105 @@ public sealed class SmartPaceController
         }
         finally
         {
-            // Release immediately after reserving a start slot. The returned lease
-            // deliberately does not own this gate, so concurrent SMTP transfers overlap.
             _sendGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Waits for the global SEND interval, then invokes the actual SMTP send delegate
+    /// while holding the start gate. The gate is released as soon as the delegate
+    /// returns its Task, so network transfers overlap while invocation times remain ordered.
+    /// </summary>
+    /// <param name="sendAsync">Must start the network operation synchronously and return its Task.</param>
+    /// <param name="ct">Cancellation token for waiting and the network operation.</param>
+    /// <param name="beforeStart">Optional short, non-reentrant reservation callback, invoked only when a slot is ready.</param>
+    /// <param name="onStarted">Receives the monotonic timestamp immediately before invoking the send delegate.</param>
+    public async Task ExecuteSendAsync(
+        Func<Task> sendAsync,
+        CancellationToken ct,
+        Action? beforeStart = null,
+        Action<long>? onStarted = null)
+    {
+        ArgumentNullException.ThrowIfNull(sendAsync);
+        var jitterFactor = CreateJitterFactor();
+        await _sendGate.WaitAsync(ct).ConfigureAwait(false);
+
+        Task sendTask = Task.CompletedTask;
+        var started = false;
+        try
+        {
+            while (!started)
+            {
+                ct.ThrowIfCancellationRequested();
+                TimeSpan delay;
+                lock (_lock)
+                {
+                    var intervalMs = GetEffectiveIntervalMsLocked(jitterFactor);
+                    var now = Stopwatch.GetTimestamp();
+                    var intervalTicks = (long)(intervalMs * (double)_freq / 1000.0);
+                    var earliest = _lastActualSendTicks + intervalTicks;
+
+                    if (intervalMs <= 0 || _lastActualSendTicks == 0 || now >= earliest)
+                    {
+                        // Keep the reservation and actual delegate invocation atomic
+                        // with respect to other workers and mailbox-pressure updates.
+                        beforeStart?.Invoke();
+                        var startedAt = Stopwatch.GetTimestamp();
+                        _lastActualSendTicks = startedAt;
+                        onStarted?.Invoke(startedAt);
+                        sendTask = sendAsync();
+                        started = true;
+                        delay = TimeSpan.Zero;
+                    }
+                    else
+                    {
+                        var waitTicks = earliest - now;
+                        delay = TimeSpan.FromMilliseconds(Math.Max(1, waitTicks * 1000.0 / _freq));
+                    }
+                }
+
+                if (!started)
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+
+        await sendTask.ConfigureAwait(false);
+    }
+
+    private double CreateJitterFactor()
+    {
+        if (!_options.EnableJitter || _options.JitterPercent <= 0)
+            return 1.0;
+
+        var jitter = _options.JitterPercent / 100.0;
+        return 1.0 + (Random.Shared.NextDouble() * 2 - 1) * jitter;
+    }
+
+    // Caller must hold _lock.
+    private int GetEffectiveIntervalMsLocked(double jitterFactor)
+    {
+        var intervalMs = _currentIntervalMs;
+        if (_options.EnableWarmup && intervalMs > 0)
+        {
+            var phases = GetWarmupPhases();
+            if (_warmupPhaseIndex < phases.Length)
+            {
+                var warmupFactor = 1.0 + (phases.Length - _warmupPhaseIndex) * 0.5;
+                intervalMs = (int)(intervalMs * warmupFactor);
+            }
+        }
+
+        if (intervalMs > 0)
+            intervalMs = (int)Math.Max(0, intervalMs * jitterFactor);
+
+        // Jitter may never undercut a mailbox-pressure slowdown.
+        intervalMs = Math.Max(intervalMs, _mailboxMinimumIntervalMs);
+        _lastEffectiveIntervalMs = intervalMs;
+        return intervalMs;
     }
 
     /// <summary>

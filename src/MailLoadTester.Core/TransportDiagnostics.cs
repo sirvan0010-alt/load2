@@ -33,7 +33,8 @@ public sealed record TransportDiagnosticReport(
     IReadOnlyList<MxRecord>? MxRecords,
     IReadOnlyList<string> Steps,
     string Summary,
-    string? Error);
+    string? Error,
+    TransportFailureKind? FailureKind = null);
 
 /// <summary>
 /// DNS / TLS / SMTP capability diagnostics layered on existing helpers.
@@ -88,9 +89,17 @@ public static class TransportDiagnostics
                 Error: null);
         }
 
+        if (options.RequireTor)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(options, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
+        }
+
         DnsPolicyChecker.PolicyResult? dns = null;
         IReadOnlyList<MxRecord>? mx = null;
         string? error = null;
+        TransportFailureKind? failureKind = null;
         var connected = false;
         var authenticated = false;
         double connectMs = 0;
@@ -98,7 +107,7 @@ public static class TransportDiagnostics
         string? tlsProtocol = null;
         string? certSubject = null;
 
-        if (diag.CheckDnsPolicy)
+        if (diag.CheckDnsPolicy && !options.RequireTor)
         {
             ct.ThrowIfCancellationRequested();
             var domain = DnsPolicyChecker.ExtractDomain(options.From);
@@ -115,6 +124,7 @@ public static class TransportDiagnostics
                 {
                     steps.Add($"DNS policy failed: {ex.GetType().Name}");
                     error ??= ex.Message;
+                    failureKind ??= TransportFailureKind.Dns;
                 }
             }
             else
@@ -123,7 +133,7 @@ public static class TransportDiagnostics
             }
         }
 
-        if (diag.CheckMx)
+        if (diag.CheckMx && !options.RequireTor)
         {
             ct.ThrowIfCancellationRequested();
             var recipientDomain = options.Recipients
@@ -141,8 +151,12 @@ public static class TransportDiagnostics
             {
                 steps.Add($"MX failed: {ex.GetType().Name}");
                 error ??= ex.Message;
+                failureKind ??= TransportFailureKind.Dns;
             }
         }
+
+        if (options.RequireTor && (diag.CheckDnsPolicy || diag.CheckMx))
+            steps.Add("Tor mode: local DNS/MX checks skipped to prevent queries outside the SOCKS5 tunnel.");
 
         if (diag.CheckSmtp && !string.IsNullOrWhiteSpace(options.SmtpHost))
         {
@@ -168,22 +182,19 @@ public static class TransportDiagnostics
                 if (!string.IsNullOrWhiteSpace(options.ProxyList))
                 {
                     var list = ProxyClientFactory.ParseList(options.ProxyList);
-                    if (list.Count > 0)
-                    {
-                        var proxy = ProxyClientFactory.Create(list[0]);
-                        if (proxy != null)
-                            client.ProxyClient = proxy;
-                    }
+                    if (list.Count == 0)
+                        throw new InvalidOperationException("ProxyList je vyplněný, ale neobsahuje žádný platný proxy endpoint.");
+                    client.ProxyClient = ProxyClientFactory.Create(list[0])
+                        ?? throw new InvalidOperationException("Proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
                 }
-                else if (options.UseSocks5Proxy && !string.IsNullOrWhiteSpace(options.ProxyHost))
+                else if (options.UseSocks5Proxy)
                 {
                     var ep = new ProxyEndpoint(
                         ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
                         string.IsNullOrEmpty(options.ProxyUsername) ? null : options.ProxyUsername,
                         string.IsNullOrEmpty(options.ProxyPassword) ? null : options.ProxyPassword);
-                    var proxy = ProxyClientFactory.Create(ep);
-                    if (proxy != null)
-                        client.ProxyClient = proxy;
+                    client.ProxyClient = ProxyClientFactory.Create(ep)
+                        ?? throw new InvalidOperationException("SOCKS5 proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
                 }
 
                 var socket = SmtpConnectivityTester.ToSocketOptions(options.Security);
@@ -226,6 +237,7 @@ public static class TransportDiagnostics
                 connectMs = sw.Elapsed.TotalMilliseconds;
                 steps.Add($"SMTP failed: {ex.GetType().Name}");
                 error = Validation.ExplainSmtpError(ex);
+                failureKind = TransportFailureClassifier.Classify(ex);
             }
         }
         else if (diag.CheckSmtp)
@@ -233,7 +245,7 @@ public static class TransportDiagnostics
             steps.Add("SMTP: skipped (empty SmtpHost)");
         }
 
-        var summary = BuildSummary(options, connected, authenticated, caps, dns, mx, error);
+        var summary = BuildSummary(options, connected, authenticated, caps, dns, mx, error, failureKind);
         return new TransportDiagnosticReport(
             TargetHost: options.SmtpHost,
             Port: options.Port,
@@ -248,7 +260,8 @@ public static class TransportDiagnostics
             MxRecords: mx,
             Steps: steps,
             Summary: summary,
-            Error: error);
+            Error: error,
+            FailureKind: failureKind);
     }
 
     static string BuildSummary(
@@ -258,7 +271,8 @@ public static class TransportDiagnostics
         EhloCapabilities? caps,
         DnsPolicyChecker.PolicyResult? dns,
         IReadOnlyList<MxRecord>? mx,
-        string? error)
+        string? error,
+        TransportFailureKind? failureKind)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Target: {o.SmtpHost}:{o.Port} ({o.Security})");
@@ -275,6 +289,8 @@ public static class TransportDiagnostics
         }
         if (authenticated)
             sb.AppendLine("Authenticated: yes");
+        if (failureKind.HasValue)
+            sb.AppendLine($"Failure category: {failureKind.Value}");
         if (!string.IsNullOrEmpty(error))
             sb.AppendLine($"Error: {error}");
         return sb.ToString().TrimEnd();

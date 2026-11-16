@@ -31,10 +31,28 @@ public class ValidationTests
         IReadOnlyDictionary<string, string>? headers = null,
         bool ignoreCert = false,
         int retries = 1,
-        bool dryRun = false)
+        bool dryRun = false,
+        bool requireTor = false,
+        bool useSocks5 = false,
+        string proxyHost = "",
+        int proxyPort = 1080,
+        string proxyList = "",
+        bool directMx = false,
+        string ipv4Rotation = "",
+        string ipv6Prefix = "",
+        bool checkRbl = false)
         => new(from, recipients ?? new[] { "user@example.com" }, host, port, security, useAuth, user, pass,
             count, interval, batch, batchSize, batchPause, concurrency, subject, body, name, random, testMode, domains,
-            html, attachments ?? Array.Empty<string>(), headers ?? new Dictionary<string, string>(), ignoreCert, retries, dryRun);
+            html, attachments ?? Array.Empty<string>(), headers ?? new Dictionary<string, string>(), ignoreCert, retries, dryRun,
+            UseSocks5Proxy: useSocks5,
+            ProxyHost: proxyHost,
+            ProxyPort: proxyPort,
+            ProxyList: proxyList,
+            DirectMxDelivery: directMx,
+            Ipv4Rotation: ipv4Rotation,
+            Ipv6Prefix: ipv6Prefix,
+            CheckRblBeforeStart: checkRbl,
+            RequireTor: requireTor);
 
     [Theory]
     [InlineData("test@gmail.com")]
@@ -144,6 +162,33 @@ public class ValidationTests
     }
 
 
+    [Fact]
+    public async Task StrictTorWebhookRequiresProxyClientAndCannotFallBackDirect()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WebhookNotifier.NotifyAsync("https://example.com/hook", null!, CancellationToken.None,
+                proxyClient: null, requireProxy: true));
+    }
+
+    [Fact]
+    public void TorWebhookValidationDoesNotResolveHostnameLocally()
+    {
+        var uri = WebhookSecurityPolicy.ValidateTorDestination("https://does-not-resolve.invalid/hook");
+        Assert.Equal("does-not-resolve.invalid", uri.Host);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1/hook")]
+    [InlineData("http://localhost/hook")]
+    [InlineData("https://192.168.1.10/hook")]
+    [InlineData("https://service.local/hook")]
+    [InlineData("ftp://example.com/hook")]
+    [InlineData("https://user:pass@example.com/hook")]
+    public void TorWebhookValidationRejectsUnsafeDestinations(string url)
+    {
+        Assert.Throws<ArgumentException>(() => WebhookSecurityPolicy.ValidateTorDestination(url));
+    }
+
     [Theory]
     [InlineData("http://127.0.0.1:8080/hook")]
     [InlineData("http://10.0.0.5/hook")]
@@ -168,6 +213,72 @@ public class ValidationTests
             () => WebhookSecurityPolicy.ResolveSafeDestinationAsync(url, CancellationToken.None));
     }
 
+
+    [Fact]
+    public void ValidationRejectsCommentOnlyProxyList()
+    {
+        var o = Base(proxyList: "# no endpoints");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+    }
+
+    [Fact]
+    public void ProxyModeRejectsSourceIpRotation()
+    {
+        var ipv4 = Base(useSocks5: true, proxyHost: "127.0.0.1", ipv4Rotation: "192.0.2.10");
+        var ipv6 = Base(useSocks5: true, proxyHost: "127.0.0.1", ipv6Prefix: "2001:db8::");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv4));
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv6));
+    }
+
+    [Fact]
+    public void TorModeRequiresSocks5()
+    {
+        var o = Base(requireTor: true);
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+    }
+
+    [Fact]
+    public void TorModeAcceptsLocalSocks5Endpoint()
+    {
+        var o = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1", proxyPort: 9050);
+        Validation.Validate(o);
+    }
+
+    [Theory]
+    [InlineData("localhost")]
+    [InlineData("tor.example.com")]
+    [InlineData("192.0.2.5")]
+    public void TorModeRejectsNonLoopbackProxyHost(string host)
+    {
+        var o = Base(requireTor: true, useSocks5: true, proxyHost: host);
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+    }
+
+    [Fact]
+    public void TorModeRejectsProxyRotation()
+    {
+        var o = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1",
+            proxyList: "socks5://127.0.0.1:9050");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(o));
+    }
+
+    [Fact]
+    public void TorModeRejectsDirectMxAndRbl()
+    {
+        var directMx = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1", directMx: true);
+        var rbl = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1", checkRbl: true);
+        Assert.Throws<ArgumentException>(() => Validation.Validate(directMx));
+        Assert.Throws<ArgumentException>(() => Validation.Validate(rbl));
+    }
+
+    [Fact]
+    public void TorModeRejectsSourceIpRotation()
+    {
+        var ipv4 = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1", ipv4Rotation: "192.0.2.10");
+        var ipv6 = Base(requireTor: true, useSocks5: true, proxyHost: "127.0.0.1", ipv6Prefix: "2001:db8::");
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv4));
+        Assert.Throws<ArgumentException>(() => Validation.Validate(ipv6));
+    }
 
     [Fact]
     public void ExplainSmtpErrorContainsHintForTimeout()

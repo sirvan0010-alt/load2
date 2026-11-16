@@ -51,7 +51,7 @@ public sealed class SmartPaceControllerTests
 
         var tasks = Enumerable.Range(0, messages).Select(async _ =>
         {
-            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
+            await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
             pace.RecordSuccess("b@test.local");
         });
         await Task.WhenAll(tasks);
@@ -76,12 +76,14 @@ public sealed class SmartPaceControllerTests
 
         var tasks = Enumerable.Range(0, messages).Select(async _ =>
         {
-            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
-            starts.Add(sw.ElapsedMilliseconds);
-            var nowActive = Interlocked.Increment(ref active);
-            UpdateMax(ref maxActive, nowActive);
-            try { await Task.Delay(transferMs); }
-            finally { Interlocked.Decrement(ref active); }
+            await pace.ExecuteSendAsync(async () =>
+            {
+                starts.Add(sw.ElapsedMilliseconds);
+                var nowActive = Interlocked.Increment(ref active);
+                UpdateMax(ref maxActive, nowActive);
+                try { await Task.Delay(transferMs); }
+                finally { Interlocked.Decrement(ref active); }
+            }, CancellationToken.None);
         });
 
         await Task.WhenAll(tasks);
@@ -106,19 +108,21 @@ public sealed class SmartPaceControllerTests
 
         var tasks = Enumerable.Range(0, workers).Select(async _ =>
         {
-            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
-            var nowActive = Interlocked.Increment(ref active);
-            UpdateMax(ref maxActive, nowActive);
-            try
+            await pace.ExecuteSendAsync(async () =>
             {
-                // Represents the time spent inside SMTP SendAsync. The pacing
-                // reservation must not hold a global lock for this duration.
-                await Task.Delay(100);
-            }
-            finally
-            {
-                Interlocked.Decrement(ref active);
-            }
+                var nowActive = Interlocked.Increment(ref active);
+                UpdateMax(ref maxActive, nowActive);
+                try
+                {
+                    // Represents the time spent inside SMTP SendAsync. The start
+                    // gate must be released after invocation, not after transfer completion.
+                    await Task.Delay(100);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref active);
+                }
+            }, CancellationToken.None);
         });
 
         await Task.WhenAll(tasks);
@@ -145,12 +149,12 @@ public sealed class SmartPaceControllerTests
             WarmupPhases = "10;20"
         });
 
-        await using (await warmup.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await warmup.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         Assert.Equal(1_000, warmup.LastEffectiveIntervalMs);
 
         var mailboxPressure = new SmartPaceController(BaseOptions(0));
         mailboxPressure.ApplyMailboxPressure(1);
-        await using (await mailboxPressure.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await mailboxPressure.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         Assert.Equal(1_000, mailboxPressure.LastEffectiveIntervalMs);
     }
 
@@ -161,8 +165,8 @@ public sealed class SmartPaceControllerTests
         pace.ApplyMailboxPressure(1);
 
         var sw = Stopwatch.StartNew();
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         sw.Stop();
 
         Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(850),
@@ -257,15 +261,36 @@ public sealed class SmartPaceControllerTests
         var pace = new SmartPaceController(BaseOptions(intervalMs));
         var sw = Stopwatch.StartNew();
 
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         var firstMs = sw.ElapsedMilliseconds;
         Assert.True(firstMs < 40, $"First SEND should be immediate, took {firstMs} ms");
 
         sw.Restart();
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         var secondMs = sw.ElapsedMilliseconds;
         Assert.True(secondMs >= intervalMs - 25,
             $"Second SEND should wait ~{intervalMs} ms, took {secondMs} ms");
+    }
+
+    [Fact]
+    public async Task ExecuteSendAsync_BeforeStartFailureDoesNotConsumeGlobalSlot()
+    {
+        var pace = new SmartPaceController(BaseOptions(intervalMs: 250));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            pace.ExecuteSendAsync(
+                () => Task.CompletedTask,
+                CancellationToken.None,
+                beforeStart: () => throw new InvalidOperationException("capacity stop")));
+
+        var sw = Stopwatch.StartNew();
+        long startedAt = -1;
+        await pace.ExecuteSendAsync(() =>
+        {
+            startedAt = sw.ElapsedMilliseconds;
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        Assert.InRange(startedAt, 0, 80);
     }
 
     [Fact]
@@ -276,8 +301,9 @@ public sealed class SmartPaceControllerTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await using var lease = await pace.AcquireSendSlotAsync(cts.Token);
-            await Task.Delay(500, cts.Token);
+            await pace.ExecuteSendAsync(
+                () => Task.Delay(500, cts.Token),
+                cts.Token);
         });
 
         using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -294,9 +320,11 @@ public sealed class SmartPaceControllerTests
 
         var tasks = Enumerable.Range(0, 4).Select(async i =>
         {
-            await using var lease = await pace.AcquireSendSlotAsync(CancellationToken.None);
-            starts[i] = sw.ElapsedMilliseconds;
-            await Task.Delay(5);
+            await pace.ExecuteSendAsync(() =>
+            {
+                starts[i] = sw.ElapsedMilliseconds;
+                return Task.Delay(5);
+            }, CancellationToken.None);
         });
         await Task.WhenAll(tasks);
         Array.Sort(starts);
