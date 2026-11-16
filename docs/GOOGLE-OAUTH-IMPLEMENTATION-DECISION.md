@@ -1,7 +1,7 @@
 # Google OAuth – implementation decision
 
 Status: accepted technical direction for implementation
-Target branch: `feature/tor-socks5-safe-mode`
+Target branch: `feature/google-oauth-gmail-api`
 Date: 2026-11-16
 
 ## Decision summary
@@ -41,7 +41,7 @@ For public distribution, use a separate production project, complete Branding an
 
 1. OAuth foundation:
    - Desktop Authorization Code + PKCE.
-   - Random state and nonce validation.
+   - Random OAuth state validation (OpenID userinfo is used; no ID-token nonce is consumed).
    - Loopback callback bound only to 127.0.0.1 with a short timeout.
    - Exchange and refresh tokens without a client secret.
    - Verify the signed-in Google account identity and email.
@@ -69,10 +69,10 @@ For public distribution, use a separate production project, complete Branding an
   https://developers.google.com/identity/protocols/oauth2/native-app
 - OAuth refresh-token behavior in Testing:
   https://developers.google.com/identity/protocols/oauth2
-- Gmail SMTP/IMAP OAuth XOAUTH2:
-  https://developers.google.com/workspace/gmail/imap/xoauth2-protocol
-- Google OAuth restricted-scope verification:
-  https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification
+- Gmail API send method:
+  https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send
+- Google OAuth sensitive-scope verification:
+  https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification
 - Google OAuth verification FAQ (explicit SMTP-only / minimum-scope guidance):
   https://support.google.com/cloud/answer/13463817
 - Gmail API sending scope:
