@@ -57,7 +57,7 @@ MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zp
 3. V MailLoadTester na kartě **SMTP Server** klikni na **Přihlásit přes Google**.
 4. V otevřeném systémovém prohlížeči vyber Gmail účet a potvrď oprávnění k odesílání e-mailů.
 5. Po návratu do aplikace uvidíš připojenou e-mailovou adresu. Obnovovací token se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows.
-6. Na kartě **E-mail (Od / Komu)** nastav příjemce, předmět, tělo a případné běžné přílohy. Odesílatel musí odpovídat přihlášenému Gmail účtu.
+6. Příjemce nastav přímo ve třetím sloupci na kartě **SMTP Server**. Předmět, tělo a případné běžné přílohy nastav na kartě **E-mail (Od / obsah)**. Odesílatel musí odpovídat přihlášenému Gmail účtu.
 7. Klikni na **Odeslat 1 zprávu přes Gmail API** a zkontroluj potvrzovací dialog.
 
 Tato akce odešle právě jednu zprávu přes Gmail API. Nejde o SMTP spojení ani zátěžový test a výsledek se nezapočítává do SMTP metrik. Běžné přílohy ze seznamu Přílohy se připojí; inline obrázky, EML šablona a náhodné generování se v tomto samostatném API odeslání nepoužívají. Aplikace nikdy automaticky nepřepne na SMTP, pokud Gmail API selže.
@@ -88,7 +88,7 @@ Při běžném uložení profilu se hesla všech SMTP účtů odstraní. Po nač
 
 Na záložce **Zpráva** nastav:
 
-- From, To, CC a BCC;
+- From, CC a BCC; příjemce To je společný a nastavuje se ve třetím sloupci karty SMTP Server;
 - předmět, text nebo HTML tělo;
 - SMTPUTF8 pro Unicode adresy, pokud jej server podporuje;
 - přílohy, inline obrázky a vlastní hlavičky;
