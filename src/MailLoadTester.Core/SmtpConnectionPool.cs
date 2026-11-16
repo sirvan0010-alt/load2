@@ -377,8 +377,22 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             }
             try
             {
-                // Source bind priorita: IPv6 rotace → IPv4 rotace → fixní SourceIp → default
-                if (_ipv6Rotator != null)
+                // A configured proxy must own the TCP connection. Passing a pre-bound
+                // Socket to SmtpClient.ConnectAsync bypasses MailKit's ProxyClient.
+                if (client.ProxyClient is not null)
+                {
+                    if (_ipv6Rotator is not null || _ipv4Rotator is not null)
+                        throw new InvalidOperationException("Rotace zdrojových IP není kompatibilní s proxy. Zruš IP rotaci nebo proxy.");
+                    if (_localEp is not null)
+                    {
+                        if (client.ProxyClient is not MailKit.Net.Proxy.ProxyClient proxyClient)
+                            throw new InvalidOperationException("Vybraný proxy klient nepodporuje vazbu na lokální zdrojovou IP.");
+                        proxyClient.LocalEndPoint = _localEp;
+                    }
+                    await client.ConnectAsync(_options.SmtpHost, _options.Port, _socket, ct).ConfigureAwait(false);
+                }
+                // Without a proxy, use the existing source-IP binding path.
+                else if (_ipv6Rotator != null)
                 {
                     var ip = _ipv6Rotator.GetNextRandomIp();
                     var ep = new IPEndPoint(ip, 0);
