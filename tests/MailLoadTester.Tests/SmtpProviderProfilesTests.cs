@@ -19,6 +19,7 @@ public sealed class SmtpProviderProfilesTests
     [InlineData("Yahoo", "smtp.mail.yahoo.com", 465, SmtpSecurity.ImplicitTls)]
     [InlineData("iCloud", "smtp.mail.me.com", 587, SmtpSecurity.StartTls)]
     [InlineData("Zoho", "smtp.zoho.com", 587, SmtpSecurity.StartTls)]
+    [InlineData("ZohoEU", "smtp.zoho.eu", 587, SmtpSecurity.StartTls)]
     [InlineData("Fastmail", "smtp.fastmail.com", 465, SmtpSecurity.ImplicitTls)]
     public void Provider_HasExpectedSubmissionEndpoint(string id, string host, int port, SmtpSecurity security)
     {
@@ -54,7 +55,6 @@ public sealed class SmtpProviderProfilesTests
         Assert.Equal("smtp.seznam.cz", applied.SmtpHost);
         Assert.Equal(465, applied.Port);
         Assert.Equal(SmtpSecurity.ImplicitTls, applied.Security);
-        Assert.Equal(SmtpAuthMethod.Auto, applied.AuthMethod);
         Assert.True(applied.UseAuthentication);
         Assert.Equal(SmtpAuthMethod.Auto, applied.AuthMethod);
         Assert.Equal("user", applied.Username);
@@ -63,6 +63,15 @@ public sealed class SmtpProviderProfilesTests
         Assert.Equal(options.Recipients, applied.Recipients);
         Assert.Equal(options.IntervalMs, applied.IntervalMs);
         Assert.Equal(options.ProxyHost, applied.ProxyHost);
+    }
+
+    [Theory]
+    [InlineData("Microsoft365", SmtpAuthMethod.OAuth2)]
+    [InlineData("Outlook", SmtpAuthMethod.OAuth2)]
+    [InlineData("Fastmail", SmtpAuthMethod.Plain)]
+    public void Provider_UsesDocumentedAuthenticationMechanism(string id, SmtpAuthMethod expected)
+    {
+        Assert.Equal(expected, SmtpProviderProfiles.Find(id)?.AuthMethod);
     }
 
     [Fact]
