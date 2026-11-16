@@ -165,9 +165,19 @@ public sealed class GoogleOAuthClient
         using var response = await _http.PostAsync(TokenEndpoint, content, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            // Do not include response bodies: OAuth error payloads and request context
-            // must never leak authorization codes, refresh tokens, or client data.
-            throw new GoogleOAuthException("Google OAuth token endpoint odmítl požadavek.", response.StatusCode);
+            // Google returns a small OAuth error object (error/error_description).
+            // Surface only these bounded diagnostic fields; never echo request data,
+            // authorization codes, tokens, or the raw response body.
+            var (errorCode, errorDescription) = await ReadSafeOAuthErrorAsync(
+                response, cancellationToken).ConfigureAwait(false);
+            var detail = string.IsNullOrWhiteSpace(errorCode)
+                ? $"HTTP {(int)response.StatusCode}"
+                : $"HTTP {(int)response.StatusCode}, {errorCode}";
+            if (!string.IsNullOrWhiteSpace(errorDescription))
+                detail += ": " + errorDescription;
+            throw new GoogleOAuthException(
+                "Google OAuth token endpoint odmítl požadavek (" + detail + ").",
+                response.StatusCode, errorCode, errorDescription);
         }
 
         var token = await response.Content.ReadFromJsonAsync<GoogleOAuthTokenResponse>(
@@ -187,6 +197,48 @@ public sealed class GoogleOAuthClient
             DateTimeOffset.UtcNow.AddSeconds(token.ExpiresIn),
             token.TokenType ?? "Bearer",
             token.Scope ?? "");
+    }
+
+    private static async Task<(string? Error, string? Description)> ReadSafeOAuthErrorAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+                .ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(
+                stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return (null, null);
+
+            static string? ReadBoundedString(JsonElement root, string property, int maxLength)
+            {
+                if (!root.TryGetProperty(property, out var value)
+                    || value.ValueKind != JsonValueKind.String)
+                    return null;
+                var text = value.GetString();
+                if (string.IsNullOrWhiteSpace(text))
+                    return null;
+                var safe = new string(text
+                    .Where(ch => !char.IsControl(ch))
+                    .Take(maxLength)
+                    .ToArray());
+                return string.IsNullOrWhiteSpace(safe) ? null : safe;
+            }
+
+            return (
+                ReadBoundedString(document.RootElement, "error", 80),
+                ReadBoundedString(document.RootElement, "error_description", 240));
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+        catch (NotSupportedException)
+        {
+            return (null, null);
+        }
     }
 
     private static bool IsLoopbackRedirect(Uri uri) =>
@@ -237,7 +289,18 @@ public sealed record GoogleOAuthUser(string Subject, string Email, string Name);
 public sealed class GoogleOAuthException : Exception
 {
     public HttpStatusCode StatusCode { get; }
+    public string? OAuthError { get; }
+    public string? OAuthErrorDescription { get; }
 
-    public GoogleOAuthException(string message, HttpStatusCode statusCode)
-        : base(message) => StatusCode = statusCode;
+    public GoogleOAuthException(
+        string message,
+        HttpStatusCode statusCode,
+        string? oauthError = null,
+        string? oauthErrorDescription = null)
+        : base(message)
+    {
+        StatusCode = statusCode;
+        OAuthError = oauthError;
+        OAuthErrorDescription = oauthErrorDescription;
+    }
 }
