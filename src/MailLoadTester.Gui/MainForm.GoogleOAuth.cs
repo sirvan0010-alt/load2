@@ -16,6 +16,28 @@ public sealed partial class MainForm
     private GoogleOAuthCredentialStore? _googleOAuthCredentialStore;
     private GoogleOAuthStoredAccount? _googleOAuthStoredAccount;
     private GoogleOAuthTokenSet? _googleOAuthTokens;
+    private CancellationTokenSource? _googleOAuthOperationCts;
+    private TaskCompletionSource<bool>? _googleOAuthOperationCompletion;
+
+    private CancellationToken BeginGoogleOAuthOperation()
+    {
+        if (_googleOAuthOperationCts is not null)
+            throw new InvalidOperationException("Jiná operace Google OAuth již probíhá.");
+
+        _googleOAuthOperationCts = new CancellationTokenSource();
+        _googleOAuthOperationCompletion = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        return _googleOAuthOperationCts.Token;
+    }
+
+    private void EndGoogleOAuthOperation()
+    {
+        var cts = _googleOAuthOperationCts;
+        _googleOAuthOperationCts = null;
+        _googleOAuthOperationCompletion?.TrySetResult(true);
+        _googleOAuthOperationCompletion = null;
+        cts?.Dispose();
+    }
 
     private void DisposeGoogleOAuthResources()
     {
@@ -61,10 +83,13 @@ public sealed partial class MainForm
 
     private async Task OnGoogleSignInAsync()
     {
-        if (_isRunning || _testConnectionCts is not null)
+        if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
+        var operationToken = BeginGoogleOAuthOperation();
         btnGoogleSignIn.Enabled = false;
+        btnGoogleSignOut.Enabled = false;
+        btnSendGoogleTest.Enabled = false;
         lblGoogleAccountStatus.Text = "Čekám na přihlášení v prohlížeči…";
         try
         {
@@ -77,13 +102,14 @@ public sealed partial class MainForm
                     Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
                     return Task.CompletedTask;
                 },
-                TimeSpan.FromMinutes(3));
+                TimeSpan.FromMinutes(3),
+                operationToken);
 
             var stored = new GoogleOAuthStoredAccount(
                 result.User.Subject, result.User.Email, result.Tokens.RefreshToken);
             await (_googleOAuthCredentialStore
                 ?? throw new InvalidOperationException("Úložiště Google OAuth není připravené."))
-                .SaveAsync(stored);
+                .SaveAsync(stored, operationToken);
 
             _googleOAuthStoredAccount = stored;
             _googleOAuthTokens = result.Tokens;
@@ -96,6 +122,10 @@ public sealed partial class MainForm
             MessageBox.Show(
                 "Google účet byl úspěšně připojen. Přihlašovací údaje jsou zašifrované pro aktuální účet Windows.",
                 "Google účet připojen", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (OperationCanceledException) when (operationToken.IsCancellationRequested)
+        {
+            lblGoogleAccountStatus.Text = "Google účet: přihlášení zrušeno";
         }
         catch (TimeoutException ex)
         {
@@ -111,15 +141,22 @@ public sealed partial class MainForm
         }
         finally
         {
+            EndGoogleOAuthOperation();
             btnGoogleSignIn.Enabled = true;
+            btnGoogleSignOut.Enabled = _googleOAuthStoredAccount is not null;
+            btnSendGoogleTest.Enabled = _googleOAuthStoredAccount is not null;
         }
     }
 
     private async Task OnGoogleSignOutAsync()
     {
-        if (_isRunning || _testConnectionCts is not null)
+        if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
+        var operationToken = BeginGoogleOAuthOperation();
+        btnGoogleSignIn.Enabled = false;
+        btnGoogleSignOut.Enabled = false;
+        btnSendGoogleTest.Enabled = false;
         var account = _googleOAuthStoredAccount;
         var revokeWarning = string.Empty;
         try
@@ -128,7 +165,7 @@ public sealed partial class MainForm
             {
                 try
                 {
-                    await _googleOAuthClient.RevokeAsync(account.RefreshToken);
+                    await _googleOAuthClient.RevokeAsync(account.RefreshToken, operationToken);
                 }
                 catch (Exception ex)
                 {
@@ -138,7 +175,7 @@ public sealed partial class MainForm
 
             await (_googleOAuthCredentialStore
                 ?? throw new InvalidOperationException("Úložiště Google OAuth není připravené."))
-                .DeleteAsync();
+                .DeleteAsync(operationToken);
 
             _googleOAuthStoredAccount = null;
             _googleOAuthTokens = null;
@@ -151,17 +188,28 @@ public sealed partial class MainForm
                 "Google účet", MessageBoxButtons.OK,
                 string.IsNullOrEmpty(revokeWarning) ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
+        catch (OperationCanceledException) when (operationToken.IsCancellationRequested)
+        {
+            lblGoogleAccountStatus.Text = "Google účet: odpojení zrušeno";
+        }
         catch (Exception ex)
         {
             ShowErrorWithCopy(
                 "Google účet se nepodařilo odpojit: " + ex.Message,
                 "Odpojení Google účtu", ex.ToString(), GuiErrorCodes.Validation);
         }
+        finally
+        {
+            EndGoogleOAuthOperation();
+            btnGoogleSignIn.Enabled = true;
+            btnGoogleSignOut.Enabled = _googleOAuthStoredAccount is not null;
+            btnSendGoogleTest.Enabled = _googleOAuthStoredAccount is not null;
+        }
     }
 
     private async Task OnSendGoogleTestMessageAsync()
     {
-        if (_isRunning || _testConnectionCts is not null)
+        if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
         var account = _googleOAuthStoredAccount;
@@ -201,18 +249,20 @@ public sealed partial class MainForm
         if (confirmation != DialogResult.Yes)
             return;
 
+        var operationToken = BeginGoogleOAuthOperation();
         btnSendGoogleTest.Enabled = false;
         btnGoogleSignIn.Enabled = false;
+        btnGoogleSignOut.Enabled = false;
         lblGoogleAccountStatus.Text = "Odesílám přes Gmail API…";
         try
         {
-            var tokens = await GetCurrentGoogleTokensAsync(account);
+            var tokens = await GetCurrentGoogleTokensAsync(account, operationToken);
             var sender = new GoogleGmailApiClient(_gmailApiHttpClient);
-            var result = await sender.SendAsync(message, _googleOAuthClient!, tokens);
+            var result = await sender.SendAsync(message, _googleOAuthClient!, tokens, operationToken);
 
             _googleOAuthTokens = result.Tokens;
             var updatedAccount = account with { RefreshToken = result.Tokens.RefreshToken };
-            await _googleOAuthCredentialStore!.SaveAsync(updatedAccount);
+            await _googleOAuthCredentialStore!.SaveAsync(updatedAccount, operationToken);
             _googleOAuthStoredAccount = updatedAccount;
 
             lblGoogleAccountStatus.Text = "Připojeno: " + updatedAccount.Email;
@@ -220,6 +270,13 @@ public sealed partial class MainForm
                 "Gmail API přijalo zprávu k odeslání.\n\nID zprávy: " + result.MessageId +
                 "\n\nPřijetí API nepotvrzuje doručení do schránky příjemce.",
                 "Zpráva předána Gmailu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (OperationCanceledException) when (operationToken.IsCancellationRequested)
+        {
+            lblGoogleAccountStatus.Text = "Připojeno: " + account.Email;
+            MessageBox.Show(
+                "Odesílání bylo zrušeno. Pokud už požadavek dorazil Googlu, nelze vyloučit, že zprávu přijal. Před opakováním zkontroluj odeslanou poštu.",
+                "Gmail API – zrušeno", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (GoogleOAuthException ex)
         {
@@ -244,13 +301,16 @@ public sealed partial class MainForm
         }
         finally
         {
+            EndGoogleOAuthOperation();
             btnGoogleSignIn.Enabled = true;
+            btnGoogleSignOut.Enabled = _googleOAuthStoredAccount is not null;
             btnSendGoogleTest.Enabled = _googleOAuthStoredAccount is not null;
         }
     }
 
     private async Task<GoogleOAuthTokenSet> GetCurrentGoogleTokensAsync(
-        GoogleOAuthStoredAccount account)
+        GoogleOAuthStoredAccount account,
+        CancellationToken cancellationToken)
     {
         if (_googleOAuthTokens is { } cached
             && cached.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1))
@@ -261,8 +321,8 @@ public sealed partial class MainForm
         var previous = new GoogleOAuthTokenSet(
             string.Empty, account.RefreshToken, DateTimeOffset.MinValue,
             "Bearer", GoogleOAuthClient.GmailSendScope);
-        var refreshed = await oauth.RefreshAsync(previous);
-        var identity = await oauth.GetUserAsync(refreshed.AccessToken);
+        var refreshed = await oauth.RefreshAsync(previous, cancellationToken);
+        var identity = await oauth.GetUserAsync(refreshed.AccessToken, cancellationToken);
 
         if (!string.Equals(identity.Subject, account.Subject, StringComparison.Ordinal)
             || !string.Equals(identity.Email, account.Email, StringComparison.OrdinalIgnoreCase))
@@ -271,7 +331,7 @@ public sealed partial class MainForm
 
         _googleOAuthTokens = refreshed;
         var updated = account with { RefreshToken = refreshed.RefreshToken };
-        await _googleOAuthCredentialStore!.SaveAsync(updated);
+        await _googleOAuthCredentialStore!.SaveAsync(updated, cancellationToken);
         _googleOAuthStoredAccount = updated;
         return refreshed;
     }
