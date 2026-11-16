@@ -37,6 +37,7 @@ public sealed class GoogleOAuthLoopbackFlow
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
 
+        var stage = "příprava callbacku";
         try
         {
             // Begin accepting before launching the browser. This avoids a race with
@@ -44,6 +45,7 @@ public sealed class GoogleOAuthLoopbackFlow
             var acceptTask = listener.AcceptTcpClientAsync(timeoutCts.Token).AsTask();
             try
             {
+                stage = "otevření systémového prohlížeče";
                 await openBrowser(authorizationUri, timeoutCts.Token).ConfigureAwait(false);
             }
             catch
@@ -54,10 +56,12 @@ public sealed class GoogleOAuthLoopbackFlow
                 throw;
             }
 
+            stage = "čekání na lokální OAuth callback";
             using var tcpClient = await acceptTask.ConfigureAwait(false);
             tcpClient.NoDelay = true;
             await using var stream = tcpClient.GetStream();
 
+            stage = "čtení lokální OAuth odpovědi";
             var request = await ReadRequestTargetAsync(stream, timeoutCts.Token).ConfigureAwait(false);
             GoogleOAuthCallback callback;
             try
@@ -72,10 +76,13 @@ public sealed class GoogleOAuthLoopbackFlow
                 throw new GoogleOAuthAuthorizationException(ex.Message);
             }
 
+            stage = "výměna autorizačního kódu";
             var tokens = await client.ExchangeCodeAsync(
                 callback.Code, redirectUri, pkce.CodeVerifier, timeoutCts.Token).ConfigureAwait(false);
+            stage = "ověření Google účtu";
             var user = await client.GetUserAsync(tokens.AccessToken, timeoutCts.Token).ConfigureAwait(false);
 
+            stage = "odpověď do prohlížeče";
             await WriteBrowserResponseAsync(stream, HttpStatusCode.OK,
                 "Přihlášení bylo dokončeno. Můžete zavřít toto okno a vrátit se do MailLoadTester.",
                 timeoutCts.Token).ConfigureAwait(false);
@@ -84,7 +91,7 @@ public sealed class GoogleOAuthLoopbackFlow
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException("Přihlášení přes Google vypršelo. Zkuste to prosím znovu.");
+            throw new TimeoutException("Přihlášení přes Google vypršelo během fáze: " + stage + ". Zkuste to prosím znovu.");
         }
         finally
         {
