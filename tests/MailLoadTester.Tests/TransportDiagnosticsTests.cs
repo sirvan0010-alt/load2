@@ -71,6 +71,8 @@ public sealed class TransportDiagnosticsTests
             new TransportDiagnosticOptions(CheckDnsPolicy: false, CheckMx: false, CheckSmtp: true));
         Assert.False(report.Connected);
         Assert.False(string.IsNullOrEmpty(report.Error));
+        Assert.Equal(TransportFailureKind.Connection, report.FailureKind);
+        Assert.Contains("Failure category: Connection", report.Summary);
     }
 
     [Fact]
