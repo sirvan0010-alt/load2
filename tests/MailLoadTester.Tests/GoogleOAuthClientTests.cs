@@ -94,6 +94,26 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
+    public async Task ExchangeCode_ReportsSafeOAuthErrorWithoutEchoingAuthorizationCode()
+    {
+        using var http = new HttpClient(new StubHandler(_ =>
+            Json(HttpStatusCode.BadRequest, """{"error":"invalid_grant","error_description":"Code was already redeemed."}""")));
+        var client = new GoogleOAuthClient(ClientId, http);
+
+        var exception = await Assert.ThrowsAsync<GoogleOAuthException>(() =>
+            client.ExchangeCodeAsync(
+                "do-not-leak-this-code",
+                new Uri("http://127.0.0.1:49152/"),
+                "pkce-verifier"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Equal("invalid_grant", exception.OAuthError);
+        Assert.Contains("invalid_grant", exception.Message);
+        Assert.Contains("Code was already redeemed.", exception.Message);
+        Assert.DoesNotContain("do-not-leak-this-code", exception.Message);
+    }
+
+    [Fact]
     public async Task Refresh_PreservesExistingRefreshTokenWhenGoogleOmitsIt()
     {
         using var http = new HttpClient(new StubHandler(_ =>
