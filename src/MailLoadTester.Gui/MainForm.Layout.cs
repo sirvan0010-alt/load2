@@ -472,6 +472,15 @@ public sealed partial class MainForm
         {
             if (chkRequireTor.Checked)
             {
+                if (!btnDiscoverRecipientMx.Enabled || !btnDiscoverSubmission.Enabled || !btnCheckRbl.Enabled)
+                {
+                    chkRequireTor.Checked = false;
+                    MessageBox.Show(
+                        "Nejprve dokonči probíhající MX/SMTP/RBL diagnostiku. Tyto starší diagnostické akce nepoužívají Tor tunel.",
+                        "Tor režim", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 chkSocks5.Checked = true;
                 StopMailboxMonitorPolling();
                 _mailboxMonitorCts?.Cancel();
