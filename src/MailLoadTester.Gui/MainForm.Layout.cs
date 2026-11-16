@@ -532,7 +532,7 @@ public sealed partial class MainForm
             AutoSize = true,
             MaximumSize = new Size(720, 0),
             ForeColor = SystemColors.GrayText,
-            Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; běžné porty jsou 9150 (Browser) a 9050 (služba)."
+            Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; porty bývají 9150 (Browser) a 9050 (služba). Tor mění síťovou trasu a výstupní IP, nikoli identitu SMTP účtu nebo adresu From; poskytovatel i příjemce je stále uvidí."
         });
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
