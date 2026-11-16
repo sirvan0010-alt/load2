@@ -45,7 +45,17 @@ Při 4xx zpomal a zjisti příčinu. Při 5xx/policy odmítnutí test nezvyšuj 
 - IMAP přihlašovací údaje zůstávají v paměti aplikace a do profilu se neukládají.
 - Sdílený profil může přesto obsahovat hosty, adresy, cesty k souborům a další provozní konfiguraci; před sdílením jej zkontroluj.
 
-## 6. Logy, reporty a webhooky
+## 6. Google OAuth a Gmail API
+
+- Google OAuth používá Authorization Code + PKCE a pouze oprávnění `gmail.send` spolu s OpenID Connect identitou. Desktop Client ID je veřejné; Client Secret se v aplikaci nepoužívá.
+- Obnovovací token se ukládá pouze zašifrovaný Windows DPAPI CurrentUser. Jiný účet Windows jej nemůže běžně dešifrovat. Access token zůstává v paměti procesu.
+- Odpojení požádá Google o odvolání refresh tokenu a odstraní lokální uložené údaje.
+- Gmail API odesílání je oddělené od SMTP runneru. Nejde o SMTP test a nesmí se vykazovat jako SMTP throughput, SMTP AUTH nebo SMTP SEND.
+- Gmail API nepoužívej k obcházení limitů Gmailu. Respektuj kvóty, zásady proti zneužití a případná omezení účtu.
+- OAuth projekt v režimu Testing dovoluje pouze uvedené testovací účty; pro veřejnou distribuci je nutné produkční publikování a ověření citlivého scope `gmail.send` podle pravidel Googlu.
+- Pokud API vrátí HTTP 401, aplikace může jednou obnovit token a opakovat požadavek. Při timeoutu nebo jiné nejednoznačné síťové chybě se odeslání automaticky neopakuje, aby nevznikly duplicitní zprávy.
+
+## 7. Logy, reporty a webhooky
 
 ### SMTP session log
 
@@ -67,6 +77,6 @@ Export reportu neobsahuje hesla a známé tajné hodnoty. Před sdílením zkont
 
 Webhook může odeslat výsledek běhu na nakonfigurovanou URL. Používej pouze důvěryhodný endpoint a ověř, jaké údaje přijímá a kam je ukládá.
 
-## 7. Data a grafy
+## 8. Data a grafy
 
 SMTP Accepted není důkaz uložení do schránky. IMAP delta může zahrnovat aktivitu jiných klientů. Chybějící kvóta je Unknown, ne nula. Tyto rozdíly jsou bezpečnostní i metodický požadavek, nikoli kosmetické označení.
