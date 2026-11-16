@@ -347,7 +347,11 @@ public static class Validation
             throw new ArgumentException("Display name je příliš dlouhý (max 200 znaků).");
         if (!string.IsNullOrWhiteSpace(o.ProxyList))
         {
-            try { _ = ProxyClientFactory.ParseList(o.ProxyList); }
+            try
+            {
+                if (ProxyClientFactory.ParseList(o.ProxyList).Count == 0)
+                    throw new ArgumentException("seznam neobsahuje žádný platný proxy endpoint.");
+            }
             catch (Exception ex) { throw new ArgumentException("ProxyList: " + ex.Message); }
         }
 
