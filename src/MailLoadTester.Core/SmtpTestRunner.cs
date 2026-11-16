@@ -96,6 +96,13 @@ public sealed class SmtpTestRunner
         IProgress<ProgressUpdate> progress,
         CancellationToken ct)
     {
+        if (options.RequireTor)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(options, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
+        }
+
         options = CapacityRunPlanner.Apply(options);
         var ledger = new DeliveryLedger(options.MessageCount);
         var capacityGuard = options.CapacityRun is { Enabled: true } limits
