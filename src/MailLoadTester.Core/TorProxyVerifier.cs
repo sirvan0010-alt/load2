@@ -1,6 +1,7 @@
 using System.Net;
 using System.IO;
 using System.Net.Http;
+using MailKit.Net.Proxy;
 using System.Net.Sockets;
 using System.Text.Json;
 using MailKit.Net.Proxy;
@@ -63,10 +64,7 @@ public static class TorProxyVerifier
             {
                 // Pass the hostname unchanged. MailKit's SOCKS5 client sends it
                 // in the SOCKS request; local DNS is not used for the check host.
-                return await proxy.ConnectAsync(
-                    context.DnsEndPoint.Host,
-                    context.DnsEndPoint.Port,
-                    token).ConfigureAwait(false);
+                return await ConnectThroughProxyAsync(proxy, context.DnsEndPoint, token).ConfigureAwait(false);
             }
         };
 
@@ -85,6 +83,17 @@ public static class TorProxyVerifier
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         return ParseCheckResponse(json);
+    }
+
+    internal static ValueTask<Stream> ConnectThroughProxyAsync(
+        IProxyClient proxy,
+        DnsEndPoint destination,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(proxy);
+        ArgumentNullException.ThrowIfNull(destination);
+        return new ValueTask<Stream>(
+            proxy.ConnectAsync(destination.Host, destination.Port, cancellationToken));
     }
 
     internal static ProxyEndpoint ValidateEndpoint(ProxyEndpoint endpoint)
