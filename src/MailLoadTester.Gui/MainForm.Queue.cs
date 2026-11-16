@@ -86,6 +86,14 @@ public sealed partial class MainForm
             return;
         }
 
+        if (chkRequireTor?.Checked == true)
+        {
+            lblProxyStatus.Text = "● TOR POVINNÝ — před každým během se ověří Tor exit IP; při chybě se SMTP nespustí.";
+            lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
+            lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+            return;
+        }
+
         var host = listConfigured ? "seznam proxy" : txtProxyHost.Text.Trim();
         var port = listConfigured ? 0 : (int)numProxyPort.Value;
         var isLocalTorEndpoint = !listConfigured
