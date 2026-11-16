@@ -468,7 +468,12 @@ public sealed partial class MainForm
         chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
         chkRequireTor = AddCheckBox(flProxy, "Vyžadovat ověřený Tor (bez přímého fallbacku)", false,
             "Před testem ověří výstupní IP přes check.torproject.org. Pokud Tor nefunguje nebo není potvrzen, SMTP test se nespustí. Vyžaduje lokální Tor SOCKS5 na 127.0.0.1 / ::1.");
-        chkRequireTor.CheckedChanged += (_, _) => UpdateProxyStatus();
+        chkRequireTor.CheckedChanged += (_, _) =>
+        {
+            if (chkRequireTor.Checked)
+                chkSocks5.Checked = true;
+            UpdateProxyStatus();
+        };
         lblProxyStatus = new Label
         {
             AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
