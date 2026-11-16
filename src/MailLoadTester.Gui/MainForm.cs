@@ -17,6 +17,8 @@ public sealed partial class MainForm : Form
 
     // SMTP tab
     private ComboBox txtHost = null!;
+    private ComboBox cmbSmtpProvider = null!;
+    private Label lblSmtpProviderGuidance = null!;
     private NumericUpDown numPort = null!;
     private ComboBox cmbSecurity = null!;
     private CheckBox chkIgnoreCert = null!;

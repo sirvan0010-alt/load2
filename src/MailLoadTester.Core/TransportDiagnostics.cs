@@ -33,7 +33,8 @@ public sealed record TransportDiagnosticReport(
     IReadOnlyList<MxRecord>? MxRecords,
     IReadOnlyList<string> Steps,
     string Summary,
-    string? Error);
+    string? Error,
+    TransportFailureKind? FailureKind = null);
 
 /// <summary>
 /// DNS / TLS / SMTP capability diagnostics layered on existing helpers.
@@ -91,6 +92,7 @@ public static class TransportDiagnostics
         DnsPolicyChecker.PolicyResult? dns = null;
         IReadOnlyList<MxRecord>? mx = null;
         string? error = null;
+        TransportFailureKind? failureKind = null;
         var connected = false;
         var authenticated = false;
         double connectMs = 0;
@@ -115,6 +117,7 @@ public static class TransportDiagnostics
                 {
                     steps.Add($"DNS policy failed: {ex.GetType().Name}");
                     error ??= ex.Message;
+                    failureKind ??= TransportFailureKind.Dns;
                 }
             }
             else
@@ -141,6 +144,7 @@ public static class TransportDiagnostics
             {
                 steps.Add($"MX failed: {ex.GetType().Name}");
                 error ??= ex.Message;
+                failureKind ??= TransportFailureKind.Dns;
             }
         }
 
@@ -226,6 +230,7 @@ public static class TransportDiagnostics
                 connectMs = sw.Elapsed.TotalMilliseconds;
                 steps.Add($"SMTP failed: {ex.GetType().Name}");
                 error = Validation.ExplainSmtpError(ex);
+                failureKind = TransportFailureClassifier.Classify(ex);
             }
         }
         else if (diag.CheckSmtp)
@@ -233,7 +238,7 @@ public static class TransportDiagnostics
             steps.Add("SMTP: skipped (empty SmtpHost)");
         }
 
-        var summary = BuildSummary(options, connected, authenticated, caps, dns, mx, error);
+        var summary = BuildSummary(options, connected, authenticated, caps, dns, mx, error, failureKind);
         return new TransportDiagnosticReport(
             TargetHost: options.SmtpHost,
             Port: options.Port,
@@ -248,7 +253,8 @@ public static class TransportDiagnostics
             MxRecords: mx,
             Steps: steps,
             Summary: summary,
-            Error: error);
+            Error: error,
+            FailureKind: failureKind);
     }
 
     static string BuildSummary(
@@ -258,7 +264,8 @@ public static class TransportDiagnostics
         EhloCapabilities? caps,
         DnsPolicyChecker.PolicyResult? dns,
         IReadOnlyList<MxRecord>? mx,
-        string? error)
+        string? error,
+        TransportFailureKind? failureKind)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Target: {o.SmtpHost}:{o.Port} ({o.Security})");
@@ -275,6 +282,8 @@ public static class TransportDiagnostics
         }
         if (authenticated)
             sb.AppendLine("Authenticated: yes");
+        if (failureKind.HasValue)
+            sb.AppendLine($"Failure category: {failureKind.Value}");
         if (!string.IsNullOrEmpty(error))
             sb.AppendLine($"Error: {error}");
         return sb.ToString().TrimEnd();
