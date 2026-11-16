@@ -505,18 +505,41 @@ public sealed partial class MainForm
             lblProxyStatus.Text = "Ověřuji SOCKS5 spojení a Tor exit IP…";
             try
             {
-                var endpoint = new ProxyEndpoint(ProxyType.Socks5, txtProxyHost.Text.Trim(),
-                    (int)numProxyPort.Value,
-                    string.IsNullOrWhiteSpace(txtProxyUser.Text) ? null : txtProxyUser.Text,
-                    string.IsNullOrWhiteSpace(txtProxyPass.Text) ? null : txtProxyPass.Text);
-                var result = await TorProxyVerifier.VerifyAsync(endpoint, CancellationToken.None);
-                chkRequireTor.Checked = result.IsTor;
-                var strictModeEnabled = result.IsTor && chkRequireTor.Checked;
+                var proxyHost = string.IsNullOrWhiteSpace(txtProxyHost.Text) ? "127.0.0.1" : txtProxyHost.Text.Trim();
+                txtProxyHost.Text = proxyHost;
+                var proxyUser = string.IsNullOrWhiteSpace(txtProxyUser.Text) ? null : txtProxyUser.Text;
+                var proxyPass = string.IsNullOrWhiteSpace(txtProxyPass.Text) ? null : txtProxyPass.Text;
+                TorProxyVerificationResult? result = null;
+                Exception? lastError = null;
+                var portsToTry = new[] { (int)numProxyPort.Value, 9050, 9150 }.Distinct();
+                foreach (var port in portsToTry)
+                {
+                    try
+                    {
+                        var endpoint = new ProxyEndpoint(ProxyType.Socks5, proxyHost, port, proxyUser, proxyPass);
+                        var candidate = await TorProxyVerifier.VerifyAsync(endpoint, CancellationToken.None);
+                        if (candidate.IsTor)
+                        {
+                            result = candidate;
+                            numProxyPort.Value = port;
+                            break;
+                        }
+                        lastError = new InvalidOperationException(candidate.Message);
+                    }
+                    catch (Exception ex)
+                    {
+                        lastError = ex;
+                    }
+                }
+
+                if (result is null)
+                    throw lastError ?? new InvalidOperationException("Tor nebyl nalezen na portech 9050 ani 9150.");
+
+                chkRequireTor.Checked = true;
+                var strictModeEnabled = chkRequireTor.Checked;
                 lblProxyStatus.Text = strictModeEnabled
-                    ? $"TOR OVĚŘEN A POVINNÝ — výstupní IP: {result.ExitIp}. SMTP DNS cílového hostu bude předáno přes SOCKS5."
-                    : result.IsTor
-                        ? $"Tor exit IP {result.ExitIp} je ověřena, ale přísný režim nebyl zapnut. Dokonči probíhající přímou diagnostiku a ověření zopakuj."
-                        : $"TOR NEPOTVRZEN — {result.Message}";
+                    ? $"TOR OVĚŘEN A POVINNÝ — 127.0.0.1:{numProxyPort.Value}, výstupní IP: {result.ExitIp}. SMTP DNS cílového hostu bude předáno přes SOCKS5."
+                    : $"Tor exit IP {result.ExitIp} je ověřena, ale přísný režim nebyl zapnut. Dokonči probíhající přímou diagnostiku a ověření zopakuj.";
                 lblProxyStatus.BackColor = strictModeEnabled ? Color.FromArgb(215, 245, 220) : Color.FromArgb(250, 220, 220);
                 lblProxyStatus.ForeColor = strictModeEnabled ? Color.DarkGreen : Color.DarkRed;
             }
@@ -535,7 +558,7 @@ public sealed partial class MainForm
             AutoSize = true,
             MaximumSize = new Size(720, 0),
             ForeColor = SystemColors.GrayText,
-            Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; porty bývají 9150 (Browser) a 9050 (služba). Tor mění síťovou trasu a výstupní IP, nikoli identitu SMTP účtu nebo adresu From; poskytovatel i příjemce je stále uvidí."
+            Text = "Aplikace Tor sama neinstaluje ani nespouští. Nejprve spusť Tor Browser nebo službu Tor; tlačítko automaticky zkusí běžné porty 9050 a 9150. Tor mění síťovou trasu a výstupní IP, nikoli identitu SMTP účtu nebo adresu From; poskytovatel i příjemce je stále uvidí."
         });
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
