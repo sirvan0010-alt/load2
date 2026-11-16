@@ -78,19 +78,19 @@ public sealed partial class MainForm
         var listConfigured = !string.IsNullOrWhiteSpace(txtProxyList?.Text);
         var singleConfigured = chkSocks5?.Checked == true;
         var enabled = listConfigured || singleConfigured;
-        if (!enabled)
-        {
-            lblProxyStatus.Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí.";
-            lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
-            lblProxyStatus.ForeColor = Color.DarkRed;
-            return;
-        }
-
         if (chkRequireTor?.Checked == true)
         {
             lblProxyStatus.Text = "● TOR POVINNÝ — před každým během se ověří Tor exit IP; při chybě se SMTP nespustí.";
             lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
             lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+            return;
+        }
+
+        if (!enabled)
+        {
+            lblProxyStatus.Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí.";
+            lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
+            lblProxyStatus.ForeColor = Color.DarkRed;
             return;
         }
 
