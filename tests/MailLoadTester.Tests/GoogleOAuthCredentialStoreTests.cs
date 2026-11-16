@@ -84,13 +84,13 @@ public sealed class GoogleOAuthCredentialStoreTests
         public byte[] Protect(byte[] plaintext)
         {
             ProtectCalls++;
-            return plaintext.ToArray();
+            return plaintext.Select(value => (byte)(value ^ 0x5A)).ToArray();
         }
 
         public byte[] Unprotect(byte[] protectedData)
         {
             UnprotectCalls++;
-            return protectedData.ToArray();
+            return protectedData.Select(value => (byte)(value ^ 0x5A)).ToArray();
         }
     }
 }
