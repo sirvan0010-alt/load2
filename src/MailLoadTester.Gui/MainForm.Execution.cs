@@ -627,7 +627,8 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(),
+                    GuiErrorCodes.ForTransportFailure(TransportFailureClassifier.Classify(ex)));
         }
         finally
         {
