@@ -108,10 +108,10 @@ public sealed record MailTestOptions(
     IReadOnlyList<SmtpAccount>? Accounts = null,
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
     int DurationSeconds = 0,
-    /// <summary>Require a verified Tor exit through a local SOCKS5 endpoint; never fall back to direct SMTP.</summary>
-    bool RequireTor = false,
     /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
-    CapacityRunLimits? CapacityRun = null);
+    CapacityRunLimits? CapacityRun = null,
+    /// <summary>Require a verified Tor exit through a local SOCKS5 endpoint; never fall back to direct SMTP.</summary>
+    bool RequireTor = false);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
