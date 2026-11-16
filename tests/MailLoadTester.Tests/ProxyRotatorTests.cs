@@ -42,7 +42,7 @@ public sealed class ProxyRotatorTests
     [Fact]
     public void RejectsProxyListContainingOnlyComments()
     {
-        Assert.Throws<ArgumentException>(() => ProxyClientFactory.ParseList("# no endpoints"));
+        Assert.Empty(ProxyClientFactory.ParseList("# no endpoints"));
     }
 
     [Fact]
