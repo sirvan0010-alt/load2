@@ -168,7 +168,59 @@ public sealed partial class MainForm
         };
         btnSendTest.FlatAppearance.BorderSize = 0;
         flAuth.Controls.Add(btnSendTest);
-        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu na první adresu v poli Komu. Nepoužívá zátěžový režim.");
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
+
+        var googleSeparator = new Label
+        {
+            Text = "──────── Gmail přes Google (samostatně od SMTP) ────────",
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 14, 0, 2)
+        };
+        flAuth.Controls.Add(googleSeparator);
+        lblGoogleAccountStatus = new Label
+        {
+            Text = "Google účet: kontroluji uložené přihlášení…",
+            AutoSize = true,
+            MaximumSize = new Size(390, 0),
+            Margin = new Padding(0, 4, 0, 4)
+        };
+        flAuth.Controls.Add(lblGoogleAccountStatus);
+        btnGoogleSignIn = new Button
+        {
+            Text = "Přihlásit přes Google",
+            Width = 230,
+            Height = 34,
+            Margin = new Padding(0, 4, 0, 2),
+            Cursor = Cursors.Hand
+        };
+        flAuth.Controls.Add(btnGoogleSignIn);
+        btnGoogleSignOut = new Button
+        {
+            Text = "Odpojit Google účet",
+            Width = 230,
+            Height = 30,
+            Margin = new Padding(0, 2, 0, 2),
+            Enabled = false
+        };
+        flAuth.Controls.Add(btnGoogleSignOut);
+        btnSendGoogleTest = new Button
+        {
+            Text = "Odeslat 1 zprávu přes Gmail API",
+            Width = 280,
+            Height = 36,
+            Margin = new Padding(0, 4, 0, 0),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(50, 115, 75),
+            ForeColor = Color.White,
+            Cursor = Cursors.Hand,
+            Enabled = false
+        };
+        btnSendGoogleTest.FlatAppearance.BorderSize = 0;
+        flAuth.Controls.Add(btnSendGoogleTest);
+        toolTip.SetToolTip(btnGoogleSignIn, "Otevře přihlášení Google v systémovém prohlížeči. Není potřeba zadávat heslo aplikace ani Client Secret.");
+        toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
+        toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
         gbAuth.Controls.Add(flAuth);
         tblSmtp.Controls.Add(gbAuth, 1, 0);
 
@@ -978,6 +1030,9 @@ public sealed partial class MainForm
         chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
         btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
+        btnGoogleSignIn.Click += async (s, e) => await OnGoogleSignInAsync();
+        btnGoogleSignOut.Click += async (s, e) => await OnGoogleSignOutAsync();
+        btnSendGoogleTest.Click += async (s, e) => await OnSendGoogleTestMessageAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numRandomAttachmentSizeMb.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numConcurrency.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
