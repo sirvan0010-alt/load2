@@ -85,25 +85,43 @@ public sealed class GoogleOAuthLoopbackFlowTests
         }));
         var oauth = new GoogleOAuthClient("123456789.apps.googleusercontent.com", http);
         var flow = new GoogleOAuthLoopbackFlow();
-        string? browserResponse = null;
+        TcpClient? callbackClient = null;
+        StreamReader? callbackReader = null;
+        Task<string>? browserResponseTask = null;
+        GoogleOAuthAuthorizationResult result;
+        string browserResponse;
 
-        var result = await flow.AuthorizeAsync(
-            oauth,
-            async (authorizationUri, cancellationToken) =>
-            {
-                var query = ParseQuery(authorizationUri.Query);
-                var redirect = new Uri(query["redirect_uri"]);
-                using var tcp = new System.Net.Sockets.TcpClient();
-                await tcp.ConnectAsync(IPAddress.Loopback, redirect.Port, cancellationToken);
-                await using var stream = tcp.GetStream();
-                var request = Encoding.ASCII.GetBytes(
-                    $"GET /?code=one-time-code&state={Uri.EscapeDataString(query["state"])} HTTP/1.1\r\n" +
-                    $"Host: 127.0.0.1:{redirect.Port}\r\nConnection: close\r\n\r\n");
-                await stream.WriteAsync(request, cancellationToken);
-                using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-                browserResponse = await reader.ReadToEndAsync(cancellationToken);
-            },
-            TimeSpan.FromSeconds(5));
+        try
+        {
+            result = await flow.AuthorizeAsync(
+                oauth,
+                async (authorizationUri, cancellationToken) =>
+                {
+                    var query = ParseQuery(authorizationUri.Query);
+                    var redirect = new Uri(query["redirect_uri"]);
+                    callbackClient = new TcpClient();
+                    await callbackClient.ConnectAsync(IPAddress.Loopback, redirect.Port, cancellationToken);
+                    var stream = callbackClient.GetStream();
+                    var request = Encoding.ASCII.GetBytes(
+                        $"GET /?code=one-time-code&state={Uri.EscapeDataString(query["state"])} HTTP/1.1\r\n" +
+                        $"Host: 127.0.0.1:{redirect.Port}\r\nConnection: close\r\n\r\n");
+                    await stream.WriteAsync(request, cancellationToken);
+
+                    // A real Process.Start returns after launching the browser; it does
+                    // not wait for the local callback response. Read concurrently so
+                    // the flow can process the request and send the browser page.
+                    callbackReader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+                    browserResponseTask = callbackReader.ReadToEndAsync(cancellationToken);
+                },
+                TimeSpan.FromSeconds(5));
+
+            browserResponse = await browserResponseTask!;
+        }
+        finally
+        {
+            callbackReader?.Dispose();
+            callbackClient?.Dispose();
+        }
 
         Assert.Equal("user@gmail.com", result.User.Email);
         Assert.Equal("google-subject", result.User.Subject);
