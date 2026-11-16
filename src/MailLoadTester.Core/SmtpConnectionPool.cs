@@ -378,13 +378,14 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             {
                 // A configured proxy must own the TCP connection. Passing a pre-bound
                 // Socket to SmtpClient.ConnectAsync bypasses MailKit's ProxyClient.
-                if (client.ProxyClient is not null)
+                var configuredProxy = client.ProxyClient;
+                if (configuredProxy is not null)
                 {
                     if (_ipv6Rotator is not null || _ipv4Rotator is not null)
                         throw new InvalidOperationException("Rotace zdrojových IP není kompatibilní s proxy. Zruš IP rotaci nebo proxy.");
                     if (_localEp is not null)
                     {
-                        client.ProxyClient.LocalEndPoint = _localEp;
+                        configuredProxy.LocalEndPoint = _localEp;
                     }
                     await client.ConnectAsync(_options.SmtpHost, _options.Port, _socket, ct).ConfigureAwait(false);
                 }
