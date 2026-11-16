@@ -108,6 +108,8 @@ public sealed record MailTestOptions(
     IReadOnlyList<SmtpAccount>? Accounts = null,
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
     int DurationSeconds = 0,
+    /// <summary>Require a verified Tor exit through a local SOCKS5 endpoint; never fall back to direct SMTP.</summary>
+    bool RequireTor = false,
     /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
     CapacityRunLimits? CapacityRun = null);
 
@@ -355,6 +357,22 @@ public static class Validation
                 throw new ArgumentException("SOCKS5 proxy host je povinný.");
             if (o.ProxyPort is < 1 or > 65535)
                 throw new ArgumentException("SOCKS5 proxy port musí být 1–65535.");
+        }
+        if (o.RequireTor)
+        {
+            if (!o.UseSocks5Proxy)
+                throw new ArgumentException("Režim Tor vyžaduje zapnutou SOCKS5 proxy.");
+            if (!string.IsNullOrWhiteSpace(o.ProxyList))
+                throw new ArgumentException("Režim Tor nepodporuje rotaci proxy. Použij jeden lokální Tor SOCKS5 endpoint.");
+            if (!System.Net.IPAddress.TryParse(o.ProxyHost, out var torProxyIp)
+                || !System.Net.IPAddress.IsLoopback(torProxyIp))
+                throw new ArgumentException("Režim Tor vyžaduje lokální SOCKS5 endpoint na 127.0.0.1 nebo ::1.");
+            if (!string.IsNullOrWhiteSpace(o.Ipv4Rotation) || !string.IsNullOrWhiteSpace(o.Ipv6Prefix))
+                throw new ArgumentException("V režimu Tor nelze současně používat rotaci zdrojových IP adres.");
+            if (o.DirectMxDelivery)
+                throw new ArgumentException("Direct MX obchází SMTP proxy a v režimu Tor je zakázán.");
+            if (o.CheckRblBeforeStart)
+                throw new ArgumentException("RBL kontrola používá systémové DNS a v režimu Tor je zakázána.");
         }
         if (o.CircuitBreakerThreshold is < 1 or > 50)
             throw new ArgumentException("Circuit breaker threshold musí být 1–50.");
