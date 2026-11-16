@@ -654,13 +654,13 @@ public sealed class SmtpTestRunner
                             {
                                 Interlocked.Increment(ref smtpSendAttempts);
                                 return utf8Format != null
-                                    ? validationClient.SendAsync(utf8Format, validationMessage, ct)
-                                    : validationClient.SendAsync(validationMessage, ct);
+                                    ? validationClient!.SendAsync(utf8Format, validationMessage, ct)
+                                    : validationClient!.SendAsync(validationMessage, ct);
                             },
                             ct: ct,
                             beforeStart: () =>
                             {
-                                long? serverMaxMessageBytes = validationClient.Capabilities.HasFlag(SmtpCapabilities.Size)
+                                long? serverMaxMessageBytes = validationClient!.Capabilities.HasFlag(SmtpCapabilities.Size)
                                     && validationClient.MaxSize > 0
                                         ? validationClient.MaxSize
                                         : null;
