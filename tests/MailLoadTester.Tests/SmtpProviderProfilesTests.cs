@@ -36,6 +36,34 @@ public sealed class SmtpProviderProfilesTests
         Assert.Equal("Seznam", SmtpProviderProfiles.FindByHost(" SMTP.SEZNAM.CZ ")?.Id);
     }
 
+    [Theory]
+    [InlineData("user@gmail.com", "Gmail")]
+    [InlineData("user@googlemail.com", "Gmail")]
+    [InlineData("user@hotmail.com", "Outlook")]
+    [InlineData("user@seznam.cz", "Seznam")]
+    [InlineData("user@email.cz", "Seznam")]
+    [InlineData("user@yahoo.co.uk", "Yahoo")]
+    [InlineData("user@icloud.com", "iCloud")]
+    [InlineData("user@zoho.eu", "ZohoEU")]
+    [InlineData("user@fastmail.fm", "Fastmail")]
+    public void FindByEmail_DetectsKnownMailboxDomains(string email, string expectedId)
+    {
+        Assert.Equal(expectedId, SmtpProviderProfiles.FindByEmail(email)?.Id);
+    }
+
+    [Fact]
+    public void Detect_PrefersExplicitSmtpHostOverEmailDomain()
+    {
+        Assert.Equal("Seznam", SmtpProviderProfiles.Detect("smtp.seznam.cz", "user@gmail.com")?.Id);
+    }
+
+    [Fact]
+    public void FindByEmail_UnknownOrInvalidAddressReturnsNull()
+    {
+        Assert.Null(SmtpProviderProfiles.FindByEmail("not-an-email"));
+        Assert.Null(SmtpProviderProfiles.FindByEmail("user@custom-domain.example"));
+    }
+
     [Fact]
     public void ApplyTo_ChangesOnlySmtpConnectionDefaults()
     {
