@@ -471,7 +471,13 @@ public sealed partial class MainForm
         chkRequireTor.CheckedChanged += (_, _) =>
         {
             if (chkRequireTor.Checked)
+            {
                 chkSocks5.Checked = true;
+                StopMailboxMonitorPolling();
+                _mailboxMonitorCts?.Cancel();
+                if (lblMailboxStatus is not null)
+                    lblMailboxStatus.Text = "IMAP monitoring paused — strict Tor mode is selected.";
+            }
             UpdateProxyStatus();
         };
         lblProxyStatus = new Label
