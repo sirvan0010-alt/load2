@@ -40,8 +40,48 @@ public static class SmtpProviderProfiles
     public static SmtpProviderProfile? Find(string id) =>
         All.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
-    public static SmtpProviderProfile? FindByHost(string host) =>
-        All.FirstOrDefault(p => p.Host.Equals(host?.Trim(), StringComparison.OrdinalIgnoreCase));
+    public static SmtpProviderProfile? FindByHost(string host)
+    {
+        var normalized = host?.Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return null;
+
+        return All.FirstOrDefault(p =>
+            p.Host.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Best-effort detection from a mailbox domain; custom-domain Workspace accounts need an SMTP host.</summary>
+    public static SmtpProviderProfile? FindByEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        var at = email.LastIndexOf('@');
+        if (at <= 0 || at == email.Length - 1)
+            return null;
+
+        var domain = email[(at + 1)..].Trim().TrimEnd('.').ToLowerInvariant();
+        if (domain is "gmail.com" or "googlemail.com")
+            return Find("Gmail");
+        if (domain is "outlook.com" or "hotmail.com" or "live.com" or "msn.com")
+            return Find("Outlook");
+        if (domain is "seznam.cz" or "email.cz" or "post.cz" or "spoluzaci.cz")
+            return Find("Seznam");
+        if (domain.StartsWith("yahoo.", StringComparison.Ordinal) || domain == "ymail.com" || domain == "rocketmail.com")
+            return Find("Yahoo");
+        if (domain is "icloud.com" or "me.com" or "mac.com")
+            return Find("iCloud");
+        if (domain is "zoho.com" or "zohomail.com" or "zoho.eu")
+            return domain == "zoho.eu" ? Find("ZohoEU") : Find("Zoho");
+        if (domain is "fastmail.com" or "fastmail.fm" or "messagingengine.com")
+            return Find("Fastmail");
+
+        return null;
+    }
+
+    /// <summary>Prefer an explicitly configured SMTP host; fall back to the mailbox domain.</summary>
+    public static SmtpProviderProfile? Detect(string host, string email) =>
+        FindByHost(host) ?? FindByEmail(email);
 
     /// <summary>
     /// Apply only server connection defaults. Credentials, sender, recipients,
