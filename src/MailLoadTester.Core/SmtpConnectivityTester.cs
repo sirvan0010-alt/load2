@@ -50,9 +50,26 @@ public static class SmtpConnectivityTester
             proxyLabel = ep.DisplayKey;
         }
 
+        if (o.RequireTor)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(o, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
+        }
+
         var socketOpts = ToSocketOptions(o.Security);
         var localEp = IpBindingHelper.ResolveLocalEndPoint(o.SourceIp, o.IpVersion);
-        if (localEp != null)
+        if (client.ProxyClient is not null)
+        {
+            if (localEp is not null)
+            {
+                if (client.ProxyClient is not MailKit.Net.Proxy.ProxyClient proxyClient)
+                    throw new InvalidOperationException("Proxy klient nepodporuje vazbu na lokální zdrojovou IP.");
+                proxyClient.LocalEndPoint = localEp;
+            }
+            await client.ConnectAsync(o.SmtpHost, o.Port, socketOpts, ct).ConfigureAwait(false);
+        }
+        else if (localEp != null)
         {
             var s = IpBindingHelper.CreateBoundSocket(localEp, o.IpVersion);
             try
