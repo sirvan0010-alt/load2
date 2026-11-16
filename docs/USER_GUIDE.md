@@ -58,12 +58,13 @@ Source IP určuje lokální adresu, ze které počítač navazuje spojení. IPv4
 
 Tor režim je volitelná síťová vrstva pro SMTP a webhook komunikaci. Aplikace Tor sama neinstaluje ani nespouští.
 
-1. Spusť **Tor Browser** nebo samostatnou službu Tor.
-2. Na záložce proxy ponech host `127.0.0.1`. Běžný SOCKS5 port služby Tor je `9050`, Tor Browser obvykle používá `9150`.
-3. Klikni na **Ověřit Tor a výstupní IP**. Aplikace zkusí aktuální port a běžné porty 9050/9150. Při úspěchu zobrazí Tor exit IP a zapne přísný režim.
-4. Ponech zaškrtnuté **Vyžadovat ověřený Tor (bez přímého fallbacku)** a spusť test.
+1. Stáhni **Tor Browser pro Windows** pouze z oficiální stránky [Tor Project – Download](https://www.torproject.org/download/). Spusť instalátor a dokonči instalaci. Tor Project doporučuje ověřit podpis instalačního souboru.
+2. Spusť Tor Browser a v úvodním okně klikni na **Connect**. Počkej, až se připojí k síti Tor. Browser může zůstat otevřený na pozadí; nemusíš v něm nic prohlížet.
+3. V MailLoadTester otevři kartu **Proxy**. Host nastav na `127.0.0.1`. Tlačítko **Ověřit Tor a výstupní IP** automaticky vyzkouší aktuální port, `9050` a `9150`. U Tor Browseru je obvyklý port `9150`; samostatná služba Tor často používá `9050`.
+4. Po úspěšném ověření se ve spodním stavovém řádku rozsvítí fialová cibulka **TOR ON** a zobrazí se ověřená výstupní IP. Stejná kontrola proběhne znovu před spuštěním reálného SMTP testu.
+5. Ponech zaškrtnuté **Vyžadovat ověřený Tor (bez přímého fallbacku)**. Pokud Tor Browser zavřeš nebo se proxy odpojí, test se nesmí přepnout na běžnou síť a musí skončit chybou.
 
-Před každým skutečným během aplikace ověří výstupní IP přes Tor Project check API. Pokud SOCKS5 není dostupná nebo výstup není potvrzen jako Tor exit node, běh se nespustí. Při pozdějším výpadku proxy se SMTP spojení ukončí chybou; aplikace se nepřepne na přímé připojení.
+Fialová svítící cibulka znamená, že poslední kontrola přes Tor Project check API potvrdila Tor exit node. Šedá cibulka znamená, že Tor není ověřen; oranžová značí probíhající kontrolu a červená neúspěšné ověření. Indikátor není pouze detekcí otevřeného portu — rozsvítí se až po potvrzení `IsTor=true`. Před každým skutečným během aplikace ověří výstupní IP znovu. Pokud SOCKS5 není dostupná nebo výstup není potvrzen jako Tor exit node, běh se nespustí. Při pozdějším výpadku proxy se SMTP spojení ukončí chybou; aplikace se nepřepne na přímé připojení.
 
 V přísném Tor režimu:
 
