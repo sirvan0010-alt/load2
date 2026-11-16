@@ -43,7 +43,7 @@ public sealed partial class MainForm
         return new MailTestOptions(
             txtFrom.Text.Trim(), recipients.ToList(),
             txtHost.Text.Trim(), (int)numPort.Value, security,
-            chkAuth.Checked, txtUser.Text, txtPass.Text,
+            chkAuth.Checked, txtUser.Text, GetSmtpPasswordForSubmission(),
             (int)numCount.Value, (int)numInterval.Value,
             chkBatchMode.Checked, (int)numBatchSize.Value, (int)numBatchPause.Value,
             (int)numConcurrency.Value, txtSubject.Text, txtBody.Text, txtDisplayName.Text,
@@ -501,7 +501,29 @@ public sealed partial class MainForm
         {
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
-                throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+            {
+                // A one-message diagnostic commonly targets the authenticated mailbox.
+                // Never silently send: ask first, then visibly populate the recipient field.
+                var suggestedRecipient = IsValidEmailSuggestion(txtUser.Text)
+                    ? txtUser.Text.Trim()
+                    : IsValidEmailSuggestion(txtFrom.Text) ? txtFrom.Text.Trim() : null;
+
+                if (suggestedRecipient is null)
+                    throw new InvalidOperationException(
+                        "Pole Komu na kartě E-mail je prázdné a z SMTP uživatele ani adresy Od nelze bezpečně odvodit příjemce. Zadej e-mailovou adresu, na kterou smíš testovací zprávu odeslat.");
+
+                var useSuggestedRecipient = MessageBox.Show(
+                    $"Pole Komu je prázdné. Chceš jako příjemce jediné testovací zprávy použít svou SMTP adresu?\n\n{suggestedRecipient}\n\nAdresa se před odesláním doplní do pole Komu a ještě ji uvidíš v potvrzení odeslání.",
+                    "Doplnit příjemce testovací zprávy",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (useSuggestedRecipient != DialogResult.Yes)
+                    return;
+
+                txtTo.Text = suggestedRecipient;
+                configured = BuildOptions();
+            }
             EnsureRealSmtpConfiguration(configured);
 
             // This is a single-message diagnostic, not a load test. Keep the selected
