@@ -41,6 +41,20 @@ public sealed class GoogleOAuthClientTests
         Assert.Contains(GoogleOAuthClient.GmailSendScope, query["scope"]);
         Assert.DoesNotContain("mail.google.com", query["scope"]);
         Assert.Equal("offline", query["access_type"]);
+        Assert.Equal("select_account", query["prompt"]);
+    }
+
+    [Fact]
+    public void AuthorizationUri_RequestsConsentOnlyWhenExplicitlyForced()
+    {
+        using var http = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+        var client = new GoogleOAuthClient(ClientId, http);
+        var uri = client.BuildAuthorizationUri(
+            new Uri("http://127.0.0.1:49152/"),
+            GoogleOAuthClient.CreatePkceChallenge(),
+            forceConsent: true);
+
+        Assert.Equal("consent select_account", ParseQuery(uri.Query)["prompt"]);
     }
 
     [Theory]
