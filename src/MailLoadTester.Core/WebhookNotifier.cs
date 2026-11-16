@@ -24,12 +24,12 @@ public static class WebhookNotifier
 
         if (requireProxy)
         {
-            if (proxyClient is null)
-                throw new InvalidOperationException("Strict Tor webhook mode requires a SOCKS5 proxy client; direct fallback is forbidden.");
+            var requiredProxy = proxyClient
+                ?? throw new InvalidOperationException("Strict Tor webhook mode requires a SOCKS5 proxy client; direct fallback is forbidden.");
 
             destinationUri = WebhookSecurityPolicy.ValidateTorDestination(url);
             connectCallback = (context, token) =>
-                TorProxyVerifier.ConnectThroughProxyAsync(proxyClient, context.DnsEndPoint, token);
+                TorProxyVerifier.ConnectThroughProxyAsync(requiredProxy, context.DnsEndPoint, token);
         }
         else
         {
