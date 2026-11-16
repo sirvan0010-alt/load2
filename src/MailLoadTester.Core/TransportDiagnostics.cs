@@ -187,7 +187,7 @@ public static class TransportDiagnostics
                     client.ProxyClient = ProxyClientFactory.Create(list[0])
                         ?? throw new InvalidOperationException("Proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
                 }
-                else if (options.UseSocks5Proxy && !string.IsNullOrWhiteSpace(options.ProxyHost))
+                else if (options.UseSocks5Proxy)
                 {
                     var ep = new ProxyEndpoint(
                         ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
