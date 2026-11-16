@@ -284,7 +284,9 @@ public sealed partial class MainForm : Form
         var runActive = _isRunning;
         var connectionTestActive = _testConnectionCts != null;
         var mailboxMonitorActive = _mailboxMonitorCts != null;
-        if (!runActive && !connectionTestActive && !mailboxMonitorActive)
+        var googleOperationActive = _googleOAuthOperationCts != null;
+        var googleOperationCompletion = _googleOAuthOperationCompletion;
+        if (!runActive && !connectionTestActive && !mailboxMonitorActive && !googleOperationActive)
             return;
 
         e.Cancel = true;
@@ -293,6 +295,7 @@ public sealed partial class MainForm : Form
         _testConnectionCts?.Cancel();
         _mailboxMonitorTimer?.Stop();
         _mailboxMonitorCts?.Cancel();
+        _googleOAuthOperationCts?.Cancel();
 
         if (runActive)
         {
@@ -322,6 +325,12 @@ public sealed partial class MainForm : Form
                 try { await completion.Task.ConfigureAwait(true); }
                 catch { /* Mailbox monitor owns its cancellation/error handling. */ }
             }
+        }
+
+        if (googleOperationActive && googleOperationCompletion != null)
+        {
+            try { await googleOperationCompletion.Task.ConfigureAwait(true); }
+            catch { /* Google OAuth operation owns its cancellation/error handling. */ }
         }
 
         _closeApproved = true;
