@@ -149,12 +149,12 @@ public sealed class SmartPaceControllerTests
             WarmupPhases = "10;20"
         });
 
-        await using (await warmup.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await warmup.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         Assert.Equal(1_000, warmup.LastEffectiveIntervalMs);
 
         var mailboxPressure = new SmartPaceController(BaseOptions(0));
         mailboxPressure.ApplyMailboxPressure(1);
-        await using (await mailboxPressure.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await mailboxPressure.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         Assert.Equal(1_000, mailboxPressure.LastEffectiveIntervalMs);
     }
 
@@ -165,8 +165,8 @@ public sealed class SmartPaceControllerTests
         pace.ApplyMailboxPressure(1);
 
         var sw = Stopwatch.StartNew();
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         sw.Stop();
 
         Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(850),
@@ -261,12 +261,12 @@ public sealed class SmartPaceControllerTests
         var pace = new SmartPaceController(BaseOptions(intervalMs));
         var sw = Stopwatch.StartNew();
 
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         var firstMs = sw.ElapsedMilliseconds;
         Assert.True(firstMs < 40, $"First SEND should be immediate, took {firstMs} ms");
 
         sw.Restart();
-        await using (await pace.AcquireSendSlotAsync(CancellationToken.None)) { }
+        await pace.ExecuteSendAsync(() => Task.CompletedTask, CancellationToken.None);
         var secondMs = sw.ElapsedMilliseconds;
         Assert.True(secondMs >= intervalMs - 25,
             $"Second SEND should wait ~{intervalMs} ms, took {secondMs} ms");
