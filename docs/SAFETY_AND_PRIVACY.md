@@ -70,3 +70,14 @@ Webhook může odeslat výsledek běhu na nakonfigurovanou URL. Používej pouze
 ## 7. Data a grafy
 
 SMTP Accepted není důkaz uložení do schránky. IMAP delta může zahrnovat aktivitu jiných klientů. Chybějící kvóta je Unknown, ne nula. Tyto rozdíly jsou bezpečnostní i metodický požadavek, nikoli kosmetické označení.
+
+## 8. Přísný Tor / SOCKS5 režim
+
+- Přísný režim přijímá pouze lokální SOCKS5 endpoint `127.0.0.1` nebo `::1` a ověřuje Tor exit IP před skutečným během.
+- Pokud Tor není dostupný nebo Tor Project check nepotvrdí Tor exit, SMTP běh se nespustí. Při výpadku SOCKS5 není povolen přímý fallback.
+- SMTP cílové hostname a webhook hostname se předávají přes SOCKS5; místní DNS dotazy pro tyto cíle se neprovádějí.
+- Lokální DNS/MX/RBL diagnostika a IMAP monitoring jsou v tomto režimu pozastavené. Direct MX a IP/proxy rotace jsou zakázané.
+- Webhook se odešle přes ověřený SOCKS5 tunel; pokud proxy není dostupná, notifikace selže a nezkouší přímé připojení.
+- Aplikace Tor neinstaluje ani nespouští. Uživatel musí spustit Tor Browser nebo službu Tor. Běžné porty jsou 9150 (Tor Browser) a 9050 (samostatná služba).
+- Tor nezakrývá SMTP účet, heslo/token před poskytovatelem ani adresu From před příjemcem. Někteří poskytovatelé blokují Tor exit IP.
+- Jde o síťovou ochranu této aplikace, nikoli o systémový kill switch nebo ochranu ostatních programů v počítači. Není to úplný audit DNS provozu celého operačního systému.
