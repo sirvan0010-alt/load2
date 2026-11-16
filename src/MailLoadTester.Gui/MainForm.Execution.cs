@@ -109,6 +109,54 @@ public sealed partial class MainForm
             RequireTor: chkRequireTor.Checked);
     }
 
+    private async Task<bool> VerifyTorForUiAsync(MailTestOptions options)
+    {
+        if (!options.RequireTor || options.DryRun)
+        {
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(TorIndicatorState.Off);
+            return true;
+        }
+
+        SetTorIndicator(TorIndicatorState.Checking);
+        if (lblProxyStatus is not null)
+        {
+            lblProxyStatus.Text = "Ověřuji Tor před spuštěním SMTP…";
+            lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
+            lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+        }
+
+        try
+        {
+            var check = await TorProxyVerifier.VerifyAsync(options, CancellationToken.None);
+            if (!check.IsTor)
+                throw new InvalidOperationException(check.Message);
+
+            _torVerified = true;
+            _torExitIp = check.ExitIp;
+            SetTorIndicator(TorIndicatorState.Verified, check.ExitIp);
+            UpdateProxyStatus();
+            AppendLog($"Tor ověřen před spuštěním. Výstupní IP: {check.ExitIp}. SMTP poběží přes lokální SOCKS5.", Color.MediumPurple);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _torVerified = false;
+            _torExitIp = null;
+            SetTorIndicator(TorIndicatorState.Failed);
+            if (lblProxyStatus is not null)
+            {
+                lblProxyStatus.Text = "TOR NENÍ OVĚŘEN — SMTP se nespustí. " + ex.Message;
+                lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
+                lblProxyStatus.ForeColor = Color.DarkRed;
+            }
+            ShowErrorWithCopy("Tor se nepodařilo ověřit. SMTP test nebyl spuštěn a přímé připojení nebylo použito.\n" + ex.Message,
+                "Tor není dostupný", ex.ToString(), GuiErrorCodes.Validation);
+            return false;
+        }
+    }
+
     private void UpdateCapacityEstimate(MailTestOptions options)
     {
         if (options.CapacityRun is not { Enabled: true } limits)
@@ -288,6 +336,9 @@ public sealed partial class MainForm
                     await pendingMailboxRefresh.Task;
             }
         }
+
+        if (!await VerifyTorForUiAsync(options))
+            return;
 
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
@@ -563,6 +614,9 @@ public sealed partial class MainForm
             "Potvrdit odeslání testovací zprávy",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (confirm != DialogResult.Yes)
+            return;
+
+        if (!await VerifyTorForUiAsync(options))
             return;
 
         _isRunning = true;
