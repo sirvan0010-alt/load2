@@ -384,9 +384,7 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                         throw new InvalidOperationException("Rotace zdrojových IP není kompatibilní s proxy. Zruš IP rotaci nebo proxy.");
                     if (_localEp is not null)
                     {
-                        if (client.ProxyClient is not MailKit.Net.Proxy.ProxyClient proxyClient)
-                            throw new InvalidOperationException("Vybraný proxy klient nepodporuje vazbu na lokální zdrojovou IP.");
-                        proxyClient.LocalEndPoint = _localEp;
+                        client.ProxyClient.LocalEndPoint = _localEp;
                     }
                     await client.ConnectAsync(_options.SmtpHost, _options.Port, _socket, ct).ConfigureAwait(false);
                 }
