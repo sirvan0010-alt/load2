@@ -67,6 +67,10 @@ public sealed partial class MainForm : Form
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
     private TextBox txtProxyList = null!;
     private Label lblProxyStatus = null!;
+    private TorStatusIndicator? torStatusIndicator;
+    private ToolStripControlHost? torStatusHost;
+    private bool _torVerified;
+    private string? _torExitIp;
     private FlowLayoutPanel pnlQueueFlow = null!;
     private readonly Dictionary<string, Label> _queueFlowLabels = new(StringComparer.Ordinal);
     // Options without dedicated controls (persist via profile / defaults)
