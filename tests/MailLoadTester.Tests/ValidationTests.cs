@@ -162,6 +162,25 @@ public class ValidationTests
     }
 
 
+    [Fact]
+    public void TorWebhookValidationDoesNotResolveHostnameLocally()
+    {
+        var uri = WebhookSecurityPolicy.ValidateTorDestination("https://does-not-resolve.invalid/hook");
+        Assert.Equal("does-not-resolve.invalid", uri.Host);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1/hook")]
+    [InlineData("http://localhost/hook")]
+    [InlineData("https://192.168.1.10/hook")]
+    [InlineData("https://service.local/hook")]
+    [InlineData("ftp://example.com/hook")]
+    [InlineData("https://user:pass@example.com/hook")]
+    public void TorWebhookValidationRejectsUnsafeDestinations(string url)
+    {
+        Assert.Throws<ArgumentException>(() => WebhookSecurityPolicy.ValidateTorDestination(url));
+    }
+
     [Theory]
     [InlineData("http://127.0.0.1:8080/hook")]
     [InlineData("http://10.0.0.5/hook")]
