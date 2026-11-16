@@ -97,8 +97,8 @@ public sealed class GoogleOAuthLoopbackFlowTests
                 await tcp.ConnectAsync(IPAddress.Loopback, redirect.Port, cancellationToken);
                 await using var stream = tcp.GetStream();
                 var request = Encoding.ASCII.GetBytes(
-                    $"GET /?code=one-time-code&state={Uri.EscapeDataString(query["state"])} HTTP/1.1\\r\\n" +
-                    $"Host: 127.0.0.1:{redirect.Port}\\r\\nConnection: close\\r\\n\\r\\n");
+                    $"GET /?code=one-time-code&state={Uri.EscapeDataString(query["state"])} HTTP/1.1\r\n" +
+                    $"Host: 127.0.0.1:{redirect.Port}\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(request, cancellationToken);
                 using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
                 browserResponse = await reader.ReadToEndAsync(cancellationToken);
