@@ -509,8 +509,8 @@ public sealed partial class MainForm
             btnVerifyTor.Enabled = false;
             _torVerified = false;
             _torExitIp = null;
-            SetTorIndicator(TorIndicatorState.Checking);
             chkSocks5.Checked = true;
+            SetTorIndicator(TorIndicatorState.Checking);
             lblProxyStatus.Text = "Ověřuji SOCKS5 spojení a Tor exit IP…";
             try
             {
@@ -531,6 +531,7 @@ public sealed partial class MainForm
                         {
                             result = candidate;
                             numProxyPort.Value = port;
+                            SetTorIndicator(TorIndicatorState.Checking);
                             break;
                         }
                         lastError = new InvalidOperationException(candidate.Message);
@@ -586,8 +587,8 @@ public sealed partial class MainForm
         txtProxyUser = AddLabeledText(flProxy, "Proxy uživatel:", "Volitelné — pouze pokud proxy vyžaduje autentizaci.");
         txtProxyPass = AddLabeledText(flProxy, "Proxy heslo:", "Volitelné heslo pro SOCKS5 proxy.");
         txtProxyPass.PasswordChar = '●';
-        txtProxyUser.TextChanged += (_, _) => InvalidateTorVerification();
-        txtProxyPass.TextChanged += (_, _) => InvalidateTorVerification();
+        txtProxyUser.TextChanged += (_, _) => { InvalidateTorVerification(); UpdateProxyStatus(); };
+        txtProxyPass.TextChanged += (_, _) => { InvalidateTorVerification(); UpdateProxyStatus(); };
         tabProxy.Controls.Add(flProxy);
         tabs.TabPages.Add(tabProxy);
 
