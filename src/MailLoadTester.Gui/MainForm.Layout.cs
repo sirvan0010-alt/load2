@@ -163,7 +163,7 @@ public sealed partial class MainForm
         txtPass.PasswordChar = '●';
         var lnkCredentialHelp = new LinkLabel
         {
-            Text = "Jak získat heslo / přihlásit účet?",
+            Text = "Jak získat heslo pro SMTP?"
             AutoSize = true,
             LinkBehavior = LinkBehavior.HoverUnderline,
             Margin = new Padding(0, 0, 0, 8)
