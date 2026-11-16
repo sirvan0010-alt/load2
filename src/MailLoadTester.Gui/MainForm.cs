@@ -61,6 +61,7 @@ public sealed partial class MainForm : Form
 
     // Proxy tab
     private CheckBox chkSocks5 = null!;
+    private CheckBox chkRequireTor = null!;
     private TextBox txtProxyHost = null!;
     private NumericUpDown numProxyPort = null!;
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
