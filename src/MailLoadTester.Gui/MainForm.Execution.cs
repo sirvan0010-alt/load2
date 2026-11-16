@@ -275,6 +275,20 @@ public sealed partial class MainForm
             catch { /* neblokovat start při chybě DNSBL */ }
         }
 
+        if (options.RequireTor)
+        {
+            // Stop any previously scheduled IMAP polling and cancel an in-flight refresh
+            // before opening the strict Tor SMTP run.
+            StopMailboxMonitorPolling();
+            if (_mailboxRefreshInProgress)
+            {
+                _mailboxMonitorCts?.Cancel();
+                var pendingMailboxRefresh = _mailboxMonitorCompletion;
+                if (pendingMailboxRefresh is not null)
+                    await pendingMailboxRefresh.Task;
+            }
+        }
+
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
