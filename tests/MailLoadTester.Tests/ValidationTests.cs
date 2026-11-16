@@ -163,6 +163,14 @@ public class ValidationTests
 
 
     [Fact]
+    public async Task StrictTorWebhookRequiresProxyClientAndCannotFallBackDirect()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WebhookNotifier.NotifyAsync("https://example.com/hook", null!, CancellationToken.None,
+                proxyClient: null, requireProxy: true));
+    }
+
+    [Fact]
     public void TorWebhookValidationDoesNotResolveHostnameLocally()
     {
         var uri = WebhookSecurityPolicy.ValidateTorDestination("https://does-not-resolve.invalid/hook");
