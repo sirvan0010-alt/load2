@@ -89,6 +89,13 @@ public static class TransportDiagnostics
                 Error: null);
         }
 
+        if (options.RequireTor)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(options, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
+        }
+
         DnsPolicyChecker.PolicyResult? dns = null;
         IReadOnlyList<MxRecord>? mx = null;
         string? error = null;
@@ -100,7 +107,7 @@ public static class TransportDiagnostics
         string? tlsProtocol = null;
         string? certSubject = null;
 
-        if (diag.CheckDnsPolicy)
+        if (diag.CheckDnsPolicy && !options.RequireTor)
         {
             ct.ThrowIfCancellationRequested();
             var domain = DnsPolicyChecker.ExtractDomain(options.From);
@@ -126,7 +133,7 @@ public static class TransportDiagnostics
             }
         }
 
-        if (diag.CheckMx)
+        if (diag.CheckMx && !options.RequireTor)
         {
             ct.ThrowIfCancellationRequested();
             var recipientDomain = options.Recipients
@@ -147,6 +154,9 @@ public static class TransportDiagnostics
                 failureKind ??= TransportFailureKind.Dns;
             }
         }
+
+        if (options.RequireTor && (diag.CheckDnsPolicy || diag.CheckMx))
+            steps.Add("Tor mode: local DNS/MX checks skipped to prevent queries outside the SOCKS5 tunnel.");
 
         if (diag.CheckSmtp && !string.IsNullOrWhiteSpace(options.SmtpHost))
         {
