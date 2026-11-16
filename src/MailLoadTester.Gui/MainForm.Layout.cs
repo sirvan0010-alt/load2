@@ -511,11 +511,14 @@ public sealed partial class MainForm
                     string.IsNullOrWhiteSpace(txtProxyPass.Text) ? null : txtProxyPass.Text);
                 var result = await TorProxyVerifier.VerifyAsync(endpoint, CancellationToken.None);
                 chkRequireTor.Checked = result.IsTor;
-                lblProxyStatus.Text = result.IsTor
-                    ? $"TOR OVĚŘEN — výstupní IP: {result.ExitIp}. SMTP DNS cílového hostu bude předáno přes SOCKS5."
-                    : $"TOR NEPOTVRZEN — {result.Message}";
-                lblProxyStatus.BackColor = result.IsTor ? Color.FromArgb(215, 245, 220) : Color.FromArgb(250, 220, 220);
-                lblProxyStatus.ForeColor = result.IsTor ? Color.DarkGreen : Color.DarkRed;
+                var strictModeEnabled = result.IsTor && chkRequireTor.Checked;
+                lblProxyStatus.Text = strictModeEnabled
+                    ? $"TOR OVĚŘEN A POVINNÝ — výstupní IP: {result.ExitIp}. SMTP DNS cílového hostu bude předáno přes SOCKS5."
+                    : result.IsTor
+                        ? $"Tor exit IP {result.ExitIp} je ověřena, ale přísný režim nebyl zapnut. Dokonči probíhající přímou diagnostiku a ověření zopakuj."
+                        : $"TOR NEPOTVRZEN — {result.Message}";
+                lblProxyStatus.BackColor = strictModeEnabled ? Color.FromArgb(215, 245, 220) : Color.FromArgb(250, 220, 220);
+                lblProxyStatus.ForeColor = strictModeEnabled ? Color.DarkGreen : Color.DarkRed;
             }
             catch (Exception ex)
             {
