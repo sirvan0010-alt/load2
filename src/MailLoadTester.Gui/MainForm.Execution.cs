@@ -156,6 +156,7 @@ public sealed partial class MainForm
         }
 
         _isRunning = true;
+        _mailboxQuotaStopTriggered = false;
         _lastRunReport = null;
         btnExportReport.Enabled = false;
         btnStart.Enabled = false;
@@ -185,6 +186,7 @@ public sealed partial class MainForm
         }
 
         _cts = new CancellationTokenSource();
+        StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
         _runCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var progress = new Progress<ProgressUpdate>(UpdateProgress);
@@ -206,7 +208,9 @@ public sealed partial class MainForm
             btnExportReport.Enabled = true;
 
             progressBar.Value = 100;
-            lblStatus.Text = result.Cancelled ? "Zastaveno uživatelem" : "Dokončeno";
+            lblStatus.Text = result.Cancelled
+                ? (_mailboxQuotaStopTriggered ? "Zastaveno: limit kvóty" : "Zastaveno uživatelem")
+                : "Dokončeno";
             lblEta.Text = "";
             lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed} Retry:{result.Retries}";
 
@@ -263,6 +267,7 @@ public sealed partial class MainForm
         }
         finally
         {
+            StopMailboxMonitorPolling();
             _isRunning = false;
             btnStart.Enabled = true;
             btnStop.Enabled = false;

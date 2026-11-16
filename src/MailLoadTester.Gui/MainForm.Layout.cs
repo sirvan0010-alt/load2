@@ -5,7 +5,7 @@ public sealed partial class MainForm
 
     private void InitializeComponent()
     {
-        toolTip = new ToolTip { AutoPopDelay = 8000, InitialDelay = 400, ReshowDelay = 200 };
+        toolTip = new ToolTip { AutoPopDelay = 3000, InitialDelay = 150, ReshowDelay = 50, ShowAlways = true };
 
         // === UI enhancement ===
         pnlSafetyBanner = new Panel
@@ -77,6 +77,8 @@ public sealed partial class MainForm
             Text = "Export report JSON", Width = 140, Height = 36, Left = 560, Top = 6,
             FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Enabled = false
         };
+        toolTip.SetToolTip(btnStart, "Spustí test podle aktuální konfigurace. Pokud není zapnutý Dry-run, může dojít ke skutečnému odesílání e-mailů.");
+        toolTip.SetToolTip(btnStop, "Požádá o bezpečné zastavení právě běžícího testu. Již předané zprávy nelze vzít zpět.");
         toolTip.SetToolTip(btnSaveProfile, "Uloží aktuální nastavení testu do JSON (bez hesel).");
         toolTip.SetToolTip(btnLoadProfile, "Načte profil testu z JSON souboru.");
         toolTip.SetToolTip(btnExportReport, "Exportuje poslední běh jako JSON report bez hesel a známých tajných hodnot.");
@@ -124,7 +126,8 @@ public sealed partial class MainForm
             else if (cmbLocalIp.SelectedIndex == 0)
                 txtSourceIp.Text = "";
         };
-        toolTip.SetToolTip(cmbLocalIp, "Vybere lokální IPv4 adresu pro IP binding (Source IP).");
+        toolTip.SetToolTip(lblLocalIp, "Vyber lokální IPv4 adresu počítače, ze které se budou navazovat SMTP spojení.");
+        toolTip.SetToolTip(cmbLocalIp, "Vybere lokální IPv4 adresu pro IP binding (Source IP). Automatická volba ponechá výběr na operačním systému.");
         flConn.Controls.Add(cmbLocalIp);
         txtIpv6Prefix = AddLabeledText(flConn, "IPv6 prefix (rotace):",
             "Např. 2001:db8:85a3:0:: — každé nové SMTP spojení dostane náhodnou adresu z /N. OS musí prefix routovat. Prázdné = vypnuto. Má přednost před Source IP.");
@@ -185,6 +188,7 @@ public sealed partial class MainForm
         flContent.Controls.Add(lblBody);
         txtBody = new TextBox { Multiline = true, Height = 80, Width = 360, ScrollBars = ScrollBars.Vertical };
         flContent.Controls.Add(txtBody);
+        toolTip.SetToolTip(lblBody, "Obsah každé odesílané zprávy. Lze použít prostý text, HTML nebo dynamické značky.");
         toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
         chkHtmlBody = AddCheckBox(flContent, "HTML tělo", false, "Zpráva bude odeslána jako text/html.");
         chkRandomData = AddCheckBox(flContent, "Náhodná testovací data", false, "Automaticky vygeneruje náhodný předmět, tělo a jméno.");
@@ -204,6 +208,7 @@ public sealed partial class MainForm
         flContent.Controls.Add(pnlRandomAttachments);
         lblRandomAttachmentSafety = new Label { AutoSize = false, Width = 390, Height = 62, Text = "Bezpečnost příloh: Auto – výpočet podle RAM, počtu příloh a paralelismu.", Margin = new Padding(0, 2, 0, 6) };
         flContent.Controls.Add(lblRandomAttachmentSafety);
+        toolTip.SetToolTip(numMaxRandomAttachments, "Maximální počet náhodně vytvořených příloh přidaných do jedné zprávy. Rozsah: 1 až 5; výchozí hodnota: 2. Vyšší počet zvyšuje velikost zprávy i spotřebu paměti.");
         toolTip.SetToolTip(numRandomAttachmentSizeMb, "0 = Auto. Program před startem odhadne špičku: velikost × počet příloh × paralelní workery + raw data + MIME/base64 režie. Pokud odhad překročí bezpečný rozpočet dostupné RAM, test se před alokací zastaví. Před každou velkou generovanou přílohou se RAM ještě znovu ověří, protože dostupná RAM se může během testu změnit. Ruční hodnota je v MB, maximum 128 MB.");
         toolTip.SetToolTip(lblRandomAttachmentSafety, "Bezpečnostní odhad není přesný měřič celé RAM. Je záměrně konzervativní. Test se při nebezpečné kombinaci nespustí, takže vysoká hodnota sama o sobě PC nezasekne.");
         chkVaryMessage = AddCheckBox(flContent, "Variace Subject/Body u každé zprávy", false,
@@ -217,7 +222,9 @@ public sealed partial class MainForm
         pnlEml.Controls.Add(txtEmlTemplate);
         pnlEml.Controls.Add(btnEmlBrowse);
         flContent.Controls.Add(pnlEml);
+        toolTip.SetToolTip(lblEml, "Volitelná šablona celé zprávy ve formátu EML.");
         toolTip.SetToolTip(txtEmlTemplate, "Načte předmět, tělo a přílohy ze souboru .eml místo ručního zadání.");
+        toolTip.SetToolTip(btnEmlBrowse, "Vybere soubor .eml z disku.");
         gbContent.Controls.Add(flContent);
         tblMsg.Controls.Add(gbContent, 1, 0);
 
@@ -231,6 +238,8 @@ public sealed partial class MainForm
         flAttach.Controls.Add(btnRem);
         btnAdd.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true }; if (dlg.ShowDialog() == DialogResult.OK) lstAttachments.Items.AddRange(dlg.FileNames); };
         btnRem.Click += (s, e) => { if (lstAttachments.SelectedIndex >= 0) lstAttachments.Items.RemoveAt(lstAttachments.SelectedIndex); };
+        toolTip.SetToolTip(btnAdd, "Vybere jeden nebo více souborů, které se připojí ke každé testovací zprávě.");
+        toolTip.SetToolTip(btnRem, "Odebere právě vybranou přílohu ze seznamu. Soubor na disku nesmaže.");
         toolTip.SetToolTip(lstAttachments, "Seznam souborů připojených ke každé zprávě.");
         gbAttach.Controls.Add(flAttach);
         tabMsg.Controls.Add(gbAttach);
@@ -246,6 +255,8 @@ public sealed partial class MainForm
         flInline.Controls.Add(btnRemInline);
         btnAddInline.Click += (s, e) => { using var dlg = new OpenFileDialog { Multiselect = true, Filter = "Images|*.png;*.jpg;*.jpeg;*.gif;*.bmp" }; if (dlg.ShowDialog() == DialogResult.OK) lstInlineAttachments.Items.AddRange(dlg.FileNames); };
         btnRemInline.Click += (s, e) => { if (lstInlineAttachments.SelectedIndex >= 0) lstInlineAttachments.Items.RemoveAt(lstInlineAttachments.SelectedIndex); };
+        toolTip.SetToolTip(btnAddInline, "Vybere obrázky, které se vloží přímo do HTML zprávy jako inline obsah.");
+        toolTip.SetToolTip(btnRemInline, "Odebere vybraný inline obrázek ze seznamu. Soubor na disku nesmaže.");
         toolTip.SetToolTip(lstInlineAttachments, "Obrázky vložené do HTML těla. V HTML použij {{cid:nazev_souboru_bez_pripony}}.");
         gbInline.Controls.Add(flInline);
         tabMsg.Controls.Add(gbInline);
@@ -336,6 +347,7 @@ public sealed partial class MainForm
         numBandwidthLimit = AddLabeledNumeric(flExp, "Bandwidth limit (kbps):", 0, 1000000, 0, "Omezení rychlosti odesílání v kbps (0 = bez limitu).");
         var btnNet = new Button { Text = "Zobrazit síťové adaptéry", Width = 180, Height = 32, Margin = new Padding(0, 16, 0, 0) };
         btnNet.Click += (s, e) => MessageBox.Show(NetworkAdapterInfo.GetHelpText(), "Síťové adaptéry", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        toolTip.SetToolTip(btnNet, "Zobrazí síťové adaptéry počítače a informace potřebné pro výběr Source IP a IP rotaci.");
         flExp.Controls.Add(btnNet);
         tabExp.Controls.Add(flExp);
         tabs.TabPages.Add(tabExp);
@@ -351,12 +363,13 @@ public sealed partial class MainForm
             cmbProviderPreset.Items.Add(p.DisplayName);
         cmbProviderPreset.SelectedIndex = 2; // Standard
         cmbProviderPreset.SelectedIndexChanged += (s, e) => ApplyProviderPreset();
+        toolTip.SetToolTip(lblPreset, "Předvolba upraví několik parametrů tempa a ochrany podle typu cílového SMTP serveru.");
         toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranu pro daný typ serveru. Poté můžete cokoliv upravit ručně.");
         flPace.Controls.Add(cmbProviderPreset);
 
-        chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu snižuje detekci robotického vzoru.");
+        chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu slouží k modelování nepravidelného provozu v autorizovaném testu. Neobchází antispamové filtry a nezaručuje doručení do Inboxu.");
         numJitterPercent = AddLabeledNumeric(flPace, "Jitter (± %):", 0, 50, 15, "15 % při 1000 ms = 850–1150 ms.");
-        chkBurst = AddCheckBox(flPace, "Burst + pause", false, "Po N zprávách delší pauza – podobá se lidskému chování.");
+        chkBurst = AddCheckBox(flPace, "Burst + pause", false, "Po zadaném počtu zpráv vloží delší pauzu. Slouží k simulaci dávkových scénářů a ověřování limitů serveru.");
         numBurstSize = AddLabeledNumeric(flPace, "Velikost burstu:", 1, 100, 10, "Počet zpráv v jedné dávce.");
         numBurstPause = AddLabeledNumeric(flPace, "Pauza po burstu (s):", 1, 3600, 30, "Délka pauzy po dokončení burstu.");
         chkBackoff = AddCheckBox(flPace, "Progressive backoff", true, "Po chybách 4xx/5xx nebo po N úspěšných zprávách zpomalovat.");
@@ -369,7 +382,7 @@ public sealed partial class MainForm
         chkTimeWindow = AddCheckBox(flPace, "Omezit na denní dobu", false, "Odesílat jen v zadaném intervalu hodin.");
         numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "");
         numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "");
-        chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupné zvyšování rychlosti.");
+        chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupně zvyšuje tempo řízeného testu. Neobchází pravidla poskytovatele ani nezaručuje doručení do Inboxu.");
         txtWarmupPhases = AddLabeledText(flPace, "Fáze (zprávy; oddělené):", "Např. 50;150;500 – počet zpráv v jednotlivých fázích.");
         txtWarmupPhases.Text = "50;150;500";
         chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "451/452/try again – odložený retry.");
@@ -401,6 +414,8 @@ public sealed partial class MainForm
         gridObserved.Columns.Add("Count", "Počet");
         gridObserved.Columns.Add("Class", "Klasifikace");
         gridObserved.Columns.Add("Action", "Doporučení");
+        toolTip.SetToolTip(lblObs, "Tabulka průběžně zaznamenává odpovědi SMTP serveru, jejich četnost a doporučenou reakci.");
+        toolTip.SetToolTip(gridObserved, "Přehled odpovědí serveru během testu. Kódy 2xx obvykle znamenají úspěch, 4xx dočasný problém a 5xx trvalé odmítnutí.");
         flPace.Controls.Add(gridObserved);
 
         var lblKnow = new Label { Text = "Znalostní báze filtrů a limitů:", AutoSize = true, Margin = new Padding(0, 10, 0, 2) };
@@ -416,6 +431,8 @@ public sealed partial class MainForm
         gridKnowledge.Columns.Add("Reco", "Doporučení");
         foreach (var e in FilterKnowledgeBase.DefaultEntries)
             gridKnowledge.Rows.Add(e.Provider, e.TypicalLimit, e.TypicalResponse, e.Recommendation);
+        toolTip.SetToolTip(lblKnow, "Orientační znalostní báze typických limitů a reakcí vybraných poskytovatelů. Nejde o garantované aktuální limity.");
+        toolTip.SetToolTip(gridKnowledge, "Orientační přehled limitů a doporučení. Skutečné limity se mohou lišit podle účtu, reputace IP a aktuální politiky poskytovatele.");
         flPace.Controls.Add(gridKnowledge);
 
         tabPace.Controls.Add(flPace);
@@ -426,6 +443,7 @@ public sealed partial class MainForm
         smtpLogTab = new SmtpLogTab();
         tabSmtpLog.Controls.Add(smtpLogTab);
         tabs.TabPages.Add(tabSmtpLog);
+        InitializeMailboxMonitorTab();
 
         Controls.Add(tabs);
 
@@ -500,6 +518,9 @@ public sealed partial class MainForm
         statusStrip.Items.Add(lblEta);
         statusStrip.Items.Add(lblSentFailed);
         Controls.Add(statusStrip);
+
+        // Give controls that are created outside the labeled helpers a useful fallback hint.
+        ApplyFallbackToolTips(this);
     }
 
     private TextBox AddLabeledText(Control parent, string label, string tip)
@@ -508,7 +529,7 @@ public sealed partial class MainForm
         parent.Controls.Add(lbl);
         var txt = new TextBox { Width = 360, Margin = new Padding(0, 0, 0, 4) };
         parent.Controls.Add(txt);
-        toolTip.SetToolTip(txt, tip);
+        SetFieldToolTip(lbl, txt, tip);
         return txt;
     }
 
@@ -518,7 +539,8 @@ public sealed partial class MainForm
         parent.Controls.Add(lbl);
         var num = new NumericUpDown { Minimum = min, Maximum = max, Value = value, Width = 120, Margin = new Padding(0, 0, 0, 4) };
         parent.Controls.Add(num);
-        toolTip.SetToolTip(num, tip);
+        var rangeTip = $"{tip}{(string.IsNullOrWhiteSpace(tip) ? string.Empty : Environment.NewLine)}Rozsah: {min} až {max}. Výchozí hodnota: {value}.";
+        SetFieldToolTip(lbl, num, rangeTip);
         return num;
     }
 
@@ -530,7 +552,7 @@ public sealed partial class MainForm
         cmb.Items.AddRange(items);
         cmb.SelectedItem = selected;
         parent.Controls.Add(cmb);
-        toolTip.SetToolTip(cmb, tip);
+        SetFieldToolTip(lbl, cmb, tip);
         return cmb;
     }
 
@@ -540,6 +562,48 @@ public sealed partial class MainForm
         parent.Controls.Add(chk);
         toolTip.SetToolTip(chk, tip);
         return chk;
+    }
+
+    private void SetFieldToolTip(Control label, Control field, string tip)
+    {
+        if (string.IsNullOrWhiteSpace(tip))
+            tip = $"Nastavení „{label.Text.TrimEnd(':')}“. Podrobnosti závisí na zvoleném serveru a konfiguraci testu.";
+        toolTip.SetToolTip(label, tip);
+        toolTip.SetToolTip(field, tip);
+    }
+
+    private void ApplyFallbackToolTips(Control parent)
+    {
+        for (var i = 0; i < parent.Controls.Count; i++)
+        {
+            var child = parent.Controls[i];
+            if (string.IsNullOrWhiteSpace(toolTip.GetToolTip(child)))
+            {
+                var context = parent.Controls
+                    .Cast<Control>()
+                    .Take(i)
+                    .OfType<Label>()
+                    .LastOrDefault()?.Text.Trim().TrimEnd(':');
+                if (string.IsNullOrWhiteSpace(context) && parent is GroupBox groupBox)
+                    context = groupBox.Text;
+
+                if (child is Button button)
+                    toolTip.SetToolTip(button, $"Akce: {button.Text.Trim().Trim('…', '.')}. Kliknutím tuto funkci spustíš.");
+                else if (child is TextBox)
+                    toolTip.SetToolTip(child, $"Textové pole{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" pro {context}")}. Zadej požadovanou hodnotu.");
+                else if (child is NumericUpDown numeric)
+                    toolTip.SetToolTip(numeric, $"Číselné nastavení{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Rozsah: {numeric.Minimum} až {numeric.Maximum}. Aktuální hodnota: {numeric.Value}.");
+                else if (child is ComboBox)
+                    toolTip.SetToolTip(child, $"Výběr možnosti{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Vyber jednu z nabízených hodnot.");
+                else if (child is ListBox)
+                    toolTip.SetToolTip(child, $"Seznam položek{(string.IsNullOrWhiteSpace(context) ? string.Empty : $" – {context}")}. Vyber položku pro další práci.");
+                else if (child is GroupBox group)
+                    toolTip.SetToolTip(group, $"Skupina souvisejících nastavení: {group.Text}.");
+            }
+
+            if (child.HasChildren)
+                ApplyFallbackToolTips(child);
+        }
     }
 
     private void WireEvents()
@@ -561,6 +625,7 @@ public sealed partial class MainForm
             using var dlg = new OpenFileDialog { Filter = "EML files|*.eml|All files|*.*" };
             if (dlg.ShowDialog() == DialogResult.OK) txtEmlTemplate.Text = dlg.FileName;
         };
+        WireMailboxMonitorEvents();
     }
 
     private void SetDefaults()

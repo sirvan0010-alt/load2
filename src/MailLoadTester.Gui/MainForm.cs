@@ -105,6 +105,17 @@ public sealed partial class MainForm : Form
     private CheckBox chkSessionLog = null!;
     private TextBox txtSessionLogPath = null!;
 
+    // Mailbox Monitor tab (credentials are memory-only and never profile-persisted)
+    private TextBox txtMailboxHost = null!, txtMailboxUsername = null!, txtMailboxPassword = null!;
+    private NumericUpDown numMailboxPort = null!, numMailboxStopPercent = null!;
+    private ComboBox cmbMailboxSecurity = null!;
+    private CheckBox chkMailboxStopAtQuota = null!;
+    private Button btnMailboxRefresh = null!, btnMailboxClear = null!;
+    private ProgressBar progressMailboxQuota = null!;
+    private Label lblMailboxPercent = null!, lblMailboxMessages = null!, lblMailboxUnread = null!;
+    private Label lblMailboxUsage = null!, lblMailboxQuota = null!, lblMailboxInboxSize = null!;
+    private Label lblMailboxStatus = null!, lblMailboxLastRefresh = null!;
+
     // Síť / integrace tab
     private TextBox txtWebhookUrl = null!;
     private NumericUpDown numBandwidthLimit = null!;
@@ -130,6 +141,11 @@ public sealed partial class MainForm : Form
     private TaskCompletionSource<bool>? _runCompletion;
     private CancellationTokenSource? _testConnectionCts;
     private TaskCompletionSource<bool>? _testConnectionCompletion;
+    private System.Windows.Forms.Timer? _mailboxMonitorTimer;
+    private CancellationTokenSource? _mailboxMonitorCts;
+    private TaskCompletionSource<bool>? _mailboxMonitorCompletion;
+    private bool _mailboxRefreshInProgress;
+    private bool _mailboxQuotaStopTriggered;
     private bool _closeApproved;
     private DateTime _logThrottleWindow = DateTime.MinValue;
     private DateTime _observedThrottle = DateTime.MinValue;
@@ -169,13 +185,16 @@ public sealed partial class MainForm : Form
 
         var runActive = _isRunning;
         var connectionTestActive = _testConnectionCts != null;
-        if (!runActive && !connectionTestActive)
+        var mailboxMonitorActive = _mailboxMonitorCts != null;
+        if (!runActive && !connectionTestActive && !mailboxMonitorActive)
             return;
 
         e.Cancel = true;
         lblStatus.Text = "Zavírám — čekám na ukončení běžící operace…";
         _cts?.Cancel();
         _testConnectionCts?.Cancel();
+        _mailboxMonitorTimer?.Stop();
+        _mailboxMonitorCts?.Cancel();
 
         if (runActive)
         {
@@ -194,6 +213,16 @@ public sealed partial class MainForm : Form
             {
                 try { await completion.Task.ConfigureAwait(true); }
                 catch { /* TestConnection owns its cancellation/error handling. */ }
+            }
+        }
+
+        if (mailboxMonitorActive)
+        {
+            var completion = _mailboxMonitorCompletion;
+            if (completion != null)
+            {
+                try { await completion.Task.ConfigureAwait(true); }
+                catch { /* Mailbox monitor owns its cancellation/error handling. */ }
             }
         }
 
