@@ -119,6 +119,23 @@ public sealed class GoogleOAuthClient
         return await PostTokenAsync(content, current.RefreshToken, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task RevokeAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new ArgumentException("Google refresh token nesmí být prázdný.", nameof(refreshToken));
+
+        using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["token"] = refreshToken
+        });
+        using var response = await _http.PostAsync(
+            "https://oauth2.googleapis.com/revoke", content, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.BadRequest)
+            throw new GoogleOAuthException("Google se nepodařilo požádat o odvolání přístupu.", response.StatusCode);
+    }
+
     public async Task<GoogleOAuthUser> GetUserAsync(
         string accessToken,
         CancellationToken cancellationToken = default)
