@@ -60,9 +60,7 @@ public static class SmtpConnectivityTester
         {
             if (localEp is not null)
             {
-                if (client.ProxyClient is not MailKit.Net.Proxy.ProxyClient proxyClient)
-                    throw new InvalidOperationException("Proxy klient nepodporuje vazbu na lokální zdrojovou IP.");
-                proxyClient.LocalEndPoint = localEp;
+                client.ProxyClient.LocalEndPoint = localEp;
             }
             await client.ConnectAsync(o.SmtpHost, o.Port, socketOpts, ct).ConfigureAwait(false);
         }
