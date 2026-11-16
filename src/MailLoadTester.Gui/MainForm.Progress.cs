@@ -215,6 +215,13 @@ public sealed partial class MainForm
 
     private async Task OnCheckRblAsync()
     {
+        if (chkRequireTor?.Checked == true)
+        {
+            lblRblResult.Text = "RBL lookup is disabled in strict Tor mode to avoid system DNS queries.";
+            lblRblResult.ForeColor = Color.DarkOrange;
+            return;
+        }
+
         var ip = txtSourceIp.Text.Trim();
         if (string.IsNullOrWhiteSpace(ip))
         {

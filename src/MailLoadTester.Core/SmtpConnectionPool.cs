@@ -55,10 +55,11 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(options.ProxyList))
         {
             var list = ProxyClientFactory.ParseList(options.ProxyList);
-            if (list.Count > 0)
-                _proxyRotator = new ProxyRotator(list, options.ProxyListRandom, TimeSpan.FromMinutes(Math.Max(1, options.ProxyBanMinutes)));
+            if (list.Count == 0)
+                throw new ArgumentException("ProxyList je vyplněný, ale neobsahuje žádný platný proxy endpoint.");
+            _proxyRotator = new ProxyRotator(list, options.ProxyListRandom, TimeSpan.FromMinutes(Math.Max(1, options.ProxyBanMinutes)));
         }
-        else if (options.UseSocks5Proxy && !string.IsNullOrWhiteSpace(options.ProxyHost))
+        else if (options.UseSocks5Proxy)
         {
             var single = new ProxyEndpoint(ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
                 string.IsNullOrEmpty(options.ProxyUsername) ? null : options.ProxyUsername,
@@ -237,13 +238,11 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
                     var ep = _proxyRotator.TryGetNext();
                     if (ep is null)
                         throw new InvalidOperationException("Všechny proxy jsou dočasně vyřazené (ban detection).");
-                    var proxyClient = ProxyClientFactory.Create(ep);
-                    if (proxyClient != null)
-                    {
-                        client.ProxyClient = proxyClient;
-                        _clientProxy[client] = ep;
-                        _sessionLogger?.LogInfo($"Proxy {ep.DisplayKey}");
-                    }
+                    var proxyClient = ProxyClientFactory.Create(ep)
+                        ?? throw new InvalidOperationException("Proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
+                    client.ProxyClient = proxyClient;
+                    _clientProxy[client] = ep;
+                    _sessionLogger?.LogInfo($"Proxy {ep.DisplayKey}");
                 }
 
                 _sessionLogger?.LogInfo($"Creating new connection to {_options.SmtpHost}:{_options.Port}");
@@ -377,8 +376,21 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
             }
             try
             {
-                // Source bind priorita: IPv6 rotace → IPv4 rotace → fixní SourceIp → default
-                if (_ipv6Rotator != null)
+                // A configured proxy must own the TCP connection. Passing a pre-bound
+                // Socket to SmtpClient.ConnectAsync bypasses MailKit's ProxyClient.
+                var configuredProxy = client.ProxyClient;
+                if (configuredProxy is not null)
+                {
+                    if (_ipv6Rotator is not null || _ipv4Rotator is not null)
+                        throw new InvalidOperationException("Rotace zdrojových IP není kompatibilní s proxy. Zruš IP rotaci nebo proxy.");
+                    if (_localEp is not null)
+                    {
+                        configuredProxy.LocalEndPoint = _localEp;
+                    }
+                    await client.ConnectAsync(_options.SmtpHost, _options.Port, _socket, ct).ConfigureAwait(false);
+                }
+                // Without a proxy, use the existing source-IP binding path.
+                else if (_ipv6Rotator != null)
                 {
                     var ip = _ipv6Rotator.GetNextRandomIp();
                     var ep = new IPEndPoint(ip, 0);

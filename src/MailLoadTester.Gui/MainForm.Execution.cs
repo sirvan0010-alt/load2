@@ -43,7 +43,7 @@ public sealed partial class MainForm
         return new MailTestOptions(
             txtFrom.Text.Trim(), recipients.ToList(),
             txtHost.Text.Trim(), (int)numPort.Value, security,
-            chkAuth.Checked, txtUser.Text, txtPass.Text,
+            chkAuth.Checked, txtUser.Text, GetSmtpPasswordForSubmission(),
             (int)numCount.Value, (int)numInterval.Value,
             chkBatchMode.Checked, (int)numBatchSize.Value, (int)numBatchPause.Value,
             (int)numConcurrency.Value, txtSubject.Text, txtBody.Text, txtDisplayName.Text,
@@ -105,7 +105,8 @@ public sealed partial class MainForm
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
-                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked),
+            RequireTor: chkRequireTor.Checked);
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
@@ -201,6 +202,9 @@ public sealed partial class MainForm
             return;
         }
 
+        // Local DNS preflight is deliberately skipped in strict Tor mode.
+        if (!options.RequireTor)
+        {
         // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET)
         try
         {
@@ -247,8 +251,14 @@ public sealed partial class MainForm
             if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
         }
 
+        }
+        else
+        {
+            AppendLog("Tor mode: local SPF/DMARC and RBL DNS checks skipped to avoid DNS outside the SOCKS5 tunnel.", Color.LightGreen);
+        }
+
         // Volitelná RBL kontrola source IP
-        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
+        if (!options.RequireTor && chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
         {
             try
             {
@@ -265,10 +275,24 @@ public sealed partial class MainForm
             catch { /* neblokovat start při chybě DNSBL */ }
         }
 
+        if (options.RequireTor)
+        {
+            // Stop any previously scheduled IMAP polling and cancel an in-flight refresh
+            // before opening the strict Tor SMTP run.
+            StopMailboxMonitorPolling();
+            if (_mailboxRefreshInProgress)
+            {
+                _mailboxMonitorCts?.Cancel();
+                var pendingMailboxRefresh = _mailboxMonitorCompletion;
+                if (pendingMailboxRefresh is not null)
+                    await pendingMailboxRefresh.Task;
+            }
+        }
+
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
-        if (IsMailboxMonitorConfigured())
+        if (!options.RequireTor && IsMailboxMonitorConfigured())
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
@@ -342,7 +366,7 @@ public sealed partial class MainForm
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
-            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            var finalMailboxSnapshot = options.RequireTor ? null : await CaptureFinalMailboxSnapshotAsync();
             result = result with
             {
                 MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
@@ -408,8 +432,25 @@ public sealed partial class MainForm
             {
                 try
                 {
-                    await WebhookNotifier.NotifyAsync(txtWebhookUrl.Text, result, _cts?.Token ?? CancellationToken.None);
-                    AppendLog("Webhook notifikace odeslána.", Color.LightGreen);
+                    var webhookToken = _cts?.Token ?? CancellationToken.None;
+                    MailKit.Net.Proxy.IProxyClient? webhookProxy = null;
+                    if (options.RequireTor)
+                    {
+                        var torCheck = await TorProxyVerifier.VerifyAsync(options, webhookToken);
+                        if (!torCheck.IsTor)
+                            throw new InvalidOperationException($"Tor nebyl ověřen pro webhook. {torCheck.Message}");
+                        webhookProxy = ProxyClientFactory.Create(new ProxyEndpoint(
+                            ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
+                            string.IsNullOrWhiteSpace(options.ProxyUsername) ? null : options.ProxyUsername,
+                            string.IsNullOrWhiteSpace(options.ProxyPassword) ? null : options.ProxyPassword))
+                            ?? throw new InvalidOperationException("Tor SOCKS5 klient nebyl vytvořen; přímé webhook spojení je zakázáno.");
+                    }
+
+                    await WebhookNotifier.NotifyAsync(
+                        txtWebhookUrl.Text, result, webhookToken, webhookProxy, options.RequireTor);
+                    AppendLog(options.RequireTor
+                        ? "Webhook notifikace odeslána přes ověřený Tor SOCKS5 tunel."
+                        : "Webhook notifikace odeslána.", Color.LightGreen);
                 }
                 catch (OperationCanceledException)
                 {
@@ -460,7 +501,29 @@ public sealed partial class MainForm
         {
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
-                throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+            {
+                // A one-message diagnostic commonly targets the authenticated mailbox.
+                // Never silently send: ask first, then visibly populate the recipient field.
+                var suggestedRecipient = IsValidEmailSuggestion(txtUser.Text)
+                    ? txtUser.Text.Trim()
+                    : IsValidEmailSuggestion(txtFrom.Text) ? txtFrom.Text.Trim() : null;
+
+                if (suggestedRecipient is null)
+                    throw new InvalidOperationException(
+                        "Pole Komu na kartě E-mail je prázdné a z SMTP uživatele ani adresy Od nelze bezpečně odvodit příjemce. Zadej e-mailovou adresu, na kterou smíš testovací zprávu odeslat.");
+
+                var useSuggestedRecipient = MessageBox.Show(
+                    $"Pole Komu je prázdné. Chceš jako příjemce jediné testovací zprávy použít svou SMTP adresu?\n\n{suggestedRecipient}\n\nAdresa se před odesláním doplní do pole Komu a ještě ji uvidíš v potvrzení odeslání.",
+                    "Doplnit příjemce testovací zprávy",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (useSuggestedRecipient != DialogResult.Yes)
+                    return;
+
+                txtTo.Text = suggestedRecipient;
+                configured = BuildOptions();
+            }
             EnsureRealSmtpConfiguration(configured);
 
             // This is a single-message diagnostic, not a load test. Keep the selected
@@ -617,8 +680,19 @@ public sealed partial class MainForm
                 cts.Token);
             var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
-                    report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            {
+                if (!string.IsNullOrEmpty(report.Error) && report.FailureKind.HasValue)
+                {
+                    var details = string.Join(Environment.NewLine, report.Steps);
+                    ShowErrorWithCopy(result, "SMTP / diagnostika", details,
+                        GuiErrorCodes.ForTransportFailure(report.FailureKind.Value));
+                }
+                else
+                {
+                    MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
+                        report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+            }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -627,7 +701,8 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(),
+                    GuiErrorCodes.ForTransportFailure(TransportFailureClassifier.Classify(ex)));
         }
         finally
         {

@@ -20,8 +20,14 @@ public static class ProxyClientFactory
 {
     public static IProxyClient? Create(ProxyEndpoint? ep)
     {
-        if (ep is null || ep.Type == ProxyType.None || string.IsNullOrWhiteSpace(ep.Host))
+        if (ep is null)
             return null;
+        if (ep.Type == ProxyType.None)
+            throw new ArgumentException("Proxy type None is not a usable proxy endpoint.", nameof(ep));
+        if (string.IsNullOrWhiteSpace(ep.Host))
+            throw new ArgumentException("Proxy host is required.", nameof(ep));
+        if (ep.Port is < 1 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(ep), "Proxy port must be 1–65535.");
 
         NetworkCredential? cred = string.IsNullOrEmpty(ep.Username)
             ? null
@@ -38,7 +44,7 @@ public static class ProxyClientFactory
             ProxyType.Socks5 => cred is null
                 ? new Socks5Client(ep.Host, ep.Port)
                 : new Socks5Client(ep.Host, ep.Port, cred),
-            _ => null
+            _ => throw new ArgumentOutOfRangeException(nameof(ep), "Unsupported proxy type.")
         };
     }
 
@@ -108,13 +114,13 @@ public static class ProxyClientFactory
             return true;
         }
         // type:host:port
-        if (bits.Length == 3 && Enum.TryParse<ProxyType>(bits[0], true, out var t3) && int.TryParse(bits[2], out var port3))
+        if (bits.Length == 3 && Enum.TryParse<ProxyType>(bits[0], true, out var t3) && t3 != ProxyType.None && int.TryParse(bits[2], out var port3))
         {
             ep = new ProxyEndpoint(t3, bits[1], port3);
             return true;
         }
         // type:host:port:user:pass
-        if (bits.Length >= 5 && Enum.TryParse<ProxyType>(bits[0], true, out var t5) && int.TryParse(bits[2], out var port5))
+        if (bits.Length >= 5 && Enum.TryParse<ProxyType>(bits[0], true, out var t5) && t5 != ProxyType.None && int.TryParse(bits[2], out var port5))
         {
             ep = new ProxyEndpoint(t5, bits[1], port5, bits[3], string.Join(':', bits.Skip(4)));
             return true;

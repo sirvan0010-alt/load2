@@ -54,7 +54,28 @@ Source IP určuje lokální adresu, ze které počítač navazuje spojení. IPv4
 
 **Direct MX delivery** posílá přímo na MX cílové domény místo použití SMTP relay. Vyžaduje funkční DNS, povolený odchozí port 25 a souhlas s testováním cílového serveru. Není to automaticky vhodná volba pro veřejné domény.
 
-## 4. Účty SMTP (multi-account)
+## 4. SOCKS5 / Tor režim
+
+Tor režim je volitelná síťová vrstva pro SMTP a webhook komunikaci. Aplikace Tor sama neinstaluje ani nespouští.
+
+1. Spusť **Tor Browser** nebo samostatnou službu Tor.
+2. Na záložce proxy ponech host `127.0.0.1`. Běžný SOCKS5 port služby Tor je `9050`, Tor Browser obvykle používá `9150`.
+3. Klikni na **Ověřit Tor a výstupní IP**. Aplikace zkusí aktuální port a běžné porty 9050/9150. Při úspěchu zobrazí Tor exit IP a zapne přísný režim.
+4. Ponech zaškrtnuté **Vyžadovat ověřený Tor (bez přímého fallbacku)** a spusť test.
+
+Před každým skutečným během aplikace ověří výstupní IP přes Tor Project check API. Pokud SOCKS5 není dostupná nebo výstup není potvrzen jako Tor exit node, běh se nespustí. Při pozdějším výpadku proxy se SMTP spojení ukončí chybou; aplikace se nepřepne na přímé připojení.
+
+V přísném Tor režimu:
+
+- SMTP spojení i SMTP hostname DNS prochází přes SOCKS5; hostname se předává proxy, nikoli místnímu DNS resolveru.
+- Webhook notifikace používají stejný SOCKS5 tunel a hostname se lokálně nepřekládá.
+- Lokální SPF/DMARC, MX discovery, RBL a IMAP mailbox monitoring jsou vypnuté, protože tyto funkce zatím nepoužívají SMTP SOCKS5 tunel.
+- Direct MX, seznam/rotace proxy a rotace zdrojových IP jsou zakázané. Volitelná lokální Source IP může určit adresu, ze které se počítač připojí k lokálnímu SOCKS5 endpointu.
+- Neveřejné a lokální webhook cíle jsou odmítnuty.
+
+Tor režim nemění SMTP účet ani identitu odesílatele. Poskytovatel stále vidí přihlašovací účet a příjemce vidí adresu From. Někteří poskytovatelé navíc Tor exit IP odmítají nebo omezují. Tor režim není systémový firewall ani globální anonymizace počítače; ostatní programy na počítači přes něj automaticky nekomunikují.
+
+## 5. Účty SMTP (multi-account)
 
 Záložka **Účty SMTP** umožňuje přidat více SMTP účtů. Každý záznam obsahuje ID, host, port, TLS, volbu autentizace, uživatelské jméno, heslo a stav Enabled. Pomocí tlačítek **Přidat**, **Upravit**, **Odebrat** a **Zap/Vyp** spravuješ seznam.
 
@@ -66,7 +87,7 @@ Používej pouze účty a SMTP servery, jejichž zatěžování je výslovně po
 
 Při běžném uložení profilu se hesla všech SMTP účtů odstraní. Po načtení profilu je proto nutné hesla znovu doplnit. Do běhu se přenášejí pouze povolené účty; vypnuté položky se do konfigurace běhu ani profilu nezahrnují.
 
-## 5. Zpráva
+## 6. Zpráva
 
 Na záložce **Zpráva** nastav:
 
@@ -78,7 +99,7 @@ Na záložce **Zpráva** nastav:
 
 Inline obrázky lze v HTML odkazovat pomocí `{{cid:nazev_souboru_bez_pripony}}`. Náhodné přílohy mají bezpečnostní předvýpočet spotřeby RAM. Hodnota velikosti 0 znamená Auto; ruční nebezpečná kombinace se odmítne před velkou alokací.
 
-## 6. Test – počet, paralelismus a interval
+## 7. Test – počet, paralelismus a interval
 
 - **Počet zpráv**: požadovaný počet logických zpráv.
 - **Paralelismus**: maximální počet souběžných workerů (1–20). Není to počet zpráv za sekundu.
@@ -112,7 +133,7 @@ Zapínej ji pouze tehdy, když první příjemce je výslovně autorizovaná tes
 
 Dávkový režim rozdělí zprávy do skupin a vloží pauzu mezi dávkami. Je vhodný pro simulaci postupného zatěžování; nenahrazuje globální interval ani Capacity limity.
 
-## 7. Tempo a ochrana
+## 8. Tempo a ochrana
 
 Záložka **Tempo a ochrana** obsahuje předvolby poskytovatele a další limity:
 
@@ -128,7 +149,7 @@ Záložka **Tempo a ochrana** obsahuje předvolby poskytovatele a další limity
 
 Tyto volby slouží k řízenému a autorizovanému testování. Nepoužívej je k obcházení pravidel, reputačních kontrol nebo limitů veřejných poskytovatelů.
 
-## 8. Pokročilé
+## 9. Pokročilé
 
 - **Adaptive concurrency** začíná na nastaveném maximu, při dočasném tlaku serveru nebo růstu latence souběžnost snižuje a po zdravých oknech ji může postupně obnovit nejvýše na nastavené maximum. Permanentní 5xx politika sama o sobě neznamená přetížení.
 - **Circuit breaker** zastaví další pokusy po dosažení nastaveného prahu selhání.
@@ -136,7 +157,7 @@ Tyto volby slouží k řízenému a autorizovanému testování. Nepoužívej je
 - **Auto-restart** může opakovat nevyřešené části testu. Sleduj počet pokusů a výsledky; již přijaté logické zprávy se díky delivery ledgeru znovu neposílají.
 - **SMTP session log** je ve výchozím stavu vypnutý. Při zapnutí může zaznamenat adresy, hlavičky a obsah. Aktivní soubor má limit 8 MiB a uchovávají se nejvýše tři zálohy.
 
-## 9. Mailbox Monitor (IMAP)
+## 10. Mailbox Monitor (IMAP)
 
 IMAP je volitelný. Typicky se používá port 993 s ImplicitTls nebo port 143 se StartTls. Přihlašovací údaje IMAP zůstávají pouze v paměti aplikace a neukládají se do profilu.
 
@@ -144,7 +165,7 @@ Po kliknutí na **Test / Obnovit** se načtou dostupné údaje kvóty a složek.
 
 Volba **Zastavit SMTP test při dosažení kvóty** používá pouze skutečnou serverem oznámenou IMAP STORAGE kvótu. Kontrola probíhá po 30 sekundách, takže mezi kontrolami může dojít k překročení limitu. Bez skutečné kvóty se automatické zastavení ani mailbox feedback neaktivují.
 
-## 10. Grafy a průběh
+## 11. Grafy a průběh
 
 Na záložce **Test** jsou dva grafické pohledy:
 
@@ -155,7 +176,7 @@ Vzorky grafů se omezují přibližně na jeden za sekundu a historie je omezena
 
 IMAP změna je nezávislé pozorování schránky. Může ji ovlivnit jiný klient nebo souběžná aktivita a není důkazem, že zprávy uložil právě tento test. Chybějící IMAP data se zobrazují jako mezera, nikoli nula.
 
-## 11. Profily, logy a export
+## 12. Profily, logy a export
 
 - **Uložit profil / Načíst profil** pracuje s JSON konfigurací. Hesla a IMAP přihlašovací údaje do profilu neukládej.
 - **Export report JSON** exportuje poslední běh; report neobsahuje hesla a známé tajné hodnoty. Před sdílením jej přesto zkontroluj.
@@ -163,6 +184,6 @@ IMAP změna je nezávislé pozorování schránky. Může ji ovlivnit jiný klie
 - SMTP grid uchovává nejvýše 1 000 řádků.
 - Volitelný SMTP session log se rotuje při 8 MiB a uchovává nejvýše tři zálohy.
 
-## 12. Zastavení a zavření
+## 13. Zastavení a zavření
 
 Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nelze vzít zpět. Při zavírání aplikace během běhu program nejprve požádá o zrušení a čeká na dokončení úklidu běžících operací.

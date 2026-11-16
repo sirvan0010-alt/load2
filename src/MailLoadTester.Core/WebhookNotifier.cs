@@ -1,8 +1,10 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace MailLoadTester;
 
@@ -10,35 +12,30 @@ public static class WebhookNotifier
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
-    public static async Task NotifyAsync(string url, MailTestResult result, CancellationToken ct)
+    public static async Task NotifyAsync(
+        string url,
+        MailTestResult result,
+        CancellationToken ct,
+        MailKit.Net.Proxy.IProxyClient? proxyClient = null,
+        bool requireProxy = false)
     {
-        var destination = await WebhookSecurityPolicy.ResolveSafeDestinationAsync(url, ct).ConfigureAwait(false);
+        Uri destinationUri;
+        Func<SocketsHttpConnectionContext, CancellationToken, ValueTask<Stream>> connectCallback;
 
-        var json = JsonSerializer.Serialize(new
+        if (requireProxy)
         {
-            app = "MailLoadTester",
-            version = AppVersion.Current,
-            timestamp = DateTime.UtcNow,
-            result.Requested,
-            result.Sent,
-            result.Failed,
-            result.Cancelled,
-            result.Elapsed,
-            result.ThroughputPerSec,
-            result.AvgLatencyMs,
-            result.P95LatencyMs,
-            result.Retries,
-            result.Smtp4xx,
-            result.Smtp5xx,
-            result.LastError
-        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var requiredProxy = proxyClient
+                ?? throw new InvalidOperationException("Strict Tor webhook mode requires a SOCKS5 proxy client; direct fallback is forbidden.");
 
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var handler = new SocketsHttpHandler
+            destinationUri = WebhookSecurityPolicy.ValidateTorDestination(url);
+            connectCallback = (context, token) =>
+                TorProxyVerifier.ConnectThroughProxyAsync(requiredProxy, context.DnsEndPoint, token);
+        }
+        else
         {
-            AllowAutoRedirect = false,
-            ConnectTimeout = Timeout,
-            ConnectCallback = async (context, cancellationToken) =>
+            var destination = await WebhookSecurityPolicy.ResolveSafeDestinationAsync(url, ct).ConfigureAwait(false);
+            destinationUri = destination.Uri;
+            connectCallback = async (context, cancellationToken) =>
             {
                 Exception? last = null;
                 foreach (var address in destination.Addresses)
@@ -68,17 +65,39 @@ public static class WebhookNotifier
                 }
 
                 throw new HttpRequestException("Webhook connection failed.", last);
-            }
+            };
+        }
+
+        var json = JsonSerializer.Serialize(new
+        {
+            app = "MailLoadTester",
+            version = AppVersion.Current,
+            timestamp = DateTime.UtcNow,
+            result.Requested,
+            result.Sent,
+            result.Failed,
+            result.Cancelled,
+            result.Elapsed,
+            result.ThroughputPerSec,
+            result.AvgLatencyMs,
+            result.P95LatencyMs,
+            result.Retries,
+            result.Smtp4xx,
+            result.Smtp5xx,
+            result.LastError
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var handler = new SocketsHttpHandler
+        {
+            UseProxy = false,
+            AllowAutoRedirect = false,
+            ConnectTimeout = Timeout,
+            ConnectCallback = connectCallback
         };
         using var client = new HttpClient(handler) { Timeout = Timeout };
-
-        try
-        {
-            using var response = await client.PostAsync(destination.Uri, content, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-        }
-        catch (OperationCanceledException) { throw; }
-        catch { /* Best effort — don't fail the test if webhook fails */ }
+        using var response = await client.PostAsync(destinationUri, content, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
     }
 }
 
@@ -86,6 +105,28 @@ internal sealed record WebhookDestination(Uri Uri, IReadOnlyList<IPAddress> Addr
 
 internal static class WebhookSecurityPolicy
 {
+    public static Uri ValidateTorDestination(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            throw new ArgumentException("Webhook URL musí být platná absolutní URL.", nameof(url));
+
+        if (uri.Scheme is not ("http" or "https")
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || string.IsNullOrWhiteSpace(uri.Host)
+            || uri.IsLoopback
+            || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "Tor webhook URL musí používat HTTP(S), nesmí obsahovat přihlašovací údaje ani mířit na lokální host.", nameof(url));
+
+        if (IPAddress.TryParse(uri.DnsSafeHost, out var literal) && IsNonPublicAddress(literal))
+            throw new ArgumentException("Tor webhook nesmí mířit na neveřejnou IP adresu.", nameof(url));
+
+        // Deliberately do not resolve hostnames here: the hostname is passed to
+        // SOCKS5 so the Tor exit performs DNS resolution, not the workstation.
+        return uri;
+    }
+
     public static async Task<WebhookDestination> ResolveSafeDestinationAsync(string url, CancellationToken ct)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))

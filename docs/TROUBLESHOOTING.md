@@ -77,3 +77,15 @@ Pokud je zapnutá startup validation, chyba jediné validační zprávy zastaví
 ## Logování
 
 SMTP session log je ve výchozím stavu vypnutý. Při zapnutí může obsahovat adresy, hlavičky a obsah zpráv. Před sdílením logu jej zkontroluj a případné citlivé údaje odstraň.
+
+## Tor / SOCKS5 se nepřipojí
+
+1. Spusť Tor Browser nebo službu Tor ještě před ověřením.
+2. Ověř, že SOCKS5 poslouchá na `127.0.0.1`. Tor Browser obvykle používá port `9150`, samostatná služba Tor obvykle `9050`; tlačítko ověření zkusí oba porty.
+3. Pokud používáš vlastní port, nastav jej v proxy konfiguraci a ověření zopakuj.
+4. Použij IP adresu loopback, nikoli název `localhost` nebo vzdálený proxy host.
+5. Pokud check API nevrátí `IsTor=true`, přísný režim zůstane vypnutý a test se nesmí spustit.
+
+Při výpadku Tor se SMTP spojení nesmí přepnout na přímou síť. Zkontroluj stav Tor Browseru/služby a znovu ověř výstupní IP. Někteří SMTP poskytovatelé mohou Tor exit IP odmítat; při 5.7.x odmítnutí respektuj politiku poskytovatele, nepřecházej na rotaci IP.
+
+V přísném Tor režimu jsou IMAP monitoring, lokální SPF/DMARC, MX discovery a RBL lookup pozastavené. Webhook musí být dostupný přes Tor SOCKS5; lokální a neveřejné webhook cíle jsou odmítnuty.

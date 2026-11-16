@@ -155,6 +155,12 @@ public sealed partial class MainForm
 
     private async Task DiscoverRecipientMxAsync()
     {
+        if (chkRequireTor?.Checked == true)
+        {
+            lblSmtpDiscovery.Text = "MX discovery is disabled in strict Tor mode because it currently uses system DNS/direct SMTP.";
+            return;
+        }
+
         var recipient = txtTo.Text
             .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(Validation.IsValidEmail);
@@ -196,6 +202,12 @@ public sealed partial class MainForm
 
     private async Task DiscoverSubmissionEndpointAsync()
     {
+        if (chkRequireTor?.Checked == true)
+        {
+            lblSmtpDiscovery.Text = "Direct SMTP discovery is disabled in strict Tor mode. Use the proxy-aware SMTP connection test instead.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(txtHost.Text))
         {
             lblSmtpDiscovery.Text = "Zadej SMTP host v kartě SMTP Server.";
@@ -259,6 +271,13 @@ public sealed partial class MainForm
 
     private void StartMailboxMonitorPolling()
     {
+        if (chkRequireTor?.Checked == true)
+        {
+            StopMailboxMonitorPolling();
+            lblMailboxStatus.Text = "IMAP mailbox monitoring is paused in strict Tor mode because it does not use the SMTP SOCKS5 tunnel.";
+            return;
+        }
+
         if (!IsMailboxMonitorConfigured())
         {
             if (chkMailboxStopAtQuota.Checked)
@@ -271,6 +290,8 @@ public sealed partial class MainForm
 
     private void EnsureMailboxMonitorTimerStarted()
     {
+        if (chkRequireTor?.Checked == true)
+            return;
         _mailboxMonitorTimer ??= new System.Windows.Forms.Timer();
         _mailboxMonitorTimer.Interval = 30_000;
         _mailboxMonitorTimer.Tick -= MailboxMonitorTimer_Tick;
@@ -286,6 +307,14 @@ public sealed partial class MainForm
 
     private async Task<MailboxMonitorSnapshot?> RefreshMailboxMonitorAsync(bool enforceQuotaStop = true)
     {
+        if (chkRequireTor?.Checked == true)
+        {
+            StopMailboxMonitorPolling();
+            if (lblMailboxStatus is not null && !IsDisposed)
+                lblMailboxStatus.Text = "IMAP mailbox monitoring is paused in strict Tor mode.";
+            return null;
+        }
+
         if (_mailboxRefreshInProgress || IsDisposed || _closeApproved)
             return null;
 

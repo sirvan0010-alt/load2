@@ -17,6 +17,8 @@ public sealed partial class MainForm : Form
 
     // SMTP tab
     private ComboBox txtHost = null!;
+    private ComboBox cmbSmtpProvider = null!;
+    private Label lblSmtpProviderGuidance = null!;
     private NumericUpDown numPort = null!;
     private ComboBox cmbSecurity = null!;
     private CheckBox chkIgnoreCert = null!;
@@ -59,6 +61,7 @@ public sealed partial class MainForm : Form
 
     // Proxy tab
     private CheckBox chkSocks5 = null!;
+    private CheckBox chkRequireTor = null!;
     private TextBox txtProxyHost = null!;
     private NumericUpDown numProxyPort = null!;
     private TextBox txtProxyUser = null!, txtProxyPass = null!;
@@ -180,7 +183,12 @@ public sealed partial class MainForm : Form
         AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
-        txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
+        txtUser.TextChanged += (_, _) =>
+        {
+            SyncFromAddressSuggestions();
+            UpdateSmtpProviderGuidance();
+        };
+        txtHost.TextChanged += (_, _) => UpdateSmtpProviderGuidance();
         txtFrom.TextChanged += (_, _) => SyncFromAddressSuggestions(addCurrentAddress: true, copyLoginWhenEmpty: false);
         txtTo.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
         txtCc.TextChanged += (_, _) => RefreshEmailAddressSuggestions();
@@ -188,6 +196,7 @@ public sealed partial class MainForm : Form
         WireEvents();
         SetDefaults();
         SyncFromAddressSuggestions();
+        UpdateSmtpProviderGuidance();
         UpdateSafetyBanner();
         ApplyTheme(false);
         FormClosing += MainForm_FormClosing;

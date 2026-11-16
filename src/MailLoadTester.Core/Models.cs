@@ -109,7 +109,9 @@ public sealed record MailTestOptions(
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
     int DurationSeconds = 0,
     /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
-    CapacityRunLimits? CapacityRun = null);
+    CapacityRunLimits? CapacityRun = null,
+    /// <summary>Require a verified Tor exit through a local SOCKS5 endpoint; never fall back to direct SMTP.</summary>
+    bool RequireTor = false);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
@@ -345,7 +347,11 @@ public static class Validation
             throw new ArgumentException("Display name je příliš dlouhý (max 200 znaků).");
         if (!string.IsNullOrWhiteSpace(o.ProxyList))
         {
-            try { _ = ProxyClientFactory.ParseList(o.ProxyList); }
+            try
+            {
+                if (ProxyClientFactory.ParseList(o.ProxyList).Count == 0)
+                    throw new ArgumentException("seznam neobsahuje žádný platný proxy endpoint.");
+            }
             catch (Exception ex) { throw new ArgumentException("ProxyList: " + ex.Message); }
         }
 
@@ -355,6 +361,25 @@ public static class Validation
                 throw new ArgumentException("SOCKS5 proxy host je povinný.");
             if (o.ProxyPort is < 1 or > 65535)
                 throw new ArgumentException("SOCKS5 proxy port musí být 1–65535.");
+        }
+        if ((o.UseSocks5Proxy || !string.IsNullOrWhiteSpace(o.ProxyList))
+            && (!string.IsNullOrWhiteSpace(o.Ipv4Rotation) || !string.IsNullOrWhiteSpace(o.Ipv6Prefix)))
+            throw new ArgumentException("Rotace zdrojových IP adres není kompatibilní s proxy. Proxy určuje vzdálenou síťovou cestu; případnou lokální Source IP lze nastavit samostatně.");
+        if (o.RequireTor)
+        {
+            if (!o.UseSocks5Proxy)
+                throw new ArgumentException("Režim Tor vyžaduje zapnutou SOCKS5 proxy.");
+            if (!string.IsNullOrWhiteSpace(o.ProxyList))
+                throw new ArgumentException("Režim Tor nepodporuje rotaci proxy. Použij jeden lokální Tor SOCKS5 endpoint.");
+            if (!System.Net.IPAddress.TryParse(o.ProxyHost, out var torProxyIp)
+                || !System.Net.IPAddress.IsLoopback(torProxyIp))
+                throw new ArgumentException("Režim Tor vyžaduje lokální SOCKS5 endpoint na 127.0.0.1 nebo ::1.");
+            if (!string.IsNullOrWhiteSpace(o.Ipv4Rotation) || !string.IsNullOrWhiteSpace(o.Ipv6Prefix))
+                throw new ArgumentException("V režimu Tor nelze současně používat rotaci zdrojových IP adres.");
+            if (o.DirectMxDelivery)
+                throw new ArgumentException("Direct MX obchází SMTP proxy a v režimu Tor je zakázán.");
+            if (o.CheckRblBeforeStart)
+                throw new ArgumentException("RBL kontrola používá systémové DNS a v režimu Tor je zakázána.");
         }
         if (o.CircuitBreakerThreshold is < 1 or > 50)
             throw new ArgumentException("Circuit breaker threshold musí být 1–50.");

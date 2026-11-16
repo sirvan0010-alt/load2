@@ -30,13 +30,11 @@ public static class SmtpConnectivityTester
         if (!string.IsNullOrWhiteSpace(o.ProxyList))
         {
             var list = ProxyClientFactory.ParseList(o.ProxyList);
-            if (list.Count > 0)
-            {
-                var proxyClient = ProxyClientFactory.Create(list[0]);
-                if (proxyClient != null)
-                    client.ProxyClient = proxyClient;
-                proxyLabel = list[0].DisplayKey + (list.Count > 1 ? $" (+{list.Count - 1} v seznamu, testuje se první)" : "");
-            }
+            if (list.Count == 0)
+                throw new InvalidOperationException("ProxyList je vyplněný, ale neobsahuje žádný platný proxy endpoint.");
+            client.ProxyClient = ProxyClientFactory.Create(list[0])
+                ?? throw new InvalidOperationException("Proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
+            proxyLabel = list[0].DisplayKey + (list.Count > 1 ? $" (+{list.Count - 1} v seznamu, testuje se první)" : "");
         }
         else if (o.UseSocks5Proxy)
         {
@@ -44,15 +42,28 @@ public static class SmtpConnectivityTester
                 ProxyType.Socks5, o.ProxyHost, o.ProxyPort,
                 string.IsNullOrEmpty(o.ProxyUsername) ? null : o.ProxyUsername,
                 string.IsNullOrEmpty(o.ProxyPassword) ? null : o.ProxyPassword);
-            var proxyClient = ProxyClientFactory.Create(ep);
-            if (proxyClient != null)
-                client.ProxyClient = proxyClient;
+            client.ProxyClient = ProxyClientFactory.Create(ep)
+                ?? throw new InvalidOperationException("SOCKS5 proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
             proxyLabel = ep.DisplayKey;
+        }
+
+        if (o.RequireTor)
+        {
+            var torCheck = await TorProxyVerifier.VerifyAsync(o, ct).ConfigureAwait(false);
+            if (!torCheck.IsTor)
+                throw new InvalidOperationException($"Tor nebyl ověřen. {torCheck.Message}");
         }
 
         var socketOpts = ToSocketOptions(o.Security);
         var localEp = IpBindingHelper.ResolveLocalEndPoint(o.SourceIp, o.IpVersion);
-        if (localEp != null)
+        var configuredProxy = client.ProxyClient;
+        if (configuredProxy is not null)
+        {
+            if (localEp is not null)
+                configuredProxy.LocalEndPoint = localEp;
+            await client.ConnectAsync(o.SmtpHost, o.Port, socketOpts, ct).ConfigureAwait(false);
+        }
+        else if (localEp != null)
         {
             var s = IpBindingHelper.CreateBoundSocket(localEp, o.IpVersion);
             try
