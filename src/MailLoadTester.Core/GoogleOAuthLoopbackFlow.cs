@@ -39,9 +39,22 @@ public sealed class GoogleOAuthLoopbackFlow
 
         try
         {
-            await openBrowser(authorizationUri, timeoutCts.Token).ConfigureAwait(false);
+            // Begin accepting before launching the browser. This avoids a race with
+            // browser launchers and also makes the callback flow deterministic in tests.
+            var acceptTask = listener.AcceptTcpClientAsync(timeoutCts.Token).AsTask();
+            try
+            {
+                await openBrowser(authorizationUri, timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                timeoutCts.Cancel();
+                try { await acceptTask.ConfigureAwait(false); }
+                catch { /* preserve the browser-launch exception */ }
+                throw;
+            }
 
-            using var tcpClient = await listener.AcceptTcpClientAsync(timeoutCts.Token).ConfigureAwait(false);
+            using var tcpClient = await acceptTask.ConfigureAwait(false);
             tcpClient.NoDelay = true;
             await using var stream = tcpClient.GetStream();
 
@@ -91,6 +104,9 @@ public sealed class GoogleOAuthLoopbackFlow
 
         if (!Uri.TryCreate("http://127.0.0.1" + requestTarget, UriKind.Absolute, out var callbackUri))
             throw new InvalidOperationException("Google vrátil neplatnou OAuth odpověď.");
+
+        if (!callbackUri.AbsolutePath.Equals("/", StringComparison.Ordinal))
+            throw new InvalidOperationException("Google vrátil neočekávanou cestu lokální OAuth odpovědi.");
 
         var parameters = ParseQuery(callbackUri.Query);
         if (!parameters.TryGetValue("state", out var returnedState)
