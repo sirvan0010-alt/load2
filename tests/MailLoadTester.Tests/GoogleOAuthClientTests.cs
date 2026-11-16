@@ -96,6 +96,20 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
+    public void TokenSet_ToStringNeverExposesSecrets()
+    {
+        var tokens = new GoogleOAuthTokenSet(
+            "access-secret-value", "refresh-secret-value", DateTimeOffset.UtcNow,
+            "Bearer", GoogleOAuthClient.DefaultScopes);
+
+        var formatted = tokens.ToString();
+
+        Assert.DoesNotContain("access-secret-value", formatted);
+        Assert.DoesNotContain("refresh-secret-value", formatted);
+        Assert.Contains("[REDACTED]", formatted);
+    }
+
+    [Fact]
     public async Task GetUser_RequiresVerifiedEmail()
     {
         using var http = new HttpClient(new StubHandler(_ =>
