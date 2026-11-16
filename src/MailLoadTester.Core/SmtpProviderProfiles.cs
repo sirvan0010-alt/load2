@@ -10,28 +10,29 @@ public sealed record SmtpProviderProfile(
     string Host,
     int Port,
     SmtpSecurity Security,
+    SmtpAuthMethod AuthMethod,
     string Guidance);
 
 public static class SmtpProviderProfiles
 {
     public static IReadOnlyList<SmtpProviderProfile> All { get; } =
     [
-        new("Gmail", "Gmail / Google Workspace", "smtp.gmail.com", 587, SmtpSecurity.StartTls,
-            "Použij celou e-mailovou adresu. Google může vyžadovat heslo aplikace nebo OAuth 2.0; aplikace sama OAuth token nezískává."),
-        new("Microsoft365", "Microsoft 365", "smtp.office365.com", 587, SmtpSecurity.StartTls,
-            "SMTP AUTH musí být povolené pro organizaci i schránku. Microsoft doporučuje OAuth 2.0; samotné heslo nemusí fungovat."),
-        new("Outlook", "Outlook.com / Hotmail", "smtp-mail.outlook.com", 587, SmtpSecurity.StartTls,
-            "Použij celou e-mailovou adresu. Způsob přihlášení závisí na zabezpečení účtu Microsoft."),
-        new("Seznam", "Seznam.cz / Email.cz", "smtp.seznam.cz", 465, SmtpSecurity.ImplicitTls,
-            "Seznam uvádí port 465 se SSL/TLS. Port 25 bez šifrování nepoužívej."),
-        new("Yahoo", "Yahoo Mail", "smtp.mail.yahoo.com", 465, SmtpSecurity.ImplicitTls,
-            "Yahoo podporuje SMTP přes SSL/TLS; obvykle je potřeba heslo aplikace."),
-        new("iCloud", "Apple iCloud Mail", "smtp.mail.me.com", 587, SmtpSecurity.StartTls,
-            "Použij Apple ID e-mail a heslo pro konkrétní aplikaci."),
-        new("Zoho", "Zoho Mail", "smtp.zoho.com", 587, SmtpSecurity.StartTls,
-            "Použij přihlašovací údaje schránky; u účtů s vícefaktorovým ověřením může být nutné heslo aplikace."),
-        new("Fastmail", "Fastmail", "smtp.fastmail.com", 587, SmtpSecurity.StartTls,
-            "Použij přihlašovací údaje nebo heslo aplikace podle nastavení účtu.")
+        new("Gmail", "Gmail / Google Workspace", "smtp.gmail.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
+            "Použij celou e-mailovou adresu a heslo aplikace, případně OAuth 2.0 access token. Aplikace sama OAuth token nezískává."),
+        new("Microsoft365", "Microsoft 365", "smtp.office365.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.OAuth2,
+            "SMTP AUTH musí být povolené pro organizaci i schránku. Microsoft doporučuje OAuth 2.0. Do pole Heslo vlož platný access token; aplikace jej sama nezískává."),
+        new("Outlook", "Outlook.com / Hotmail", "smtp-mail.outlook.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.OAuth2,
+            "Outlook.com vyžaduje Modern Auth / OAuth2. Do pole Heslo vlož platný access token; aplikace jej sama nezískává."),
+        new("Seznam", "Seznam.cz / Email.cz", "smtp.seznam.cz", 465, SmtpSecurity.ImplicitTls, SmtpAuthMethod.Auto,
+            "Seznam uvádí port 465 se SSL/TLS a vyžaduje SMTP autentizaci. Port 25 bez šifrování nepoužívej."),
+        new("Yahoo", "Yahoo Mail", "smtp.mail.yahoo.com", 465, SmtpSecurity.ImplicitTls, SmtpAuthMethod.Auto,
+            "Yahoo podporuje SMTP přes SSL/TLS a vyžaduje autentizaci; obvykle je potřeba heslo aplikace."),
+        new("iCloud", "Apple iCloud Mail", "smtp.mail.me.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
+            "Použij celou iCloud e-mailovou adresu a heslo pro konkrétní aplikaci."),
+        new("Zoho", "Zoho Mail (osobní / standardní)", "smtp.zoho.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
+            "U placených doménových účtů se může lišit server (např. smtppro.zoho.com) i datacentrum. Ověř údaje ve svém Zoho účtu; port 465/SSL je také podporován."),
+        new("Fastmail", "Fastmail", "smtp.fastmail.com", 465, SmtpSecurity.ImplicitTls, SmtpAuthMethod.Plain,
+            "Fastmail vyžaduje heslo aplikace a uvádí autentizaci PLAIN. Alternativně lze použít port 587 se STARTTLS.")
     ];
 
     public static SmtpProviderProfile? Find(string id) =>
@@ -54,7 +55,7 @@ public static class SmtpProviderProfiles
             Port = profile.Port,
             Security = profile.Security,
             UseAuthentication = true,
-            AuthMethod = SmtpAuthMethod.Auto
+            AuthMethod = profile.AuthMethod
         };
     }
 }
