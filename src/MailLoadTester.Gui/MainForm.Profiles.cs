@@ -100,6 +100,7 @@ public sealed partial class MainForm
             chkTestMode.Checked = o.TestMode;
             txtAllowedDomains.Text = o.AllowedDomains;
             chkSocks5.Checked = o.UseSocks5Proxy;
+            chkRequireTor.Checked = o.RequireTor;
             txtProxyHost.Text = o.ProxyHost;
             if (txtProxyList != null) txtProxyList.Text = o.ProxyList ?? "";
             _idleHealthCheckSeconds = Math.Clamp(o.IdleConnectionHealthCheckSeconds, 0, 86_400);
