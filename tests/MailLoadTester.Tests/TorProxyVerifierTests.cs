@@ -1,4 +1,7 @@
 using System.IO;
+using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using MailKit.Net.Proxy;
 
@@ -53,11 +56,44 @@ public sealed class TorProxyVerifierTests
     }
 
     [Fact]
-    public void SmtpHostnamesRemainHostnamesForRemoteSocksDnsResolution()
+    public async Task ProxyConnectReceivesOriginalHostnameForRemoteDnsResolution()
     {
-        Assert.Equal(
-            Socks5Client.Socks5AddressType.Domain,
-            Socks5Client.GetAddressType("smtp.gmail.com", out _));
+        var proxy = new RecordingProxyClient();
+        using var stream = await TorProxyVerifier.ConnectThroughProxyAsync(
+            proxy, new DnsEndPoint("smtp.gmail.com", 587), CancellationToken.None);
+
+        Assert.Equal("smtp.gmail.com", proxy.LastHost);
+        Assert.Equal(587, proxy.LastPort);
+    }
+
+    private sealed class RecordingProxyClient : IProxyClient
+    {
+        public NetworkCredential? ProxyCredentials => null;
+        public string ProxyHost => "127.0.0.1";
+        public int ProxyPort => 9050;
+        public IPEndPoint? LocalEndPoint { get; set; }
+        public string? LastHost { get; private set; }
+        public int LastPort { get; private set; }
+
+        public Stream Connect(string host, int port, CancellationToken cancellationToken = default)
+        {
+            LastHost = host;
+            LastPort = port;
+            return new MemoryStream();
+        }
+
+        public Task<Stream> ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
+        {
+            LastHost = host;
+            LastPort = port;
+            return Task.FromResult<Stream>(new MemoryStream());
+        }
+
+        public Stream Connect(string host, int port, int timeout, CancellationToken cancellationToken = default)
+            => Connect(host, port, cancellationToken);
+
+        public Task<Stream> ConnectAsync(string host, int port, int timeout, CancellationToken cancellationToken = default)
+            => ConnectAsync(host, port, cancellationToken);
     }
 
     [Fact]
