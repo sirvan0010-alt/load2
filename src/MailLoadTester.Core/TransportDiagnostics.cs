@@ -182,12 +182,10 @@ public static class TransportDiagnostics
                 if (!string.IsNullOrWhiteSpace(options.ProxyList))
                 {
                     var list = ProxyClientFactory.ParseList(options.ProxyList);
-                    if (list.Count > 0)
-                    {
-                        var proxy = ProxyClientFactory.Create(list[0]);
-                        if (proxy != null)
-                            client.ProxyClient = proxy;
-                    }
+                    if (list.Count == 0)
+                        throw new InvalidOperationException("ProxyList je vyplněný, ale neobsahuje žádný platný proxy endpoint.");
+                    client.ProxyClient = ProxyClientFactory.Create(list[0])
+                        ?? throw new InvalidOperationException("Proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
                 }
                 else if (options.UseSocks5Proxy && !string.IsNullOrWhiteSpace(options.ProxyHost))
                 {
@@ -195,9 +193,8 @@ public static class TransportDiagnostics
                         ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
                         string.IsNullOrEmpty(options.ProxyUsername) ? null : options.ProxyUsername,
                         string.IsNullOrEmpty(options.ProxyPassword) ? null : options.ProxyPassword);
-                    var proxy = ProxyClientFactory.Create(ep);
-                    if (proxy != null)
-                        client.ProxyClient = proxy;
+                    client.ProxyClient = ProxyClientFactory.Create(ep)
+                        ?? throw new InvalidOperationException("SOCKS5 proxy klient nebyl vytvořen; přímé připojení je zakázáno.");
                 }
 
                 var socket = SmtpConnectivityTester.ToSocketOptions(options.Security);
