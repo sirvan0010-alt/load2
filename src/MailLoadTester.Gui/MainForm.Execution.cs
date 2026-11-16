@@ -432,8 +432,25 @@ public sealed partial class MainForm
             {
                 try
                 {
-                    await WebhookNotifier.NotifyAsync(txtWebhookUrl.Text, result, _cts?.Token ?? CancellationToken.None);
-                    AppendLog("Webhook notifikace odeslána.", Color.LightGreen);
+                    var webhookToken = _cts?.Token ?? CancellationToken.None;
+                    MailKit.Net.Proxy.IProxyClient? webhookProxy = null;
+                    if (options.RequireTor)
+                    {
+                        var torCheck = await TorProxyVerifier.VerifyAsync(options, webhookToken);
+                        if (!torCheck.IsTor)
+                            throw new InvalidOperationException($"Tor nebyl ověřen pro webhook. {torCheck.Message}");
+                        webhookProxy = ProxyClientFactory.Create(new ProxyEndpoint(
+                            ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
+                            string.IsNullOrWhiteSpace(options.ProxyUsername) ? null : options.ProxyUsername,
+                            string.IsNullOrWhiteSpace(options.ProxyPassword) ? null : options.ProxyPassword))
+                            ?? throw new InvalidOperationException("Tor SOCKS5 klient nebyl vytvořen; přímé webhook spojení je zakázáno.");
+                    }
+
+                    await WebhookNotifier.NotifyAsync(
+                        txtWebhookUrl.Text, result, webhookToken, webhookProxy, options.RequireTor);
+                    AppendLog(options.RequireTor
+                        ? "Webhook notifikace odeslána přes ověřený Tor SOCKS5 tunel."
+                        : "Webhook notifikace odeslána.", Color.LightGreen);
                 }
                 catch (OperationCanceledException)
                 {
