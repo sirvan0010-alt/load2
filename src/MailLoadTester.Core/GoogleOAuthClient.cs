@@ -205,7 +205,13 @@ public sealed record GoogleOAuthTokenSet(
     string RefreshToken,
     DateTimeOffset ExpiresAt,
     string TokenType,
-    string Scope);
+    string Scope)
+{
+    // Records generate a ToString() containing every property by default. Tokens
+    // must remain redacted even if a future diagnostic accidentally formats this object.
+    public override string ToString() =>
+        $"GoogleOAuthTokenSet {{ AccessToken = [REDACTED], RefreshToken = [REDACTED], ExpiresAt = {ExpiresAt:O}, TokenType = {TokenType}, Scope = {Scope} }}";
+}
 
 public sealed record GoogleOAuthUser(string Subject, string Email, string Name);
 
