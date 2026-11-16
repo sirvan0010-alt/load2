@@ -103,10 +103,20 @@ public sealed partial class MainForm
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+        flConn.Controls.Add(new Label { Text = "Poskytovatel SMTP:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) });
+        cmbSmtpProvider = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
+        cmbSmtpProvider.Items.AddRange(SmtpProviderProfiles.All.Select(p => (object)p.DisplayName).ToArray());
+        flConn.Controls.Add(cmbSmtpProvider);
+        lblSmtpProviderGuidance = new Label
+        {
+            AutoSize = true, MaximumSize = new Size(420, 0), ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 8), Text = "Vyber poskytovatele pro automatické nastavení serveru, portu a TLS. Přihlašovací údaje zadáš samostatně."
+        };
+        flConn.Controls.Add(lblSmtpProviderGuidance);
         txtHost = AddLabeledEditableCombo(flConn, "SMTP Host:",
             ["smtp.seznam.cz", "smtp.gmail.com", "smtp-mail.outlook.com", "smtp.office365.com",
              "smtp.mail.yahoo.com", "smtp.mail.me.com", "smtp.zoho.com", "smtp.zoho.eu", "smtp.fastmail.com"],
-            "Začni psát adresu SMTP serveru nebo vyber poskytovatele z nabídky. Výběr automaticky nastaví běžný port, TLS a zapne SMTP autentizaci. Vše lze ručně změnit.");
+            "SMTP server. Výběr poskytovatele výše nastaví doporučené připojení; server lze ručně upravit.");
         txtHost.SelectionChangeCommitted += (_, _) => ApplySmtpHostPreset();
         txtHost.DropDown += (_, _) => EnsureSmtpHostSuggestionsVisible();
         flConn.Controls.Add(new Label
@@ -149,8 +159,9 @@ public sealed partial class MainForm
         chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
         txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
-        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
+        txtPass = AddLabeledText(flAuth, "Heslo / app-password:", "Heslo SMTP účtu nebo heslo aplikace. U OAuth2 vlož platný access token; aplikace jej sama nezískává.");
         txtPass.PasswordChar = '●';
+        cmbSmtpProvider.SelectionChangeCommitted += (_, _) => ApplySelectedSmtpProviderProfile();
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
         txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
         txtClientCertPass.PasswordChar = '●';
@@ -529,15 +540,15 @@ public sealed partial class MainForm
         var tabPace = new TabPage("Tempo a ochrana") { Padding = new Padding(8) };
         var flPace = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
 
-        var lblPreset = new Label { Text = "Předvolba poskytovatele:", AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
+        var lblPreset = new Label { Text = "Profil tempa a ochrany:", AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
         flPace.Controls.Add(lblPreset);
         cmbProviderPreset = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320 };
         foreach (var p in ProviderPresets.All)
             cmbProviderPreset.Items.Add(p.DisplayName);
         cmbProviderPreset.SelectedIndex = 2; // Standard
         cmbProviderPreset.SelectedIndexChanged += (s, e) => ApplyProviderPreset();
-        toolTip.SetToolTip(lblPreset, "Předvolba upraví několik parametrů tempa a ochrany podle typu cílového SMTP serveru.");
-        toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranu pro daný typ serveru. Poté můžete cokoliv upravit ručně.");
+        toolTip.SetToolTip(lblPreset, "Tento profil upravuje pouze tempo a ochranné limity testu. Server, port a TLS nastavuje profil poskytovatele na záložce SMTP Server.");
+        toolTip.SetToolTip(cmbProviderPreset, "Vybere doporučené tempo a ochranné limity. Nemění SMTP host, port ani přihlašovací údaje.");
         flPace.Controls.Add(cmbProviderPreset);
 
         chkJitter = AddCheckBox(flPace, "Zapnout jitter (± %)", true, "Náhodná odchylka intervalu slouží k modelování nepravidelného provozu v autorizovaném testu. Neobchází antispamové filtry a nezaručuje doručení do Inboxu.");
@@ -876,21 +887,28 @@ public sealed partial class MainForm
 
     private void ApplySmtpHostPreset()
     {
-        var host = txtHost.Text.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(host)) return;
+        var profile = SmtpProviderProfiles.FindByHost(txtHost.Text);
+        if (profile is null) return;
+        ApplySmtpProviderProfile(profile);
+        var index = SmtpProviderProfiles.All.ToList().FindIndex(p => p.Id == profile.Id);
+        if (index >= 0) cmbSmtpProvider.SelectedIndex = index;
+    }
 
-        // Submission defaults for common providers. The operator can still edit
-        // port/security/authentication after selecting a suggestion.
-        if (host is "smtp.seznam.cz" or "smtp.gmail.com" or "smtp-mail.outlook.com"
-            or "smtp.office365.com" or "smtp.mail.yahoo.com" or "smtp.mail.me.com"
-            or "smtp.zoho.com" or "smtp.zoho.eu" or "smtp.fastmail.com")
-        {
-            numPort.Value = 587;
-            cmbSecurity.SelectedItem = "StartTls";
-            chkAuth.Checked = true;
-            if (cmbAuthMethod.SelectedItem is null)
-                cmbAuthMethod.SelectedItem = "Auto";
-        }
+    private void ApplySelectedSmtpProviderProfile()
+    {
+        var index = cmbSmtpProvider.SelectedIndex;
+        if (index < 0 || index >= SmtpProviderProfiles.All.Count) return;
+        ApplySmtpProviderProfile(SmtpProviderProfiles.All[index]);
+    }
+
+    private void ApplySmtpProviderProfile(SmtpProviderProfile profile)
+    {
+        txtHost.Text = profile.Host;
+        numPort.Value = profile.Port;
+        cmbSecurity.SelectedItem = profile.Security.ToString();
+        chkAuth.Checked = true;
+        cmbAuthMethod.SelectedItem = "Auto";
+        lblSmtpProviderGuidance.Text = profile.Guidance;
     }
 
     private NumericUpDown AddLabeledNumeric(Control parent, string label, decimal min, decimal max, decimal value, string tip, int decimalPlaces = 0)
