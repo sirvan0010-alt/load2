@@ -31,6 +31,8 @@ public static class SmtpProviderProfiles
             "Použij celou iCloud e-mailovou adresu a heslo pro konkrétní aplikaci."),
         new("Zoho", "Zoho Mail (osobní / standardní)", "smtp.zoho.com", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
             "U placených doménových účtů se může lišit server (např. smtppro.zoho.com) i datacentrum. Ověř údaje ve svém Zoho účtu; port 465/SSL je také podporován."),
+        new("ZohoEU", "Zoho Mail (EU)", "smtp.zoho.eu", 587, SmtpSecurity.StartTls, SmtpAuthMethod.Auto,
+            "Regionální server pro účty v EU. U placených doménových účtů ověř přesný server a datacentrum v nastavení Zoho."),
         new("Fastmail", "Fastmail", "smtp.fastmail.com", 465, SmtpSecurity.ImplicitTls, SmtpAuthMethod.Plain,
             "Fastmail vyžaduje heslo aplikace a uvádí autentizaci PLAIN. Alternativně lze použít port 587 se STARTTLS.")
     ];
