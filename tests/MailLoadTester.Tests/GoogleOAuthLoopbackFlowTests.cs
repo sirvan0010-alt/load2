@@ -85,7 +85,7 @@ public sealed class GoogleOAuthLoopbackFlowTests
         }));
         var oauth = new GoogleOAuthClient("123456789.apps.googleusercontent.com", http);
         var flow = new GoogleOAuthLoopbackFlow();
-        TcpClient? callbackClient = null;
+        System.Net.Sockets.TcpClient? callbackClient = null;
         StreamReader? callbackReader = null;
         Task<string>? browserResponseTask = null;
         GoogleOAuthAuthorizationResult result;
@@ -99,7 +99,7 @@ public sealed class GoogleOAuthLoopbackFlowTests
                 {
                     var query = ParseQuery(authorizationUri.Query);
                     var redirect = new Uri(query["redirect_uri"]);
-                    callbackClient = new TcpClient();
+                    callbackClient = new System.Net.Sockets.TcpClient();
                     await callbackClient.ConnectAsync(IPAddress.Loopback, redirect.Port, cancellationToken);
                     var stream = callbackClient.GetStream();
                     var request = Encoding.ASCII.GetBytes(
