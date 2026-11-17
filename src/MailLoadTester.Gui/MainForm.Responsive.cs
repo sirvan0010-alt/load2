@@ -83,9 +83,19 @@ public sealed partial class MainForm
                     {
                         item.Width = available;
                     }
+                    else if (item is CheckBox checkBox)
+                    {
+                        checkBox.AutoSize = false;
+                        checkBox.Width = available;
+                        var textSize = TextRenderer.MeasureText(checkBox.Text, checkBox.Font,
+                            new Size(Math.Max(80, available - 28), 0), TextFormatFlags.WordBreak);
+                        checkBox.Height = Math.Max(checkBox.Font.Height + 8, textSize.Height + 8);
+                    }
                     else if (item is FlowLayoutPanel nested)
                     {
                         nested.Width = available;
+                        if (nested.FlowDirection is FlowDirection.LeftToRight or FlowDirection.RightToLeft)
+                            nested.WrapContents = true;
                     }
                     else if (item is Button)
                     {
