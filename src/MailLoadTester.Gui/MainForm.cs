@@ -200,7 +200,9 @@ public sealed partial class MainForm : Form
         Shown += async (_, _) =>
         {
             LoadLayoutPreferences();
-            LoadRememberedSmtpCredentials();\n            ApplyResponsiveLayout();\n            await InitializeGoogleOAuthAsync();
+            LoadRememberedSmtpCredentials();
+            ApplyResponsiveLayout();
+            await InitializeGoogleOAuthAsync();
         };
         FormClosed += (_, _) => DisposeGoogleOAuthResources();
         FormClosed += (_, _) => SaveLayoutPreferences();
