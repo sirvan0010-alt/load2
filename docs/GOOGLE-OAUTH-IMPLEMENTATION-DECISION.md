@@ -1,10 +1,16 @@
 # Google OAuth – implementation decision
 
-Status: accepted technical direction for implementation
+Status: optional/advanced feature; not the default Gmail sign-in path
 Target branch: `feature/google-oauth-gmail-api`
-Date: 2026-11-16
+Date: 2026-11-18
 
 ## Decision summary
+
+The default Gmail workflow in MailLoadTester is **SMTP + Google App Password**. A user configures `smtp.gmail.com`, TLS, their full Gmail address, and an App Password. Google OAuth/Gmail API remains an optional advanced path and is not required to use SMTP.
+
+Google App Password availability is controlled by Google: 2-Step Verification must be enabled, and some account types/policies do not offer App Passwords. Google recommends Sign in with Google where supported. MailLoadTester nevertheless documents App Password as the simpler password-based SMTP option for eligible accounts.
+
+
 
 Do not implement Google sign-in by obtaining the broad `https://mail.google.com/` scope and passing its access token to Gmail SMTP as XOAUTH2 for a public release.
 
@@ -23,7 +29,8 @@ Therefore:
 
 - A desktop OAuth client ID is a public identifier and may be embedded in the distributed desktop application.
 - Desktop applications are public clients: any Client Secret distributed with them must not be treated as confidential. PKCE remains mandatory.
-- The desktop application is a public OAuth client. It sends the public Client ID and uses Authorization Code + PKCE; it does not request, store, or transmit a Client Secret. Google's current Desktop Apps documentation marks `client_secret` as optional for the authorization-code token exchange.
+- The desktop application currently attempts Authorization Code + PKCE with the public Client ID and no Client Secret.
+- A live sign-in attempt reported by the project owner returned HTTP 400 `invalid_request: client_secret is missing`. This has not been resolved or independently reproduced in this change set. Therefore this OAuth flow must be treated as experimental/advanced and must not be presented as the reliable default sign-in route.
 - Each Google account authorizes independently and receives its own refresh token. Refresh tokens are stored per Windows user using DPAPI (`CurrentUser`) and are not written to source control, logs, reports, or plaintext settings.
 - Provide a disconnect/revoke action and remove locally stored refresh-token credentials on sign-out.
 - The OAuth client ID for the current project is for development/testing. Create a separate Google Cloud project/client for production before public release.
@@ -36,6 +43,10 @@ The current OAuth consent configuration is External / Testing. It is suitable fo
 - it is not a public distribution configuration.
 
 For public distribution, use a separate production project, complete Branding and Audience, publish to Production, and submit the requested scopes for Google's verification as required. The app must also publish a truthful privacy policy and explain why it needs the Gmail send permission.
+
+## OAuth implementation status
+
+The OAuth/Gmail API implementation remains in the codebase as an optional advanced feature. Do not spend this work cycle changing its token-exchange design or adding a Client Secret. Do not claim that OAuth login is currently verified end-to-end. The primary SMTP + App Password path must remain usable independently.
 
 ## Required implementation phases
 
