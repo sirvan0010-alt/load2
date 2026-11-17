@@ -48,7 +48,6 @@ public sealed partial class MainForm
 
     private async Task InitializeGoogleOAuthAsync()
     {
-        _googleOAuthClient = LoadGoogleOAuthClientFromLocalConfig();
         var credentialPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MailLoadTester",
@@ -58,6 +57,7 @@ public sealed partial class MainForm
 
         try
         {
+            _googleOAuthClient = LoadGoogleOAuthClientFromLocalConfig();
             _googleOAuthStoredAccount = await _googleOAuthCredentialStore.LoadAsync();
             if (_googleOAuthStoredAccount is null)
             {
