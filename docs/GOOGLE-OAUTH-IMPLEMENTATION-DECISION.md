@@ -22,10 +22,12 @@ Therefore:
 ## OAuth client model
 
 - A desktop OAuth client ID is a public identifier and may be embedded in the distributed desktop application.
-- Never ship or request a client secret for the desktop client. Use Authorization Code with PKCE and a loopback redirect URI.
-- Each Google account authorizes independently and receives its own tokens.
-- Refresh tokens must be stored per Windows user using Windows DPAPI (CurrentUser) or Windows Credential Manager; never store them in profiles, source control, logs, reports, or plaintext settings.
-- Provide a disconnect/revoke action and remove locally stored credentials on sign-out.
+- Desktop applications are public clients: any Client Secret distributed with them must not be treated as confidential. PKCE remains mandatory.
+- This project deliberately retains manual Client Secret entry because the currently tested Google token exchange returned `invalid_request: client_secret is missing` when omitted, and the configured integration is expected to send the configured value. The value is not hard-coded in source control.
+- The user can enter or replace the Client Secret in the GUI. MailLoadTester stores it locally using Windows DPAPI (`CurrentUser`) and offers a dedicated **Nastavit / změnit Client Secret** action. If Google returns `invalid_client`, the app explains the problem and offers immediate replacement; the user can retry the operation after saving the corrected value.
+- The Client Secret is separate from each user's Google account tokens. Each Google account authorizes independently and receives its own refresh token.
+- Refresh tokens and the configured Client Secret are stored per Windows user using DPAPI (`CurrentUser`); neither is written to profiles, source control, logs, reports, or plaintext settings.
+- Provide a disconnect/revoke action and remove locally stored refresh-token credentials on sign-out. Changing the Client Secret must not delete or revoke the user's Google account token.
 - The OAuth client ID for the current project is for development/testing. Create a separate Google Cloud project/client for production before public release.
 
 ## Google Cloud testing and production
@@ -43,7 +45,7 @@ For public distribution, use a separate production project, complete Branding an
    - Desktop Authorization Code + PKCE.
    - Random OAuth state validation (OpenID userinfo is used; no ID-token nonce is consumed).
    - Loopback callback bound only to 127.0.0.1 with a short timeout.
-   - Exchange and refresh tokens without a client secret.
+   - Exchange and refresh tokens using the manually configured Client Secret; keep PKCE mandatory and never hard-code the value in the repository.
    - Verify the signed-in Google account identity and email.
 2. Credential security:
    - Per-Windows-user encrypted refresh-token store.
