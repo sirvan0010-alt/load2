@@ -556,6 +556,8 @@ public sealed partial class MainForm
             var result = await Task.Run(
                 async () => await _runner.RunAsync(options, progress, _cts.Token),
                 CancellationToken.None);
+            if (result.Sent == 1)
+                await SaveRememberedSmtpCredentialsAsync(options);
 
             lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed}";
             AppendLog(result.Sent == 1
@@ -617,7 +619,9 @@ public sealed partial class MainForm
                     TryAuthenticate: options.UseAuthentication,
                     DryRun: options.DryRun),
                 cts.Token);
-            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);\n            if (report.Connected && string.IsNullOrWhiteSpace(report.Error))\n                await SaveRememberedSmtpCredentialsAsync(options);
+            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
+            if (report.Connected && string.IsNullOrWhiteSpace(report.Error))
+                await SaveRememberedSmtpCredentialsAsync(options);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
                 MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
                     report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
