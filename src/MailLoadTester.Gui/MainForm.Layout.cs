@@ -128,21 +128,49 @@ public sealed partial class MainForm
         };
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
+        var chkAdvancedNetwork = new CheckBox
+        {
+            Text = "Pokročilé síťové možnosti (IP / rotace)",
+            AutoSize = true,
+            Checked = false,
+            Margin = new Padding(0, 10, 0, 6),
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        };
+        flConn.Controls.Add(chkAdvancedNetwork);
+        var pnlAdvancedNetwork = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Visible = false,
+            Padding = new Padding(8, 2, 4, 4),
+            Margin = new Padding(0, 0, 0, 8),
+            BorderStyle = BorderStyle.FixedSingle
+        };
         string[] localIpSuggestions;
         try { localIpSuggestions = NetworkAdapterInfo.GetLocalIPv4Addresses().ToArray(); }
         catch { localIpSuggestions = Array.Empty<string>(); }
-        txtSourceIp = AddLabeledEditableCombo(flConn, "Source IP (volitelné):",
+        txtSourceIp = AddLabeledEditableCombo(pnlAdvancedNetwork, "Source IP (volitelné):",
             localIpSuggestions,
             "Začni psát lokální IPv4 adresu nebo rozbal seznam. Prázdné pole = automatický výběr operačním systémem.");
-        txtIpv6Prefix = AddLabeledText(flConn, "IPv6 prefix (rotace):",
+        txtIpv6Prefix = AddLabeledText(pnlAdvancedNetwork, "IPv6 prefix (rotace):",
             "Např. 2001:db8:85a3:0:: — každé nové SMTP spojení dostane náhodnou adresu z /N. OS musí prefix routovat. Prázdné = vypnuto. Má přednost před Source IP.");
-        numIpv6PrefixLen = AddLabeledNumeric(flConn, "IPv6 prefix length:", 1, 128, 64,
+        numIpv6PrefixLen = AddLabeledNumeric(pnlAdvancedNetwork, "IPv6 prefix length:", 1, 128, 64,
             "Délka prefixu v bitech (běžně 64).");
-        txtIpv4Rotation = AddLabeledText(flConn, "IPv4 rotace (seznam/CIDR):",
-            "Příklady: 192.0.2.10,192.0.2.11  nebo  192.0.2.0/28. Každé NOVÉ SMTP spojení použije další adresu. Musí existovat na síťové kartě. Prázdné = vypnuto. Priorita: IPv6 rotace > IPv4 rotace > Source IP.");
-        chkIpv4RotationRandom = AddCheckBox(flConn, "IPv4 rotace náhodně (ne round-robin)", false,
+        txtIpv4Rotation = AddLabeledText(pnlAdvancedNetwork, "IPv4 rotace (seznam/CIDR):",
+            "Příklady: 192.0.2.10,192.0.2.11 nebo 192.0.2.0/28. Každé nové SMTP spojení použije další adresu. Priorita: IPv6 > IPv4 > Source IP.");
+        chkIpv4RotationRandom = AddCheckBox(pnlAdvancedNetwork, "IPv4 rotace náhodně (ne round-robin)", false,
             "Zapnuto = náhodná adresa z poolu. Vypnuto = postupně dokola.");
-        cmbIpVersion = AddLabeledCombo(flConn, "IP verze:", ["Any", "IPv4Only", "IPv6Only", "DualStack"], "Any", "Výběr IP verze pro spojení.");
+        cmbIpVersion = AddLabeledCombo(pnlAdvancedNetwork, "IP verze:", ["Any", "IPv4Only", "IPv6Only", "DualStack"], "Any", "Výběr IP verze pro spojení.");
+        chkAdvancedNetwork.CheckedChanged += (_, _) =>
+        {
+            pnlAdvancedNetwork.Visible = chkAdvancedNetwork.Checked;
+            pnlAdvancedNetwork.PerformLayout();
+            flConn.PerformLayout();
+            ApplyResponsiveLayout();
+        };
+        flConn.Controls.Add(pnlAdvancedNetwork);
         gbConn.Controls.Add(flConn);
         tblSmtp.Controls.Add(gbConn, 0, 0);
 
