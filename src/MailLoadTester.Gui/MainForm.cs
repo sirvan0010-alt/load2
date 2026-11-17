@@ -4,7 +4,7 @@ public sealed partial class MainForm : Form
 {
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
-    private TabControl tabs = null!;\n    private TableLayoutPanel _smtpLayout = null!;\n    private CheckBox chkRememberSmtpPassword = null!;\n    private bool _loadingSmtpCredentials;
+    private TabControl tabs = null!;\n    private TableLayoutPanel _smtpLayout = null!;\n    private CheckBox chkRememberSmtpPassword = null!;
     private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
