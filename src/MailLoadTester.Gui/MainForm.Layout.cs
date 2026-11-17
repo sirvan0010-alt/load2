@@ -177,13 +177,16 @@ public sealed partial class MainForm
         // Google and SMTP are intentionally separate paths: Gmail OAuth is not SMTP auth.
         var authLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(4)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(4)
         };
         authLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         authLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var gbGoogle = new GroupBox { Text = "Gmail přes Google účet", Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10) };
+        // Google OAuth is intentionally optional and collapsed by default.
+        // The normal Gmail path is SMTP + Google App Password.
+        var gbGoogle = new GroupBox { Text = "Pokročilé: Google OAuth / Gmail API (není potřeba pro SMTP)", Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10), Visible = false };
         var flGoogle = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -212,15 +215,48 @@ public sealed partial class MainForm
         toolTip.SetToolTip(btnGoogleSignIn, "Přihlásí Gmail účet v systémovém prohlížeči. Není potřeba ruční JSON import.");
         toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
         toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
-        authLayout.Controls.Add(gbGoogle, 0, 0);
+        var chkAdvancedGoogleOAuth = new CheckBox
+        {
+            Text = "Pokročilé: přihlášení Google OAuth přes Gmail API (volitelné)",
+            AutoSize = true,
+            Margin = new Padding(2, 8, 2, 4)
+        };
+        chkAdvancedGoogleOAuth.CheckedChanged += (_, _) =>
+        {
+            gbGoogle.Visible = chkAdvancedGoogleOAuth.Checked;
+            authLayout.PerformLayout();
+            ApplyResponsiveLayout();
+        };
+        toolTip.SetToolTip(chkAdvancedGoogleOAuth,
+            "Volitelná alternativa k SMTP. Používá Gmail API, nikoli SMTP; pro běžné SMTP přihlášení pomocí Hesla aplikace Google tuto funkci nepotřebuješ.");
+        authLayout.Controls.Add(chkAdvancedGoogleOAuth, 0, 1);
+        authLayout.Controls.Add(gbGoogle, 0, 2);
 
-        var gbAuth = new GroupBox { Text = "SMTP účet a certifikáty", Dock = DockStyle.Fill };
+        var gbAuth = new GroupBox { Text = "SMTP účet a certifikáty — hlavní způsob přihlášení", Dock = DockStyle.Fill };
         var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
-        chkAuth = AddCheckBox(flAuth, "Použít SMTP autentizaci", false, "Zaškrtni, pokud SMTP server vyžaduje uživatelské jméno a heslo.");
+        chkAuth = AddCheckBox(flAuth, "Použít SMTP autentizaci", false, "Zaškrtni, pokud SMTP server vyžaduje uživatelské jméno a heslo. Gmail SMTP vyžaduje autentizaci.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
         txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa.");
-        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
+        txtPass = AddLabeledText(flAuth, "Heslo / Heslo aplikace:", "Pro Gmail zadej 16místné Heslo aplikace Google, nikoli běžné heslo Google. Pro jiné SMTP servery použij heslo nebo aplikační heslo daného poskytovatele.");
         txtPass.PasswordChar = '●';
+        flAuth.Controls.Add(new Label
+        {
+            Text = "Gmail SMTP: smtp.gmail.com · port 587 · STARTTLS · celé Gmail uživatelské jméno · Heslo aplikace Google (ne běžné heslo účtu).",
+            AutoSize = true, MaximumSize = new Size(520, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 2, 0, 4)
+        });
+        var linkGoogleAppPassword = new LinkLabel
+        {
+            Text = "Vytvořit Heslo aplikace Google",
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        linkGoogleAppPassword.LinkClicked += (_, _) =>
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "https://myaccount.google.com/apppasswords") { UseShellExecute = true });
+        toolTip.SetToolTip(linkGoogleAppPassword,
+            "Otevře nastavení Hesel aplikací Google. Je vyžadováno zapnuté dvoufázové ověření; Google tuto možnost nenabízí všem typům účtů.");
+        flAuth.Controls.Add(linkGoogleAppPassword);
         chkRememberSmtpPassword = AddCheckBox(flAuth, "Zapamatovat heslo na tomto počítači", false,
             "Volitelné. Heslo se uloží pouze po úspěšném ověření/odeslání, zašifrovaně přes Windows DPAPI pro tento účet Windows. Uložení lze kdykoliv zrušit odškrtnutím.");
         txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta ke klientskému certifikátu pro mTLS.");
@@ -241,10 +277,11 @@ public sealed partial class MainForm
         flAuth.Controls.Add(btnSendTest);
         toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu.");
         gbAuth.Controls.Add(flAuth);
-        authLayout.Controls.Add(gbAuth, 0, 1);
-        authLayout.RowStyles[0].SizeType = SizeType.AutoSize;
-        authLayout.RowStyles[1].SizeType = SizeType.Percent;
-        authLayout.RowStyles[1].Height = 100F;
+        authLayout.Controls.Add(gbAuth, 0, 0);
+        authLayout.RowStyles[0].SizeType = SizeType.Percent;
+        authLayout.RowStyles[0].Height = 100F;
+        authLayout.RowStyles[1].SizeType = SizeType.AutoSize;
+        authLayout.RowStyles[2].SizeType = SizeType.AutoSize;
         tblSmtp.Controls.Add(authLayout, 1, 0);
 
         // Keep the primary recipient visible beside SMTP/authentication settings.
@@ -659,18 +696,18 @@ public sealed partial class MainForm
         numBackoffAfter = AddLabeledNumeric(flPace, "Úspěchů do zpomalení:", 1, 10000, 50, "Po kolika úspěšných zprávách se interval prodlouží.");
         numBackoffMult = AddLabeledNumeric(flPace, "Násobitel intervalu (×10):", 11, 50, 15, "1.5 = hodnota 15. Interval se vynásobí tímto číslem.");
         numMaxInterval = AddLabeledNumeric(flPace, "Max. interval (ms):", 100, 3600000, 60000, "Strop, kam až může interval narůst.");
-        chkPerRecipient = AddCheckBox(flPace, "Limit na příjemce", false, "Max. X zpráv na jednu adresu za časové okno.");
-        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "");
-        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "");
+        chkPerRecipient = AddCheckBox(flPace, "Limit na příjemce", false, "Zapne samostatný limit pro každou e-mailovou adresu. Po dosažení limitu se další zprávy tomuto příjemci pozastaví do konce časového okna.");
+        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "Kolik zpráv smí být odesláno na jednu e-mailovou adresu během časového okna nastaveného níže. Po dosažení limitu se další zprávy tomuto příjemci pozastaví.");
+        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "Délka časového okna v minutách, ve kterém se počítají zprávy pro každého příjemce. Po uplynutí okna se jeho počítadlo vynuluje.");
         chkTimeWindow = AddCheckBox(flPace, "Omezit na denní dobu", false, "Odesílat jen v zadaném intervalu hodin.");
-        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "");
-        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "");
+        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "Počáteční hodina povoleného odesílání v místním čase počítače (0–23). Použije se pouze při zapnutém omezení na denní dobu.");
+        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "Koncová hodina povoleného odesílání v místním čase počítače (0–23). Použije se pouze při zapnutém omezení na denní dobu.");
         chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupně zvyšuje tempo řízeného testu. Neobchází pravidla poskytovatele ani nezaručuje doručení do Inboxu.");
         txtWarmupPhases = AddLabeledText(flPace, "Fáze (zprávy; oddělené):", "Např. 50;150;500 – počet zpráv v jednotlivých fázích.");
         txtWarmupPhases.Text = "50;150;500";
-        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "451/452/try again – odložený retry.");
-        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "");
-        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "");
+        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "Rozpozná dočasné odmítnutí SMTP (typicky 451/452 nebo „try again“) způsobené greylistingem. Takovou zprávu může aplikace zkusit znovu později podle nastavení níže.");
+        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "Kolik minut počkat před opakováním zprávy, kterou server dočasně odmítl kvůli greylistingu.");
+        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "Maximální počet opakování po dočasném odmítnutí kvůli greylistingu. Hodnota 0 znamená, že se zpráva z tohoto důvodu znovu neodešle.");
         chkRbl = AddCheckBox(flPace, "Zkontrolovat RBL před startem", false, "Spamhaus Zen – pouze varování, nestopuje test.");
         chkCollectObserved = AddCheckBox(flPace, "Sbírat pozorované SMTP odpovědi", true, "Živá tabulka kódů a doporučení.");
 
