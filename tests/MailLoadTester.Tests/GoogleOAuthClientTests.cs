@@ -94,6 +94,41 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
+    public async Task ExchangeCode_IncludesConfiguredDesktopClientSecret()
+    {
+        string? capturedBody = null;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json(HttpStatusCode.OK, """{"access_token":"access-value","refresh_token":"refresh-value","expires_in":3600,"token_type":"Bearer"}""");
+        }));
+        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+
+        await client.ExchangeCodeAsync("authorization-code", new Uri("http://127.0.0.1:49152/"), "pkce-verifier");
+
+        Assert.NotNull(capturedBody);
+        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
+    }
+
+    [Fact]
+    public async Task Refresh_IncludesConfiguredDesktopClientSecret()
+    {
+        string? capturedBody = null;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json(HttpStatusCode.OK, """{"access_token":"new-access","expires_in":3600,"token_type":"Bearer"}""");
+        }));
+        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+        var current = new GoogleOAuthTokenSet("old-access", "refresh-value", DateTimeOffset.UtcNow, "Bearer", "scope");
+
+        await client.RefreshAsync(current);
+
+        Assert.NotNull(capturedBody);
+        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
+    }
+
+    [Fact]
     public async Task ExchangeCode_ReportsSafeOAuthErrorWithoutEchoingAuthorizationCode()
     {
         using var http = new HttpClient(new StubHandler(_ =>
