@@ -99,6 +99,34 @@ public sealed partial class MainForm
             GoogleOAuthClientId, _googleOAuthHttpClient, secret);
     }
 
+    private void OnConfigureGoogleOAuthClientSecret()
+    {
+        if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
+            return;
+
+        try
+        {
+            var secret = PromptForGoogleOAuthClientSecret(
+                this,
+                "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Pokud Google předchozí hodnotu odmítl, zadej nově vytvořený secret patřící ke stejnému Client ID. Hodnota se uloží zašifrovaně pro tento účet Windows.");
+            if (string.IsNullOrWhiteSpace(secret))
+                return;
+
+            SaveGoogleOAuthClientSecret(secret);
+            _googleOAuthClient = new GoogleOAuthClient(
+                GoogleOAuthClientId, _googleOAuthHttpClient, secret);
+            MessageBox.Show(
+                "Google OAuth Client Secret byl uložen. Při dalším přihlášení nebo odeslání se použije tato hodnota.",
+                "Google OAuth", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            ShowErrorWithCopy(
+                "Google OAuth Client Secret se nepodařilo uložit: " + ex.Message,
+                "Nastavení Google OAuth", ex.ToString(), GuiErrorCodes.Validation);
+        }
+    }
+
     private static string SecretFilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "MailLoadTester", "google-oauth-client-secret.dat");
@@ -142,11 +170,13 @@ public sealed partial class MainForm
         }
     }
 
-    private static string? PromptForGoogleOAuthClientSecret(IWin32Window owner)
+    private static string? PromptForGoogleOAuthClientSecret(
+        IWin32Window owner,
+        string? promptText = null)
     {
         using var dialog = new Form
         {
-            Text = "Jednorázové nastavení Google",
+            Text = "Nastavení Google OAuth Client Secret",
             Width = 560,
             Height = 205,
             FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -158,7 +188,7 @@ public sealed partial class MainForm
         var label = new Label
         {
             Left = 16, Top = 16, Width = 510, Height = 54,
-            Text = "Google vyžaduje Client Secret pro tento OAuth klient. V Google Cloud Console přidej nový Client Secret a vlož jeho hodnotu sem. Uloží se pouze zašifrovaně pro tento účet Windows."
+            Text = promptText ?? "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Hodnota se uloží pouze zašifrovaně pro tento účet Windows. Pokud ji Google odmítne, můžeš ji kdykoliv změnit tlačítkem Nastavit / změnit Client Secret."
         };
         var input = new TextBox
         {
@@ -233,6 +263,29 @@ public sealed partial class MainForm
         {
             lblGoogleAccountStatus.Text = "Google účet: přihlášení vypršelo";
             MessageBox.Show(ex.Message, "Přihlášení Google", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (GoogleOAuthException ex) when (
+            string.Equals(ex.OAuthError, "invalid_client", StringComparison.Ordinal))
+        {
+            lblGoogleAccountStatus.Text = "Google OAuth: Client Secret byl odmítnut";
+            var replacement = PromptForGoogleOAuthClientSecret(
+                this,
+                "Google odmítl uložený Client Secret (invalid_client). Zadej správný secret patřící ke stejnému OAuth Client ID. Po uložení spusť přihlášení znovu.");
+            if (!string.IsNullOrWhiteSpace(replacement))
+            {
+                SaveGoogleOAuthClientSecret(replacement);
+                _googleOAuthClient = new GoogleOAuthClient(
+                    GoogleOAuthClientId, _googleOAuthHttpClient, replacement);
+                MessageBox.Show(
+                    "Nový Client Secret byl uložen. Přihlašovací pokus se již nedokončí; klikni znovu na Přihlásit přes Google.",
+                    "Google OAuth", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                ShowErrorWithCopy(
+                    "Google odmítl Client Secret. Můžeš jej opravit tlačítkem Nastavit / změnit Client Secret. " + ex.Message,
+                    "Google OAuth – neplatný Client Secret", ex.ToString(), GuiErrorCodes.Validation);
+            }
         }
         catch (Exception ex)
         {
@@ -380,6 +433,29 @@ public sealed partial class MainForm
             MessageBox.Show(
                 "Odesílání bylo zrušeno. Pokud už požadavek dorazil Googlu, nelze vyloučit, že zprávu přijal. Před opakováním zkontroluj odeslanou poštu.",
                 "Gmail API – zrušeno", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (GoogleOAuthException ex) when (
+            string.Equals(ex.OAuthError, "invalid_client", StringComparison.Ordinal))
+        {
+            lblGoogleAccountStatus.Text = "Google OAuth: Client Secret byl odmítnut";
+            var replacement = PromptForGoogleOAuthClientSecret(
+                this,
+                "Google odmítl uložený Client Secret (invalid_client). Zadej správný secret patřící ke stejnému OAuth Client ID. Potom zkus odeslání znovu.");
+            if (!string.IsNullOrWhiteSpace(replacement))
+            {
+                SaveGoogleOAuthClientSecret(replacement);
+                _googleOAuthClient = new GoogleOAuthClient(
+                    GoogleOAuthClientId, _googleOAuthHttpClient, replacement);
+                MessageBox.Show(
+                    "Nový Client Secret byl uložen. Zpráva nebyla odeslána. Klikni znovu na Odeslat 1 zprávu přes Gmail API.",
+                    "Google OAuth", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                ShowErrorWithCopy(
+                    "Google odmítl Client Secret. Můžeš jej opravit tlačítkem Nastavit / změnit Client Secret. " + ex.Message,
+                    "Gmail API – neplatný Client Secret", ex.ToString(), GuiErrorCodes.Validation);
+            }
         }
         catch (GoogleOAuthException ex)
         {
