@@ -27,7 +27,7 @@ public sealed class GoogleOAuthClientTests
     public void AuthorizationUri_RequestsOnlySendScopeAndUsesPkce()
     {
         using var http = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
-        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+        var client = new GoogleOAuthClient(ClientId, http);
         var pkce = GoogleOAuthClient.CreatePkceChallenge();
 
         var uri = client.BuildAuthorizationUri(new Uri("http://127.0.0.1:49152/"), pkce);
@@ -71,7 +71,7 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
-    public async Task ExchangeCode_SendsConfiguredClientSecret_AndRequiresRefreshToken()
+    public async Task ExchangeCode_UsesPublicClientWithoutClientSecret_AndRequiresRefreshToken()
     {
         string? capturedBody = null;
         using var http = new HttpClient(new StubHandler(request =>
@@ -79,7 +79,7 @@ public sealed class GoogleOAuthClientTests
             capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             return Json(HttpStatusCode.OK, """{"access_token":"access-value","refresh_token":"refresh-value","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.send"}""");
         }));
-        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+        var client = new GoogleOAuthClient(ClientId, http);
 
         var result = await client.ExchangeCodeAsync(
             "authorization-code",
@@ -90,11 +90,11 @@ public sealed class GoogleOAuthClientTests
         Assert.Equal("refresh-value", result.RefreshToken);
         Assert.NotNull(capturedBody);
         Assert.Contains("code_verifier=pkce-verifier", capturedBody);
-        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
+        Assert.DoesNotContain("client_secret", capturedBody);
     }
 
     [Fact]
-    public async Task Refresh_SendsConfiguredClientSecret()
+    public async Task Refresh_UsesPublicClientWithoutClientSecret()
     {
         string? capturedBody = null;
         using var http = new HttpClient(new StubHandler(request =>
@@ -103,7 +103,7 @@ public sealed class GoogleOAuthClientTests
             return Json(HttpStatusCode.OK,
                 """{"access_token":"new-access","expires_in":3600,"token_type":"Bearer"}""");
         }));
-        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+        var client = new GoogleOAuthClient(ClientId, http);
         var current = new GoogleOAuthTokenSet(
             "old-access", "refresh-value", DateTimeOffset.UtcNow,
             "Bearer", GoogleOAuthClient.DefaultScopes);
@@ -113,7 +113,7 @@ public sealed class GoogleOAuthClientTests
         Assert.Equal("new-access", refreshed.AccessToken);
         Assert.NotNull(capturedBody);
         Assert.Contains("client_id=" + Uri.EscapeDataString(ClientId), capturedBody);
-        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
+        Assert.DoesNotContain("client_secret", capturedBody);
         Assert.Contains("refresh_token=refresh-value", capturedBody);
     }
 
