@@ -1057,7 +1057,7 @@ public sealed partial class MainForm
         btnExportReport.Click += async (s, e) => await OnExportReportAsync();
         btnWizard.Click += (s, e) => ShowGettingStartedWizard();
         chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
-        chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
+        chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();\n        chkIgnoreCert.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
         btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
         btnGoogleSignIn.Click += async (s, e) => await OnGoogleSignInAsync();
