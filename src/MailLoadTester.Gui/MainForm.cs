@@ -4,7 +4,7 @@ public sealed partial class MainForm : Form
 {
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
-    private TabControl tabs = null!;
+    private TabControl tabs = null!;\n    private TableLayoutPanel _smtpLayout = null!;\n    private CheckBox chkRememberSmtpPassword = null!;\n    private bool _loadingSmtpCredentials;
     private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
@@ -192,11 +192,11 @@ public sealed partial class MainForm : Form
         SyncFromAddressSuggestions();
         UpdateSafetyBanner();
         ApplyTheme(false);
-        FormClosing += MainForm_FormClosing;
+        Resize += (_, _) => ApplyResponsiveLayout();\n        FormClosing += MainForm_FormClosing;
         Shown += async (_, _) =>
         {
             LoadLayoutPreferences();
-            await InitializeGoogleOAuthAsync();
+            LoadRememberedSmtpCredentials();\n            ApplyResponsiveLayout();\n            await InitializeGoogleOAuthAsync();
         };
         FormClosed += (_, _) => DisposeGoogleOAuthResources();
         FormClosed += (_, _) => SaveLayoutPreferences();
