@@ -187,4 +187,4 @@ Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nel
 
 ### Google OAuth – první přihlášení
 
-Klikni na **Přihlásit přes Google**. MailLoadTester otevře systémový prohlížeč, kde vybereš Google účet a schválíš oprávnění k odesílání e-mailů. Není potřeba vytvářet OAuth klienta, stahovat JSON ani zadávat Client Secret. Aplikace používá vlastní veřejné Desktop Client ID a bezpečné přihlášení PKCE.
+Při prvním přihlášení aplikace požádá o Client Secret. V Google Cloud Console otevři OAuth klienta „MailLoadTester Desktop“, v části **Client secrets** přidej nový secret a jeho hodnotu ihned zkopíruj do dialogu MailLoadTesteru. Google již dříve vytvořené hodnoty nezobrazuje. Aplikace uloží secret zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows. Poté klikni na **Přihlásit přes Google**, vyber účet a potvrď oprávnění. Přihlášení používá PKCE.
