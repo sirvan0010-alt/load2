@@ -117,8 +117,6 @@ public sealed class GoogleOAuthClient
             ["refresh_token"] = current.RefreshToken,
             ["grant_type"] = "refresh_token"
         };
-        if (_clientSecret is not null)
-            fields["client_secret"] = _clientSecret;
         using var content = new FormUrlEncodedContent(fields);
         return await PostTokenAsync(content, current.RefreshToken, cancellationToken).ConfigureAwait(false);
     }
