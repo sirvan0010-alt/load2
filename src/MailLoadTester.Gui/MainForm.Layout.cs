@@ -239,6 +239,23 @@ public sealed partial class MainForm
         txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa.");
         txtPass = AddLabeledText(flAuth, "Heslo / Heslo aplikace:", "Pro Gmail zadej 16místné Heslo aplikace Google, nikoli běžné heslo Google. Pro jiné SMTP servery použij heslo nebo aplikační heslo daného poskytovatele.");
         txtPass.PasswordChar = '●';
+        var btnUseGmailSmtp = new Button
+        {
+            Text = "Nastavit Gmail SMTP",
+            Width = 190,
+            Height = 30,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+        btnUseGmailSmtp.Click += (_, _) =>
+        {
+            txtHost.Text = "smtp.gmail.com";
+            ApplySmtpHostPreset();
+            cmbAuthMethod.SelectedItem = "Auto";
+            lblStatus.Text = "Gmail SMTP nastaveno. Doplň celou Gmail adresu a Heslo aplikace Google.";
+        };
+        toolTip.SetToolTip(btnUseGmailSmtp,
+            "Vyplní smtp.gmail.com, port 587, STARTTLS a zapne SMTP autentizaci. Potom doplň celou Gmail adresu a Heslo aplikace Google.");
+        flAuth.Controls.Add(btnUseGmailSmtp);
         flAuth.Controls.Add(new Label
         {
             Text = "Gmail SMTP: smtp.gmail.com · port 587 · STARTTLS · celé Gmail uživatelské jméno · Heslo aplikace Google (ne běžné heslo účtu).",
