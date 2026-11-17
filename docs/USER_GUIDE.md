@@ -48,6 +48,22 @@ Port a režim TLS musí odpovídat dokumentaci konkrétního poskytovatele. Port
 - Client certificate (.pfx) je určen pro mTLS, pokud jej server vyžaduje.
 - Hesla a tokeny nevkládej do screenshotů, sdílených profilů ani veřejných issue.
 
+### Zapamatování SMTP hesla
+
+V kartě **SMTP účet a certifikáty** je volba **Zapamatovat heslo na tomto počítači**. Je standardně vypnutá.
+
+- Zaškrtni ji, pokud chceš, aby aplikace po úspěšném testu připojení, jednorázovém odeslání nebo úspěšném běhu testu uložila SMTP host, port, uživatelské jméno, heslo, TLS a autentizační metodu.
+- Údaje se ukládají do `%LOCALAPPDATA%\\MailLoadTester\\smtp-credential.dat` zašifrované Windows DPAPI v rozsahu aktuálního Windows uživatele.
+- Při dalším spuštění se údaje automaticky načtou a volba zůstane zaškrtnutá.
+- Odškrtnutím volby se uložený soubor smaže. Jiný Windows účet jej nemůže dešifrovat.
+- Profily JSON nadále hesla neukládají. Tato funkce je samostatná a výslovně volitelná.
+
+Pokud se přihlašuješ pomocí OAuth2 access tokenu v poli Heslo, nezapínej ukládání, pokud nechceš uložit i tento token.
+
+### Přizpůsobení rozhraní
+
+Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé popisky se zalamují. Na kartě **SMTP Server** se při užším okně tři skupiny nastavení přeskládají pod sebe a stránka se zpřístupní svislým posuvníkem. Gmail přes Google a klasické SMTP přihlášení jsou oddělené vizuální karty. Rozhraní používá škálování DPI pro monitory s různou hustotou pixelů.
+
 ### Přihlášení Gmail přes Google
 
 MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Není nutné vytvářet vlastní OAuth Client ID, stahovat JSON ani zadávat Client Secret – veřejné Client ID aplikace je součástí programu.
