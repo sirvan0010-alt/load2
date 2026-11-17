@@ -94,6 +94,30 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
+    public async Task Refresh_SendsConfiguredClientSecret()
+    {
+        string? capturedBody = null;
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json(HttpStatusCode.OK,
+                """{"access_token":"new-access","expires_in":3600,"token_type":"Bearer"}""");
+        }));
+        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
+        var current = new GoogleOAuthTokenSet(
+            "old-access", "refresh-value", DateTimeOffset.UtcNow,
+            "Bearer", GoogleOAuthClient.DefaultScopes);
+
+        var refreshed = await client.RefreshAsync(current);
+
+        Assert.Equal("new-access", refreshed.AccessToken);
+        Assert.NotNull(capturedBody);
+        Assert.Contains("client_id=" + Uri.EscapeDataString(ClientId), capturedBody);
+        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
+        Assert.Contains("refresh_token=refresh-value", capturedBody);
+    }
+
+    [Fact]
     public async Task ExchangeCode_ReportsSafeOAuthErrorWithoutEchoingAuthorizationCode()
     {
         using var http = new HttpClient(new StubHandler(_ =>
