@@ -97,7 +97,8 @@ public sealed partial class MainForm
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
-        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };\n        _smtpLayout = tblSmtp;
+        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };
+        _smtpLayout = tblSmtp;
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
@@ -1070,7 +1071,12 @@ public sealed partial class MainForm
             using var dlg = new OpenFileDialog { Filter = "EML files|*.eml|All files|*.*" };
             if (dlg.ShowDialog() == DialogResult.OK) txtEmlTemplate.Text = dlg.FileName;
         };
-        chkRememberSmtpPassword.CheckedChanged += (_, _) =>\n        {\n            if (!_loadingSmtpCredentials && !chkRememberSmtpPassword.Checked)\n                DeleteRememberedSmtpCredentials();\n        };\n        WireMailboxMonitorEvents();
+        chkRememberSmtpPassword.CheckedChanged += (_, _) =>
+        {
+            if (!_loadingSmtpCredentials && !chkRememberSmtpPassword.Checked)
+                DeleteRememberedSmtpCredentials();
+        };
+        WireMailboxMonitorEvents();
     }
 
     private void SetDefaults()
