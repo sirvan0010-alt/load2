@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using MailLoadTester;
 using MimeKit;
 
@@ -47,7 +48,7 @@ public sealed partial class MainForm
 
     private async Task InitializeGoogleOAuthAsync()
     {
-        _googleOAuthClient = new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient);
+        _googleOAuthClient = LoadGoogleOAuthClientFromLocalConfig();
         var credentialPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MailLoadTester",
@@ -81,6 +82,65 @@ public sealed partial class MainForm
         }
     }
 
+    private GoogleOAuthClient? LoadGoogleOAuthClientFromLocalConfig()
+    {
+        var configPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MailLoadTester", "google-oauth-client.json");
+        if (!File.Exists(configPath))
+            return new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+        var root = document.RootElement;
+        if (!root.TryGetProperty("installed", out var installed))
+            throw new InvalidOperationException("Soubor Google OAuth musí být JSON typu Desktop app (sekce 'installed').");
+        var clientId = installed.TryGetProperty("client_id", out var id) ? id.GetString() : null;
+        var clientSecret = installed.TryGetProperty("client_secret", out var secret) ? secret.GetString() : null;
+        if (!string.Equals(clientId, GoogleOAuthClientId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Client ID v souboru JSON neodpovídá klientovi MailLoadTester Desktop.");
+        if (string.IsNullOrWhiteSpace(clientSecret))
+            throw new InvalidOperationException("V souboru Google OAuth chybí client_secret.");
+        return new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient, clientSecret);
+    }
+
+    private GoogleOAuthClient EnsureGoogleOAuthClientWithCredentials()
+    {
+        var existing = LoadGoogleOAuthClientFromLocalConfig();
+        if (existing is not null && HasLocalGoogleOAuthConfig())
+            return existing;
+
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Vyber JSON OAuth klienta MailLoadTester Desktop",
+            Filter = "Google OAuth JSON (*.json)|*.json|Všechny soubory (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            throw new OperationCanceledException("Import Google OAuth JSON byl zrušen.");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(dialog.FileName));
+        if (!document.RootElement.TryGetProperty("installed", out var installed))
+            throw new InvalidOperationException("Vybraný soubor není JSON pro Desktop app (chybí sekce 'installed').");
+        var clientId = installed.TryGetProperty("client_id", out var id) ? id.GetString() : null;
+        var clientSecret = installed.TryGetProperty("client_secret", out var secret) ? secret.GetString() : null;
+        if (!string.Equals(clientId, GoogleOAuthClientId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Vybraný JSON patří jinému OAuth Client ID než MailLoadTester Desktop.");
+        if (string.IsNullOrWhiteSpace(clientSecret))
+            throw new InvalidOperationException("Vybraný JSON neobsahuje client_secret.");
+
+        var configDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailLoadTester");
+        Directory.CreateDirectory(configDirectory);
+        var configPath = Path.Combine(configDirectory, "google-oauth-client.json");
+        File.Copy(dialog.FileName, configPath, overwrite: true);
+        return new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient, clientSecret);
+    }
+
+    private static bool HasLocalGoogleOAuthConfig() => File.Exists(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MailLoadTester", "google-oauth-client.json"));
+
     private async Task OnGoogleSignInAsync()
     {
         if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
@@ -93,7 +153,7 @@ public sealed partial class MainForm
         lblGoogleAccountStatus.Text = "Čekám na přihlášení v prohlížeči…";
         try
         {
-            _googleOAuthClient ??= new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient);
+            _googleOAuthClient = EnsureGoogleOAuthClientWithCredentials();
             var flow = new GoogleOAuthLoopbackFlow();
             var result = await flow.AuthorizeAsync(
                 _googleOAuthClient,
