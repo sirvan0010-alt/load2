@@ -27,7 +27,7 @@ Therefore:
 - The user can enter or replace the Client Secret in the GUI. MailLoadTester stores it locally using Windows DPAPI (`CurrentUser`) and offers a dedicated **Nastavit / změnit Client Secret** action. If Google returns `invalid_client`, the app explains the problem and offers immediate replacement; the user can retry the operation after saving the corrected value.
 - The Client Secret is separate from each user's Google account tokens. Each Google account authorizes independently and receives its own refresh token.
 - Refresh tokens and the configured Client Secret are stored per Windows user using DPAPI (`CurrentUser`); neither is written to profiles, source control, logs, reports, or plaintext settings.
-- Provide a disconnect/revoke action and remove locally stored refresh-token credentials on sign-out. Changing the Client Secret must not delete or revoke the user's Google account token.
+- Provide a disconnect/revoke action and remove locally stored refresh-token credentials on sign-out.
 - The OAuth client ID for the current project is for development/testing. Create a separate Google Cloud project/client for production before public release.
 
 ## Google Cloud testing and production
