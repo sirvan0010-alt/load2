@@ -108,7 +108,7 @@ public sealed partial class MainForm
         {
             var secret = PromptForGoogleOAuthClientSecret(
                 this,
-                "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Pokud Google předchozí hodnotu odmítl, zadej nově vytvořený secret patřící ke stejnému Client ID. Hodnota se uloží zašifrovaně pro tento účet Windows.");
+                "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Pokud Google předchozí hodnotu odmítl, zadej nově vytvořený secret patřící ke stejnému Client ID. Nejde o heslo k tvému Gmailu. U desktopových aplikací není Client Secret skutečným tajemstvím; tato verze jej ale vyžaduje při komunikaci s token endpointem a uloží jej lokálně zašifrovaně pro tento účet Windows.");
             if (string.IsNullOrWhiteSpace(secret))
                 return;
 
@@ -202,7 +202,7 @@ public sealed partial class MainForm
         var label = new Label
         {
             Left = 16, Top = 16, Width = 510, Height = 54,
-            Text = promptText ?? "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Hodnota se uloží pouze zašifrovaně pro tento účet Windows. Pokud ji Google odmítne, můžeš ji kdykoliv změnit tlačítkem Nastavit / změnit Client Secret."
+            Text = promptText ?? "Vlož Client Secret pro OAuth klienta MailLoadTester Desktop. Nejde o heslo k tvému Gmailu. U desktopových aplikací není Client Secret skutečným tajemstvím; MailLoadTester jej přesto vyžaduje současnou konfigurací a uloží jej lokálně zašifrovaně pro tento účet Windows. Pokud jej Google odmítne, můžeš jej změnit tlačítkem Nastavit / změnit Client Secret."
         };
         var input = new TextBox
         {
