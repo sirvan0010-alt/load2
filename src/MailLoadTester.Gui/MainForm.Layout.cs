@@ -697,17 +697,17 @@ public sealed partial class MainForm
         numBackoffMult = AddLabeledNumeric(flPace, "Násobitel intervalu (×10):", 11, 50, 15, "1.5 = hodnota 15. Interval se vynásobí tímto číslem.");
         numMaxInterval = AddLabeledNumeric(flPace, "Max. interval (ms):", 100, 3600000, 60000, "Strop, kam až může interval narůst.");
         chkPerRecipient = AddCheckBox(flPace, "Limit na příjemce", false, "Zapne samostatný limit pro každou e-mailovou adresu. Po dosažení limitu se další zprávy tomuto příjemci pozastaví do konce časového okna.");
-        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "Kolik zpráv smí být odesláno na jednu e-mailovou adresu během časového okna nastaveného níže. Po dosažení limitu se další zprávy tomuto příjemci pozastaví.");
-        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "Délka časového okna v minutách, ve kterém se počítají zprávy pro každého příjemce. Po uplynutí okna se jeho počítadlo vynuluje.");
+        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "Kolik zpráv smí jít na jednu e-mailovou adresu během časového okna nastaveného v poli 'Okno (minuty)' níže. Po překročení appka tomuto konkrétnímu příjemci dál neposílá, dokud okno neuplyne.");
+        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "Délka časového okna v minutách, ve kterém appka počítá zprávy na jednoho příjemce (viz 'Max. zpráv / příjemce' výše). Po uplynutí okna se počítadlo pro daného příjemce vynuluje.");
         chkTimeWindow = AddCheckBox(flPace, "Omezit na denní dobu", false, "Odesílat jen v zadaném intervalu hodin.");
-        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "Počáteční hodina povoleného odesílání v místním čase počítače (0–23). Použije se pouze při zapnutém omezení na denní dobu.");
-        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "Koncová hodina povoleného odesílání v místním čase počítače (0–23). Použije se pouze při zapnutém omezení na denní dobu.");
+        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "Hodina (0–23, lokální čas tohoto počítače), od které appka smí odesílat zprávy — platí jen když je zapnuté 'Omezit na denní dobu' výše. Např. 8 = appka začne odesílat od 8:00.");
+        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "Hodina (0–23, lokální čas tohoto počítače), do které appka smí odesílat zprávy — platí jen když je zapnuté 'Omezit na denní dobu' výše. Např. 18 = appka po 18:00 počká na další povolené okno.");
         chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupně zvyšuje tempo řízeného testu. Neobchází pravidla poskytovatele ani nezaručuje doručení do Inboxu.");
         txtWarmupPhases = AddLabeledText(flPace, "Fáze (zprávy; oddělené):", "Např. 50;150;500 – počet zpráv v jednotlivých fázích.");
         txtWarmupPhases.Text = "50;150;500";
-        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "Rozpozná dočasné odmítnutí SMTP (typicky 451/452 nebo „try again“) způsobené greylistingem. Takovou zprávu může aplikace zkusit znovu později podle nastavení níže.");
-        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "Kolik minut počkat před opakováním zprávy, kterou server dočasně odmítl kvůli greylistingu.");
-        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "Maximální počet opakování po dočasném odmítnutí kvůli greylistingu. Hodnota 0 znamená, že se zpráva z tohoto důvodu znovu neodešle.");
+        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "Greylisting je běžná ochrana proti spamu: server zprávu poprvé dočasně odmítne (kódy 451/452/'try again') a čeká, jestli ji odesílatel zkusí poslat znovu — spamboti to obvykle nedělají. Appka takové dočasné odmítnutí pozná a sama zprávu později zopakuje (viz nastavení retry níže), místo aby ji rovnou vyhodnotila jako chybu.");
+        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "Kolik minut appka počká, než znovu zkusí odeslat zprávu, kterou server dočasně odmítl kvůli greylistingu (viz 'Detekovat greylist' výše).");
+        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "Kolikrát appka zprávu znovu zkusí odeslat, když ji server opakovaně odmítá kvůli greylistingu, než to vzdá a označí ji jako neúspěšnou.");
         chkRbl = AddCheckBox(flPace, "Zkontrolovat RBL před startem", false, "Spamhaus Zen – pouze varování, nestopuje test.");
         chkCollectObserved = AddCheckBox(flPace, "Sbírat pozorované SMTP odpovědi", true, "Živá tabulka kódů a doporučení.");
 
