@@ -45,9 +45,11 @@ Při 4xx zpomal a zjisti příčinu. Při 5xx/policy odmítnutí test nezvyšuj 
 - IMAP přihlašovací údaje zůstávají v paměti aplikace a do profilu se neukládají.
 - Sdílený profil může přesto obsahovat hosty, adresy, cesty k souborům a další provozní konfiguraci; před sdílením jej zkontroluj.
 
-## 6. Google OAuth a Gmail API
+## 6. Gmail SMTP a volitelné Google OAuth
 
-- Google OAuth používá Authorization Code + PKCE a pouze oprávnění `gmail.send` spolu s OpenID Connect identitou. Desktop Client ID je veřejné.
+- Výchozí cesta pro Gmail je SMTP + Heslo aplikace Google. Běžné heslo Google do SMTP klienta nezadávej. Heslo aplikace vyžaduje dvoufázové ověření a není dostupné u všech typů účtů.
+- Google OAuth/Gmail API je samostatná pokročilá funkce. Používá Authorization Code + PKCE a oprávnění `gmail.send` spolu s OpenID Connect identitou. Není součástí běžného SMTP toku.
+- OAuth přihlášení není v této verzi ověřené end-to-end; známý pokus vrátil `invalid_request: client_secret is missing`. Nepovažuj jej za garantovanou cestu přihlášení.
 - Desktopový klient je veřejný: používá veřejné Client ID a Authorization Code + PKCE. Aplikace nevyžaduje ani neposílá Client Secret; PKCE chrání autorizační kód.
 - Obnovovací token se ukládá samostatně, zašifrovaný Windows DPAPI CurrentUser. Jiný účet Windows jej nemůže běžně dešifrovat. Access token zůstává v paměti procesu.
 - Odpojení požádá Google o odvolání refresh tokenu a odstraní lokální uložené údaje.
