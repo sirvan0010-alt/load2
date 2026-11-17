@@ -187,4 +187,4 @@ Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nel
 
 ### Google OAuth – první přihlášení
 
-Při prvním přihlášení přes Gmail může aplikace požádat o JSON OAuth klienta typu **Desktop app**. V Google Cloud Console otevři OAuth klienta „MailLoadTester Desktop“, stáhni jeho JSON a při výběru souboru v aplikaci zvol stažený soubor. Aplikace ověří Client ID a uloží konfiguraci do `%LOCALAPPDATA%\MailLoadTester\google-oauth-client.json`; JSON zůstává na tomto počítači a není součástí veřejného repozitáře. Poté proběhne přihlášení přes systémový prohlížeč s PKCE.
+Klikni na **Přihlásit přes Google**. MailLoadTester otevře systémový prohlížeč, kde vybereš Google účet a schválíš oprávnění k odesílání e-mailů. Není potřeba vytvářet OAuth klienta, stahovat JSON ani zadávat Client Secret. Aplikace používá vlastní veřejné Desktop Client ID a bezpečné přihlášení PKCE.
