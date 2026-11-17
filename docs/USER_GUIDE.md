@@ -66,7 +66,7 @@ Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé pop
 
 ### Přihlášení Gmail přes Google
 
-MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Veřejné Client ID aplikace je součástí programu. Aktuální konfigurace používá také ručně zadaný Client Secret; zadává se přímo v aplikaci a ukládá se zašifrovaně pomocí DPAPI pro aktuální účet Windows. Nejde o heslo k Gmailu a u desktopové aplikace nejde o skutečné tajemství – DPAPI chrání pouze lokálně uloženou hodnotu před jinými Windows účty. Secret můžeš kdykoliv změnit tlačítkem Nastavit / změnit Client Secret. Není nutné stahovat ani importovat JSON soubor.
+MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Desktopová aplikace používá veřejné Client ID a Authorization Code + PKCE; ruční zadání Client Secret, hesla Gmailu ani import JSON souboru není potřeba. Obnovovací token Google účtu se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows.
 
 1. V Google Cloud projektu musí být povolené **Gmail API**: [Google Cloud – Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
 2. V režimu OAuth **Testing** musí být tvůj Google účet uvedený v seznamu testovacích uživatelů (Audience → Test users).
@@ -203,4 +203,4 @@ Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nel
 
 ### Google OAuth – první přihlášení
 
-Při prvním přihlášení aplikace požádá o Client Secret. V Google Cloud Console otevři OAuth klienta „MailLoadTester Desktop“, v části **Client secrets** přidej nový secret a jeho hodnotu ihned zkopíruj do dialogu MailLoadTesteru. Google již dříve vytvořené hodnoty nezobrazuje. Aplikace uloží secret zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows. Secret můžeš kdykoliv zadat znovu nebo změnit tlačítkem **Nastavit / změnit Client Secret**. Pokud Google vrátí `invalid_client`, zkontroluj, že zadáváš secret patřící ke stejnému OAuth Client ID; aplikace nabídne jeho nahrazení. Poté klikni na **Přihlásit přes Google**, vyber účet a potvrď oprávnění. Přihlášení používá PKCE.
+Klikni na **Přihlásit přes Google**, v systémovém prohlížeči vyber účet a potvrď oprávnění k odesílání e-mailů. Aplikace používá veřejné Desktop Client ID a PKCE; není potřeba vytvářet, kopírovat ani zadávat Client Secret. Obnovovací token se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows. Pokud je OAuth projekt v režimu Testing, musí být účet přidaný mezi testovací uživatele a platí omezení testovacího režimu.
