@@ -184,3 +184,7 @@ IMAP změna je nezávislé pozorování schránky. Může ji ovlivnit jiný klie
 ## 12. Zastavení a zavření
 
 Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nelze vzít zpět. Při zavírání aplikace během běhu program nejprve požádá o zrušení a čeká na dokončení úklidu běžících operací.
+
+### Google OAuth – první přihlášení
+
+Při prvním přihlášení přes Gmail může aplikace požádat o JSON OAuth klienta typu **Desktop app**. V Google Cloud Console otevři OAuth klienta „MailLoadTester Desktop“, stáhni jeho JSON a při výběru souboru v aplikaci zvol stažený soubor. Aplikace ověří Client ID a uloží konfiguraci do `%LOCALAPPDATA%\MailLoadTester\google-oauth-client.json`; JSON zůstává na tomto počítači a není součástí veřejného repozitáře. Poté proběhne přihlášení přes systémový prohlížeč s PKCE.
