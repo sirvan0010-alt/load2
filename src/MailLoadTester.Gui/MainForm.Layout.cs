@@ -212,7 +212,7 @@ public sealed partial class MainForm
         btnSendGoogleTest.FlatAppearance.BorderSize = 0;
         flGoogle.Controls.Add(btnSendGoogleTest);
         gbGoogle.Controls.Add(flGoogle);
-        toolTip.SetToolTip(btnGoogleSignIn, "Přihlásí Gmail účet v systémovém prohlížeči. Není potřeba ruční JSON import.");
+        toolTip.SetToolTip(btnGoogleSignIn, "Experimentální volitelná funkce: spustí Google OAuth a následné odeslání přes Gmail API. Nejde o SMTP přihlášení ani SMTP test.");
         toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
         toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
         var chkAdvancedGoogleOAuth = new CheckBox
@@ -292,7 +292,7 @@ public sealed partial class MainForm
         };
         btnSendTest.FlatAppearance.BorderSize = 0;
         flAuth.Controls.Add(btnSendTest);
-        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu.");
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
         gbAuth.Controls.Add(flAuth);
         authLayout.Controls.Add(gbAuth, 0, 0);
         authLayout.RowStyles[0].SizeType = SizeType.Percent;
