@@ -457,12 +457,33 @@ public sealed partial class MainForm
         if (_isRunning || _testConnectionCts != null)
             return;
 
+        if (string.IsNullOrWhiteSpace(txtTo.Text))
+        {
+            MessageBox.Show(
+                "Vyplň alespoň jednoho příjemce do pole Komu.",
+                "Chybí příjemce",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            txtTo.Focus();
+            txtTo.Select();
+            return;
+        }
+
         MailTestOptions options;
         try
         {
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
-                throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+            {
+                MessageBox.Show(
+                    "Vyplň alespoň jednoho příjemce do pole Komu.",
+                    "Chybí příjemce",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                txtTo.Focus();
+                txtTo.Select();
+                return;
+            }
             EnsureRealSmtpConfiguration(configured);
 
             // This is a single-message diagnostic, not a load test. Keep the selected
