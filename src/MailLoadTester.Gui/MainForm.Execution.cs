@@ -615,7 +615,7 @@ public sealed partial class MainForm
                     TryAuthenticate: options.UseAuthentication,
                     DryRun: options.DryRun),
                 cts.Token);
-            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
+            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);\n            if (report.Connected && string.IsNullOrWhiteSpace(report.Error))\n                await SaveRememberedSmtpCredentialsAsync(options);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
                 MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
                     report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
