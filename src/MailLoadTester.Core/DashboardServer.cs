@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -14,9 +15,10 @@ public sealed class DashboardServer : IDisposable
     private readonly Thread _thread;
     private volatile DashboardState _state = new(0, 0, 0, 0, 0, null, "Idle");
     private bool _disposed;
+    private readonly string _accessToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
     public int Port { get; }
-    public string Url => $"http://localhost:{Port}/";
+    public string Url => $"http://127.0.0.1:{Port}/?token={_accessToken}";
 
     public DashboardServer(int port)
     {
@@ -59,6 +61,21 @@ public sealed class DashboardServer : IDisposable
         {
             var req = ctx.Request;
             var resp = ctx.Response;
+            var providedToken = req.QueryString["token"] ?? string.Empty;
+            var providedBytes = Encoding.UTF8.GetBytes(providedToken);
+            var expectedBytes = Encoding.UTF8.GetBytes(_accessToken);
+            var authorized = providedBytes.Length == expectedBytes.Length &&
+                CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
+            CryptographicOperations.ZeroMemory(providedBytes);
+            CryptographicOperations.ZeroMemory(expectedBytes);
+            if (!authorized)
+            {
+                resp.StatusCode = (int)HttpStatusCode.Unauthorized;
+                resp.Close();
+                return;
+            }
+
+            resp.Headers[HttpResponseHeader.CacheControl] = "no-store";
             var path = req.Url?.AbsolutePath ?? "/";
 
             if (path == "/api/state")
@@ -88,7 +105,9 @@ public sealed class DashboardServer : IDisposable
         }
     }
 
-    private static string BuildHtml() => @"<!DOCTYPE html>
+    private string BuildHtml() => HtmlTemplate.Replace("fetch('/api/state')", $"fetch('/api/state?token={_accessToken}')", StringComparison.Ordinal);
+
+    private const string HtmlTemplate = @"<!DOCTYPE html>
 <html><head><meta charset='utf-8'><title>MailLoadTester Dashboard</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;background:#0f172a;color:#e2e8f0}
