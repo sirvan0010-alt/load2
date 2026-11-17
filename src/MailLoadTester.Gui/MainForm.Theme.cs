@@ -6,7 +6,15 @@ public sealed partial class MainForm
     {
         if (lblSafetyBanner is null || pnlSafetyBanner is null) return;
         var testMode = chkTestMode?.Checked == true;
-        if (testMode)
+        var ignoreCertificateErrors = chkIgnoreCert?.Checked == true;
+
+        if (ignoreCertificateErrors)
+        {
+            lblSafetyBanner.Text = "BEZPEČNOSTNÍ VAROVÁNÍ — Kontrola TLS certifikátu je vypnutá. Spojení může být zranitelné vůči útoku MITM. Používej pouze pro izolované testování.";
+            pnlSafetyBanner.BackColor = Color.FromArgb(255, 205, 190);
+            lblSafetyBanner.ForeColor = Color.FromArgb(130, 25, 15);
+        }
+        else if (testMode)
         {
             lblSafetyBanner.Text = "TEST MODE — odesílání jen na povolené domény. Pro první pokus: 1 zpráva, StartTls, ověřený SMTP.";
             pnlSafetyBanner.BackColor = Color.FromArgb(220, 245, 220);
@@ -18,9 +26,15 @@ public sealed partial class MainForm
             pnlSafetyBanner.BackColor = Color.FromArgb(255, 230, 180);
             lblSafetyBanner.ForeColor = Color.FromArgb(120, 60, 0);
         }
+
         if (_darkMode)
         {
-            if (testMode)
+            if (ignoreCertificateErrors)
+            {
+                pnlSafetyBanner.BackColor = Color.FromArgb(105, 35, 25);
+                lblSafetyBanner.ForeColor = Color.FromArgb(255, 205, 190);
+            }
+            else if (testMode)
             {
                 pnlSafetyBanner.BackColor = Color.FromArgb(30, 70, 40);
                 lblSafetyBanner.ForeColor = Color.FromArgb(180, 230, 180);
