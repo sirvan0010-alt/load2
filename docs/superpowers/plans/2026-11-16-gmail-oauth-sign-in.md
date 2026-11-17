@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Implement inline task-by-task. Keep each task independently testable and do not merge the draft PR until all checks pass.
 
-**Goal:** Let a MailLoadTester user connect their own Gmail account with Google sign-in and send a single explicitly confirmed message through the Gmail API. This implementation deliberately retains one-time manual Client Secret entry because the tested token endpoint rejected requests without it.
+**Goal:** Let a MailLoadTester user connect their own Gmail account with Google sign-in and send a single explicitly confirmed message through the Gmail API. Use the public desktop OAuth client flow with PKCE and no manually entered Client Secret.
 
 **Architecture:** Keep the existing SMTP load-test runner and SMTP diagnostic unchanged. Add a separate Google desktop OAuth flow (Authorization Code + PKCE + loopback callback), a per-Windows-user DPAPI-protected refresh-token store, and a Gmail API one-message sender. Add separate connect/disconnect and Gmail API send controls so the UI never labels Gmail API traffic as SMTP.
 
@@ -13,9 +13,7 @@
 ## Global Constraints
 
 - Use the existing desktop OAuth Client ID: `717640306481-tt965q9ubsuv2u60iq1ocu9ook3hodv5.apps.googleusercontent.com`.
-- Retain manual Client Secret entry/configuration; never hard-code the value in source control.
-- Store the configured Client Secret separately from account tokens, encrypted with Windows DPAPI CurrentUser; expose a GUI action to set/replace it.
-- Include the configured Client Secret in authorization-code exchange and refresh-token requests. If Google returns `invalid_client`, explain the rejection and offer replacement; start a fresh authorization attempt after replacement.
+- Use the public Desktop Client ID without a Client Secret in authorization-code exchange or refresh-token requests; PKCE remains mandatory.
 - Treat a desktop Client Secret as a public-client compatibility value, not as a true security boundary. PKCE remains mandatory.
 - Use Authorization Code + PKCE (S256), random state, system browser, and a loopback listener bound only to `127.0.0.1`.
 - Request only `openid email profile https://www.googleapis.com/auth/gmail.send`.
@@ -65,7 +63,7 @@
 **Interfaces:**
 - Produces: `IGoogleOAuthSecretProtector`, `GoogleOAuthStoredAccount`, and `GoogleOAuthCredentialStore.SaveAsync/LoadAsync/DeleteAsync`.
 - Store only account subject, verified email, and refresh token in the account credential store. Access tokens remain in memory and are refreshed when needed.
-- Store the manually configured Client Secret in a separate DPAPI-protected file; changing it must not delete or revoke the connected Google account.
+- Store only the user's refresh token in a DPAPI-protected file; no OAuth Client Secret is collected or stored.
 
 - [ ] Add tests using a deterministic fake protector for round-trip, missing file, corrupted payload, and deletion.
 - [ ] Run focused tests and verify failure before implementation.
@@ -121,6 +119,6 @@
 
 - [ ] Document first-time sign-in, disconnect, Gmail API one-message send, test-user limitation, and public verification requirement.
 - [ ] Verify no client secret or tokens are committed or logged.
-- [ ] Verify manual Client Secret entry, DPAPI persistence, replacement after `invalid_client`, and inclusion in both code-exchange and refresh requests.
+- [x] Verify authorization-code exchange and refresh requests omit `client_secret`; PKCE is mandatory.
 - [ ] Run full CI, Windows packaging, CodeQL, and inspect final PR diff.
 - [ ] Keep PR as draft until all verification passes; do not merge without explicit approval.
