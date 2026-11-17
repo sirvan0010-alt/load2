@@ -14,7 +14,7 @@
 
 - Use the existing desktop OAuth Client ID: `717640306481-tt965q9ubsuv2u60iq1ocu9ook3hodv5.apps.googleusercontent.com`.
 - Use the public Desktop Client ID without a Client Secret in authorization-code exchange or refresh-token requests; PKCE remains mandatory.
-- Treat a desktop Client Secret as a public-client compatibility value, not as a true security boundary. PKCE remains mandatory.
+- Do not collect, store, or transmit a Client Secret. Treat the desktop app as a public client and require PKCE.
 - Use Authorization Code + PKCE (S256), random state, system browser, and a loopback listener bound only to `127.0.0.1`.
 - Request only `openid email profile https://www.googleapis.com/auth/gmail.send`.
 - Persist only the refresh token and verified account identity; encrypt it with Windows DPAPI CurrentUser. Never put tokens in profiles, logs, reports, source control, or plaintext settings.
@@ -118,7 +118,7 @@
 - Modify: `docs/GOOGLE-OAUTH-IMPLEMENTATION-DECISION.md`
 
 - [ ] Document first-time sign-in, disconnect, Gmail API one-message send, test-user limitation, and public verification requirement.
-- [ ] Verify no client secret or tokens are committed or logged.
+- [x] Verify no Client Secret is collected or transmitted and no tokens are committed or logged.
 - [x] Verify authorization-code exchange and refresh requests omit `client_secret`; PKCE is mandatory.
 - [ ] Run full CI, Windows packaging, CodeQL, and inspect final PR diff.
 - [ ] Keep PR as draft until all verification passes; do not merge without explicit approval.
