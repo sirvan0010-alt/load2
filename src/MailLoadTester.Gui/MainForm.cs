@@ -4,7 +4,9 @@ public sealed partial class MainForm : Form
 {
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
-    private TabControl tabs = null!;\n    private TableLayoutPanel _smtpLayout = null!;\n    private CheckBox chkRememberSmtpPassword = null!;
+    private TabControl tabs = null!;
+    private TableLayoutPanel _smtpLayout = null!;
+    private CheckBox chkRememberSmtpPassword = null!;
     private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
@@ -13,7 +15,8 @@ public sealed partial class MainForm : Form
     private Label lblSafetyBanner = null!;
     private Button btnWizard = null!;
     private CheckBox chkDarkMode = null!;
-    private bool _darkMode;\n    private bool _loadingSmtpCredentials;
+    private bool _darkMode;
+    private bool _loadingSmtpCredentials;
 
     // SMTP tab
     private ComboBox txtHost = null!;
@@ -192,7 +195,8 @@ public sealed partial class MainForm : Form
         SyncFromAddressSuggestions();
         UpdateSafetyBanner();
         ApplyTheme(false);
-        Resize += (_, _) => ApplyResponsiveLayout();\n        FormClosing += MainForm_FormClosing;
+        Resize += (_, _) => ApplyResponsiveLayout();
+        FormClosing += MainForm_FormClosing;
         Shown += async (_, _) =>
         {
             LoadLayoutPreferences();
