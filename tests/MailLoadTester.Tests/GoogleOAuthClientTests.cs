@@ -79,7 +79,7 @@ public sealed class GoogleOAuthClientTests
             capturedBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             return Json(HttpStatusCode.OK, """{"access_token":"access-value","refresh_token":"refresh-value","expires_in":3600,"token_type":"Bearer","scope":"openid email https://www.googleapis.com/auth/gmail.send"}""");
         }));
-        var client = new GoogleOAuthClient(ClientId, http);
+        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
 
         var result = await client.ExchangeCodeAsync(
             "authorization-code",
