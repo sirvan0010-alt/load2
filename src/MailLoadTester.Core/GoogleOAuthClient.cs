@@ -22,14 +22,16 @@ public sealed class GoogleOAuthClient
 
     private readonly HttpClient _http;
     private readonly string _clientId;
+    private readonly string? _clientSecret;
 
-    public GoogleOAuthClient(string clientId, HttpClient httpClient)
+    public GoogleOAuthClient(string clientId, HttpClient httpClient, string? clientSecret = null)
     {
         if (string.IsNullOrWhiteSpace(clientId)
             || !clientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal))
             throw new ArgumentException("Google OAuth Client ID není platný desktop Client ID.", nameof(clientId));
 
         _clientId = clientId;
+        _clientSecret = string.IsNullOrWhiteSpace(clientSecret) ? null : clientSecret.Trim();
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
@@ -91,14 +93,17 @@ public sealed class GoogleOAuthClient
         if (string.IsNullOrWhiteSpace(codeVerifier))
             throw new ArgumentException("PKCE code verifier nesmí být prázdný.", nameof(codeVerifier));
 
-        using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var fields = new Dictionary<string, string>
         {
             ["client_id"] = _clientId,
             ["code"] = authorizationCode,
             ["code_verifier"] = codeVerifier,
             ["grant_type"] = "authorization_code",
             ["redirect_uri"] = loopbackRedirectUri.ToString()
-        });
+        };
+        if (_clientSecret is not null)
+            fields["client_secret"] = _clientSecret;
+        using var content = new FormUrlEncodedContent(fields);
         return await PostTokenAsync(content, previousRefreshToken: null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -110,12 +115,15 @@ public sealed class GoogleOAuthClient
         if (string.IsNullOrWhiteSpace(current.RefreshToken))
             throw new InvalidOperationException("Pro tento Google účet není uložen obnovovací token.");
 
-        using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var fields = new Dictionary<string, string>
         {
             ["client_id"] = _clientId,
             ["refresh_token"] = current.RefreshToken,
             ["grant_type"] = "refresh_token"
-        });
+        };
+        if (_clientSecret is not null)
+            fields["client_secret"] = _clientSecret;
+        using var content = new FormUrlEncodedContent(fields);
         return await PostTokenAsync(content, current.RefreshToken, cancellationToken).ConfigureAwait(false);
     }
 
