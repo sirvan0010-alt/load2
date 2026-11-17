@@ -11,7 +11,7 @@ static class Program
         // Flag is read from Environment.GetCommandLineArgs() in MainForm.BuildOptions.
         // Usage: MailLoadTester.Gui.exe --unauthorized
         _ = args;
-        ApplicationConfiguration.Initialize();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);\n        ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }
 }
