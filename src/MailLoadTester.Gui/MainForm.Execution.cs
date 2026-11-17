@@ -339,6 +339,8 @@ public sealed partial class MainForm
             // check cancelled before scheduling, the runner must execute its cleanup/result path.
             var result = await Task.Run(async () =>
                 await _runner.RunAsync(options, progress, _cts.Token), CancellationToken.None);
+            if (result.Sent > 0)
+                await SaveRememberedSmtpCredentialsAsync(options);
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
