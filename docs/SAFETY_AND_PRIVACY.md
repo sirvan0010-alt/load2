@@ -47,8 +47,10 @@ Při 4xx zpomal a zjisti příčinu. Při 5xx/policy odmítnutí test nezvyšuj 
 
 ## 6. Google OAuth a Gmail API
 
-- Google OAuth používá Authorization Code + PKCE a pouze oprávnění `gmail.send` spolu s OpenID Connect identitou. Desktop Client ID je veřejné; Client Secret se v aplikaci nepoužívá.
-- Obnovovací token se ukládá pouze zašifrovaný Windows DPAPI CurrentUser. Jiný účet Windows jej nemůže běžně dešifrovat. Access token zůstává v paměti procesu.
+- Google OAuth používá Authorization Code + PKCE a pouze oprávnění `gmail.send` spolu s OpenID Connect identitou. Desktop Client ID je veřejné.
+- Tato verze zachovává ruční zadání Client Secret. Uživatel jej může kdykoliv nastavit nebo změnit; aplikace jej ukládá odděleně od Google účtu, zašifrovaný Windows DPAPI CurrentUser. Při odpovědi `invalid_client` nabídne jeho nahrazení. Secret se nesmí ukládat do profilu, logu ani zdrojového repozitáře.
+- Upozornění: Client Secret distribuovaný s desktopovou aplikací není skutečné tajemství ani bezpečnostní hranice – desktopový klient je veřejný. DPAPI zde chrání lokálně uloženou hodnotu před běžným přístupem z jiných Windows účtů. PKCE zůstává povinné.
+- Obnovovací token se ukládá samostatně, zašifrovaný Windows DPAPI CurrentUser. Jiný účet Windows jej nemůže běžně dešifrovat. Access token zůstává v paměti procesu.
 - Odpojení požádá Google o odvolání refresh tokenu a odstraní lokální uložené údaje.
 - Gmail API odesílání je oddělené od SMTP runneru. Nejde o SMTP test a nesmí se vykazovat jako SMTP throughput, SMTP AUTH nebo SMTP SEND.
 - Gmail API nepoužívej k obcházení limitů Gmailu. Respektuj kvóty, zásady proti zneužití a případná omezení účtu.
