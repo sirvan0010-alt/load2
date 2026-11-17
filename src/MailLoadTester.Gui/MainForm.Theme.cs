@@ -49,21 +49,100 @@ public sealed partial class MainForm
 
     private void ShowGettingStartedWizard()
     {
-        const string text =
-            "JAK ZAČÍT (5 kroků)\n\n" +
-            "1) Záložka Test — zapni Test mode a vyplň Allowed domains (např. example.com).\n" +
-            "2) Záložka SMTP Server — host, port 587, StartTls, případně jméno a heslo.\n" +
-            "3) Záložka Zpráva — From / To (To musí být na povolené doméně), krátký předmět.\n" +
-            "4) Nejdřív použij Odeslat 1 testovací e-mail — po potvrzení odešle jednu skutečnou zprávu.\n" +
-            "5) Teprve po úspěšném doručení spusť START s počtem 1 a paralelismem 1.\n" +
-            "6) Aplikační log a SMTP události najdeš dole vedle sebe.\n\n" +
-            "TIPY\n" +
-            "• Tooltip = najeď myší na popisek pole.\n" +
-            "• Oranžový banner = Test mode vypnutý (ostré odesílání).\n" +
-            "• Zelený banner = Test mode (bezpečnější).\n" +
-            "• Proxy / IPv6 / circuit nech vypnuté, dokud základní test neprojde.\n" +
-            "• Auto-restart může poslat test znovu — nech vypnutý, dokud nevíš proč ho chceš.";
-        MessageBox.Show(text, "MailLoadTester — jak začít", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        using var wizard = new Form
+        {
+            Text = "MailLoadTester — průvodce prvním testem",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = new Size(720, 520),
+            BackColor = _darkMode ? Color.FromArgb(25, 30, 38) : Color.FromArgb(242, 245, 249),
+            ForeColor = _darkMode ? Color.FromArgb(229, 234, 242) : Color.FromArgb(35, 45, 60)
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            Padding = new Padding(18), BackColor = wizard.BackColor
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+
+        var intro = new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "Proveď základní nastavení v tomto pořadí. Každé tlačítko tě přenese přímo na příslušnou kartu.",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 11F, FontStyle.Regular),
+            ForeColor = wizard.ForeColor
+        };
+        layout.Controls.Add(intro, 0, 0);
+
+        var steps = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+            WrapContents = false, AutoScroll = true, Padding = new Padding(2)
+        };
+        layout.Controls.Add(steps, 0, 1);
+
+        void AddStep(string number, string title, string description, string tabName, string buttonText)
+        {
+            var card = new Panel
+            {
+                Width = 650, Height = 92, Margin = new Padding(0, 0, 0, 10),
+                Padding = new Padding(12), BorderStyle = BorderStyle.FixedSingle,
+                BackColor = _darkMode ? Color.FromArgb(38, 46, 58) : Color.White
+            };
+            var heading = new Label
+            {
+                Left = 10, Top = 8, Width = 430, Height = 24,
+                Text = number + "  " + title, Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+                ForeColor = wizard.ForeColor
+            };
+            var detail = new Label
+            {
+                Left = 10, Top = 34, Width = 430, Height = 44,
+                Text = description, Font = new Font("Segoe UI", 9F),
+                ForeColor = wizard.ForeColor
+            };
+            var open = new Button
+            {
+                Text = buttonText, Width = 165, Height = 34,
+                Left = 465, Top = 27, Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand
+            };
+            open.FlatAppearance.BorderSize = 0;
+            open.Click += (_, _) =>
+            {
+                var page = tabs.TabPages.Cast<TabPage>().FirstOrDefault(p => p.Text.Equals(tabName, StringComparison.OrdinalIgnoreCase));
+                if (page is not null) tabs.SelectedTab = page;
+                wizard.Close();
+            };
+            card.Controls.Add(heading);
+            card.Controls.Add(detail);
+            card.Controls.Add(open);
+            steps.Controls.Add(card);
+        }
+
+        AddStep("1", "SMTP připojení", "Vyplň server, port a TLS. Otestuj připojení; heslo lze volitelně zapamatovat přes DPAPI.", "SMTP Server", "Otevřít SMTP");
+        AddStep("2", "Zpráva a příjemce", "Nastav From, To, předmět a krátké tělo. Začni s jedním autorizovaným příjemcem.", "E-mail (Od / obsah)", "Otevřít zprávu");
+        AddStep("3", "Bezpečný test", "Zapni Test mode, nastav povolenou doménu, 1 zprávu a paralelismus 1. Dry-run nejprve ověří konfiguraci.", "Test", "Otevřít test");
+        AddStep("4", "Pokročilé funkce", "Proxy, rotace IP, pacing a další limity nech vypnuté, dokud základní test nefunguje.", "Proxy", "Otevřít Proxy");
+
+        var footer = new Label
+        {
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Text = "Upozornění: Test Mode omezuje cílové domény, ale není totéž co Dry-run.",
+            ForeColor = _darkMode ? Color.FromArgb(255, 210, 140) : Color.FromArgb(120, 60, 0)
+        };
+        layout.Controls.Add(footer, 0, 2);
+        wizard.Controls.Add(layout);
+        wizard.ShowDialog(this);
     }
 
     private void ApplyTheme(bool dark)
