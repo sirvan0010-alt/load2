@@ -44,6 +44,9 @@ Port a režim TLS musí odpovídat dokumentaci konkrétního poskytovatele. Port
 ### Autentizace
 
 - **Auto** nechá MailKit vybrat kompatibilní metodu podle serveru.
+- Pro Gmail použij SMTP server `smtp.gmail.com`, port **587 + STARTTLS** (nebo 465 + Implicit TLS), jako uživatelské jméno celou Gmail adresu a do pole **Heslo / Heslo aplikace** vlož **Heslo aplikace Google**. Běžné heslo Google sem nezadávej.
+- Heslo aplikace vytvoříš na [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Google vyžaduje zapnuté dvoufázové ověření. Možnost nemusí být dostupná u účtů používajících pouze bezpečnostní klíče, u účtů s Advanced Protection nebo u pracovních/školních účtů, kde ji správce nepovolil.
+- Heslo aplikace je samostatný přístupový údaj. Po změně běžného hesla Google může být odvoláno a bude nutné vytvořit nové.
 - Při ruční SMTP metodě OAuth2 patří do pole Heslo access token, nikoli refresh token.
 - Client certificate (.pfx) je určen pro mTLS, pokud jej server vyžaduje.
 - Hesla a tokeny nevkládej do screenshotů, sdílených profilů ani veřejných issue.
@@ -62,9 +65,9 @@ Pokud se přihlašuješ pomocí OAuth2 access tokenu v poli Heslo, nezapínej uk
 
 ### Přizpůsobení rozhraní
 
-Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé popisky se zalamují. Na kartě **SMTP Server** se při užším okně tři skupiny nastavení přeskládají pod sebe a stránka se zpřístupní svislým posuvníkem. Gmail přes Google a klasické SMTP přihlášení jsou oddělené vizuální karty. Rozhraní používá škálování DPI pro monitory s různou hustotou pixelů.
+Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé popisky se zalamují. Na kartě **SMTP Server** se při užším okně tři skupiny nastavení přeskládají pod sebe a stránka se zpřístupní svislým posuvníkem. Klasické SMTP přihlášení je hlavní a výchozí cesta; Google OAuth/Gmail API je skryté v rozšířených volitelných funkcích. Rozhraní používá škálování DPI pro monitory s různou hustotou pixelů.
 
-### Přihlášení Gmail přes Google
+### Volitelné přihlášení Gmail přes Google
 
 MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Desktopová aplikace používá veřejné Client ID a Authorization Code + PKCE; ruční zadání Client Secret, hesla Gmailu ani import JSON souboru není potřeba. Obnovovací token Google účtu se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows.
 
