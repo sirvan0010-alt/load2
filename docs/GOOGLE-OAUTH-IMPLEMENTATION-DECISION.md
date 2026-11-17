@@ -45,7 +45,7 @@ For public distribution, use a separate production project, complete Branding an
    - Desktop Authorization Code + PKCE.
    - Random OAuth state validation (OpenID userinfo is used; no ID-token nonce is consumed).
    - Loopback callback bound only to 127.0.0.1 with a short timeout.
-   - Exchange and refresh tokens using the manually configured Client Secret; keep PKCE mandatory and never hard-code the value in the repository.
+   - Exchange and refresh tokens using the public Client ID without a Client Secret; keep PKCE mandatory.
    - Verify the signed-in Google account identity and email.
 2. Credential security:
    - Per-Windows-user encrypted refresh-token store.
