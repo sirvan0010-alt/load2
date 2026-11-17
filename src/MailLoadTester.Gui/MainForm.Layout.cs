@@ -97,7 +97,7 @@ public sealed partial class MainForm
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
-        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };\n        _smtpLayout = tblSmtp;
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
         tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
@@ -145,86 +145,78 @@ public sealed partial class MainForm
         gbConn.Controls.Add(flConn);
         tblSmtp.Controls.Add(gbConn, 0, 0);
 
-        var gbAuth = new GroupBox { Text = "Autentizace & Certifikáty", Dock = DockStyle.Fill };
-        var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        var googleSeparator = new Label
+        // Google and SMTP are intentionally separate paths: Gmail OAuth is not SMTP auth.
+        var authLayout = new TableLayoutPanel
         {
-            Text = "──────── Gmail přes Google (samostatně od SMTP) ────────",
-            AutoSize = true,
-            ForeColor = SystemColors.GrayText,
-            Margin = new Padding(0, 14, 0, 2)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(4)
         };
-        flAuth.Controls.Add(googleSeparator);
+        authLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        var gbGoogle = new GroupBox { Text = "Gmail přes Google účet", Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10) };
+        var flGoogle = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(6)
+        };
         lblGoogleAccountStatus = new Label
         {
             Text = "Google účet: kontroluji uložené přihlášení…",
-            AutoSize = true,
-            MaximumSize = new Size(390, 0),
-            Margin = new Padding(0, 4, 0, 4)
+            AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 2, 0, 6)
         };
-        flAuth.Controls.Add(lblGoogleAccountStatus);
-        btnGoogleSignIn = new Button
-        {
-            Text = "Přihlásit přes Google",
-            Width = 230,
-            Height = 34,
-            Margin = new Padding(0, 4, 0, 2),
-            Cursor = Cursors.Hand
-        };
-        flAuth.Controls.Add(btnGoogleSignIn);
-        btnGoogleSignOut = new Button
-        {
-            Text = "Odpojit Google účet",
-            Width = 230,
-            Height = 30,
-            Margin = new Padding(0, 2, 0, 2),
-            Enabled = false
-        };
-        flAuth.Controls.Add(btnGoogleSignOut);
+        flGoogle.Controls.Add(lblGoogleAccountStatus);
+        btnGoogleSignIn = new Button { Text = "Přihlásit přes Google", Width = 230, Height = 36, Margin = new Padding(0, 2, 0, 4), Cursor = Cursors.Hand };
+        flGoogle.Controls.Add(btnGoogleSignIn);
+        btnGoogleSignOut = new Button { Text = "Odpojit Google účet", Width = 230, Height = 30, Margin = new Padding(0, 2, 0, 2), Enabled = false };
+        flGoogle.Controls.Add(btnGoogleSignOut);
         btnSendGoogleTest = new Button
         {
-            Text = "Odeslat 1 zprávu přes Gmail API",
-            Width = 280,
-            Height = 36,
-            Margin = new Padding(0, 4, 0, 0),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(50, 115, 75),
-            ForeColor = Color.White,
-            Cursor = Cursors.Hand,
-            Enabled = false
+            Text = "Odeslat 1 zprávu přes Gmail API", Width = 280, Height = 36,
+            Margin = new Padding(0, 4, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(50, 115, 75), ForeColor = Color.White,
+            Cursor = Cursors.Hand, Enabled = false
         };
         btnSendGoogleTest.FlatAppearance.BorderSize = 0;
-        flAuth.Controls.Add(btnSendGoogleTest);
-        toolTip.SetToolTip(btnGoogleSignIn, "Otevře přihlášení Google v systémovém prohlížeči. Není potřeba zadávat heslo aplikace ani Client Secret.");
+        flGoogle.Controls.Add(btnSendGoogleTest);
+        gbGoogle.Controls.Add(flGoogle);
+        toolTip.SetToolTip(btnGoogleSignIn, "Přihlásí Gmail účet v systémovém prohlížeči. Není potřeba ruční JSON import.");
         toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
         toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
-        chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
+        authLayout.Controls.Add(gbGoogle, 0, 0);
+
+        var gbAuth = new GroupBox { Text = "SMTP účet a certifikáty", Dock = DockStyle.Fill };
+        var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
+        chkAuth = AddCheckBox(flAuth, "Použít SMTP autentizaci", false, "Zaškrtni, pokud SMTP server vyžaduje uživatelské jméno a heslo.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
-        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
+        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa.");
         txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
         txtPass.PasswordChar = '●';
-        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
+        chkRememberSmtpPassword = AddCheckBox(flAuth, "Zapamatovat heslo na tomto počítači", false,
+            "Volitelné. Heslo se uloží pouze po úspěšném ověření/odeslání, zašifrovaně přes Windows DPAPI pro tento účet Windows. Uložení lze kdykoliv zrušit odškrtnutím.");
+        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta ke klientskému certifikátu pro mTLS.");
         txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
         txtClientCertPass.PasswordChar = '●';
         numConnectTimeout = AddLabeledNumeric(flAuth, "Connect timeout (ms):", 1000, 300000, 20000, "Max čas na navázání TCP spojení.");
         numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
-        btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
+        btnTestConnection = new Button { Text = "Otestovat SMTP připojení", Width = 230, Height = 34, Margin = new Padding(0, 8, 0, 0) };
         flAuth.Controls.Add(btnTestConnection);
         toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
         btnSendTest = new Button
         {
-            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
+            Text = "Odeslat 1 testovací e-mail", Width = 250, Height = 38,
             Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
-            Cursor = Cursors.Hand
+            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White, Cursor = Cursors.Hand
         };
         btnSendTest.FlatAppearance.BorderSize = 0;
         flAuth.Controls.Add(btnSendTest);
-        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
-
-
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu.");
         gbAuth.Controls.Add(flAuth);
-        tblSmtp.Controls.Add(gbAuth, 1, 0);
+        authLayout.Controls.Add(gbAuth, 0, 1);
+        authLayout.RowStyles[0].SizeType = SizeType.AutoSize;
+        authLayout.RowStyles[1].SizeType = SizeType.Percent;
+        authLayout.RowStyles[1].Height = 100F;
+        tblSmtp.Controls.Add(authLayout, 1, 0);
 
         // Keep the primary recipient visible beside SMTP/authentication settings.
         // The same To field is shared by the SMTP one-message action and Gmail API.
@@ -299,7 +291,7 @@ public sealed partial class MainForm
             "Předmět e-mailu. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID} – každá zpráva bude unikátní.");
         var lblBody = new Label { Text = "Tělo zprávy:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
         flContent.Controls.Add(lblBody);
-        txtBody = new TextBox { Multiline = true, Height = 80, Width = 360, ScrollBars = ScrollBars.Vertical };
+        txtBody = new TextBox { Multiline = true, Height = 110, Width = 360, ScrollBars = ScrollBars.Vertical, Anchor = AnchorStyles.Left | AnchorStyles.Right };
         flContent.Controls.Add(txtBody);
         toolTip.SetToolTip(lblBody, "Obsah každé odesílané zprávy. Lze použít prostý text, HTML nebo dynamické značky.");
         toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
@@ -1078,7 +1070,7 @@ public sealed partial class MainForm
             using var dlg = new OpenFileDialog { Filter = "EML files|*.eml|All files|*.*" };
             if (dlg.ShowDialog() == DialogResult.OK) txtEmlTemplate.Text = dlg.FileName;
         };
-        WireMailboxMonitorEvents();
+        chkRememberSmtpPassword.CheckedChanged += (_, _) =>\n        {\n            if (!_loadingSmtpCredentials && !chkRememberSmtpPassword.Checked)\n                DeleteRememberedSmtpCredentials();\n        };\n        WireMailboxMonitorEvents();
     }
 
     private void SetDefaults()
