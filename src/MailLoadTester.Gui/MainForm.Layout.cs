@@ -197,6 +197,12 @@ public sealed partial class MainForm
         flGoogle.Controls.Add(lblGoogleAccountStatus);
         btnGoogleSignIn = new Button { Text = "Přihlásit přes Google", Width = 230, Height = 36, Margin = new Padding(0, 2, 0, 4), Cursor = Cursors.Hand };
         flGoogle.Controls.Add(btnGoogleSignIn);
+        btnGoogleSecret = new Button
+        {
+            Text = "Nastavit / změnit Client Secret", Width = 230, Height = 30,
+            Margin = new Padding(0, 2, 0, 4)
+        };
+        flGoogle.Controls.Add(btnGoogleSecret);
         btnGoogleSignOut = new Button { Text = "Odpojit Google účet", Width = 230, Height = 30, Margin = new Padding(0, 2, 0, 2), Enabled = false };
         flGoogle.Controls.Add(btnGoogleSignOut);
         btnSendGoogleTest = new Button
@@ -210,6 +216,7 @@ public sealed partial class MainForm
         flGoogle.Controls.Add(btnSendGoogleTest);
         gbGoogle.Controls.Add(flGoogle);
         toolTip.SetToolTip(btnGoogleSignIn, "Přihlásí Gmail účet v systémovém prohlížeči. Není potřeba ruční JSON import.");
+        toolTip.SetToolTip(btnGoogleSecret, "Ručně zadá nebo změní Google OAuth Client Secret. Hodnota se ukládá zašifrovaně pomocí DPAPI pro tento účet Windows.");
         toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
         toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
         authLayout.Controls.Add(gbGoogle, 0, 0);
@@ -1090,6 +1097,7 @@ public sealed partial class MainForm
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
         btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
         btnGoogleSignIn.Click += async (s, e) => await OnGoogleSignInAsync();
+        btnGoogleSecret.Click += (s, e) => OnConfigureGoogleOAuthClientSecret();
         btnGoogleSignOut.Click += async (s, e) => await OnGoogleSignOutAsync();
         btnSendGoogleTest.Click += async (s, e) => await OnSendGoogleTestMessageAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
