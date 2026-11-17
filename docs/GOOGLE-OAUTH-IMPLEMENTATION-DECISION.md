@@ -23,10 +23,8 @@ Therefore:
 
 - A desktop OAuth client ID is a public identifier and may be embedded in the distributed desktop application.
 - Desktop applications are public clients: any Client Secret distributed with them must not be treated as confidential. PKCE remains mandatory.
-- This project deliberately retains manual Client Secret entry because the currently tested Google token exchange returned `invalid_request: client_secret is missing` when omitted, and the configured integration is expected to send the configured value. The value is not hard-coded in source control.
-- The user can enter or replace the Client Secret in the GUI. MailLoadTester stores it locally using Windows DPAPI (`CurrentUser`) and offers a dedicated **Nastavit / změnit Client Secret** action. If Google returns `invalid_client`, the app explains the problem and offers immediate replacement; the user can retry the operation after saving the corrected value.
-- The Client Secret is separate from each user's Google account tokens. Each Google account authorizes independently and receives its own refresh token.
-- Refresh tokens and the configured Client Secret are stored per Windows user using DPAPI (`CurrentUser`); neither is written to profiles, source control, logs, reports, or plaintext settings.
+- The desktop application is a public OAuth client. It sends the public Client ID and uses Authorization Code + PKCE; it does not request, store, or transmit a Client Secret. Google's current Desktop Apps documentation marks `client_secret` as optional for the authorization-code token exchange.
+- Each Google account authorizes independently and receives its own refresh token. Refresh tokens are stored per Windows user using DPAPI (`CurrentUser`) and are not written to source control, logs, reports, or plaintext settings.
 - Provide a disconnect/revoke action and remove locally stored refresh-token credentials on sign-out.
 - The OAuth client ID for the current project is for development/testing. Create a separate Google Cloud project/client for production before public release.
 
