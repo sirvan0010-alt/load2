@@ -153,20 +153,34 @@ public sealed partial class MainForm
 
     private static void SaveGoogleOAuthClientSecret(string secret)
     {
+        if (string.IsNullOrWhiteSpace(secret))
+            throw new ArgumentException("Google OAuth Client Secret nesmí být prázdný.", nameof(secret));
+
         var directory = Path.GetDirectoryName(SecretFilePath)!;
         Directory.CreateDirectory(directory);
+        var tempPath = SecretFilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         var protector = new WindowsDpapiSecretProtector();
-        var clear = Encoding.UTF8.GetBytes(secret);
+        var clear = Encoding.UTF8.GetBytes(secret.Trim());
         byte[]? encrypted = null;
         try
         {
             encrypted = protector.Protect(clear);
-            File.WriteAllBytes(SecretFilePath, encrypted);
+            File.WriteAllBytes(tempPath, encrypted);
+            File.Move(tempPath, SecretFilePath, overwrite: true);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(clear);
             if (encrypted is not null) CryptographicOperations.ZeroMemory(encrypted);
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup; the target file remains the last committed value.
+            }
         }
     }
 
