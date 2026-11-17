@@ -27,7 +27,7 @@ public sealed class GoogleOAuthClientTests
     public void AuthorizationUri_RequestsOnlySendScopeAndUsesPkce()
     {
         using var http = new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
-        var client = new GoogleOAuthClient(ClientId, http);
+        var client = new GoogleOAuthClient(ClientId, http, "desktop-client-secret");
         var pkce = GoogleOAuthClient.CreatePkceChallenge();
 
         var uri = client.BuildAuthorizationUri(new Uri("http://127.0.0.1:49152/"), pkce);
@@ -71,7 +71,7 @@ public sealed class GoogleOAuthClientTests
     }
 
     [Fact]
-    public async Task ExchangeCode_DoesNotSendClientSecret_AndRequiresRefreshToken()
+    public async Task ExchangeCode_SendsConfiguredClientSecret_AndRequiresRefreshToken()
     {
         string? capturedBody = null;
         using var http = new HttpClient(new StubHandler(request =>
@@ -90,7 +90,7 @@ public sealed class GoogleOAuthClientTests
         Assert.Equal("refresh-value", result.RefreshToken);
         Assert.NotNull(capturedBody);
         Assert.Contains("code_verifier=pkce-verifier", capturedBody);
-        Assert.DoesNotContain("client_secret", capturedBody);
+        Assert.Contains("client_secret=desktop-client-secret", capturedBody);
     }
 
     [Fact]
