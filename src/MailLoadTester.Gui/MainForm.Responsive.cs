@@ -33,7 +33,7 @@ public sealed partial class MainForm
                     _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));
                     _smtpLayout.Dock = DockStyle.Top;
                     _smtpLayout.Height = 1340;
-                    _smtpLayout.Parent!.AutoScroll = true;
+                    if (_smtpLayout.Parent is ScrollableControl compactParent) compactParent.AutoScroll = true;
                     for (var i = 0; i < _smtpLayout.Controls.Count; i++)
                         _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(0, i));
                 }
@@ -45,7 +45,7 @@ public sealed partial class MainForm
                     _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                     _smtpLayout.Dock = DockStyle.Fill;
                     _smtpLayout.Height = 0;
-                    _smtpLayout.Parent!.AutoScroll = false;
+                    if (_smtpLayout.Parent is ScrollableControl wideParent) wideParent.AutoScroll = false;
                     for (var i = 0; i < _smtpLayout.Controls.Count; i++)
                         _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(i, 0));
                 }
