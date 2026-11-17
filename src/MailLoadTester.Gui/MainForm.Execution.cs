@@ -39,11 +39,18 @@ public sealed partial class MainForm
         var security = Enum.Parse<SmtpSecurity>(cmbSecurity.SelectedItem?.ToString() ?? "StartTls", true);
         var authMethod = Enum.Parse<SmtpAuthMethod>(cmbAuthMethod.SelectedItem?.ToString() ?? "Auto", true);
         var ipVersion = Enum.Parse<IpVersionPreference>(cmbIpVersion.SelectedItem?.ToString() ?? "Any", true);
+        var smtpHost = txtHost.Text.Trim();
+        var smtpUsername = txtUser.Text.Trim();
+        // Google displays App Passwords in grouped form. Ignore pasted whitespace
+        // for Gmail SMTP only; never rewrite credentials for other providers.
+        var smtpPassword = smtpHost.Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase)
+            ? string.Concat(txtPass.Text.Where(ch => !char.IsWhiteSpace(ch)))
+            : txtPass.Text;
 
         return new MailTestOptions(
             txtFrom.Text.Trim(), recipients.ToList(),
-            txtHost.Text.Trim(), (int)numPort.Value, security,
-            chkAuth.Checked, txtUser.Text, txtPass.Text,
+            smtpHost, (int)numPort.Value, security,
+            chkAuth.Checked, smtpUsername, smtpPassword,
             (int)numCount.Value, (int)numInterval.Value,
             chkBatchMode.Checked, (int)numBatchSize.Value, (int)numBatchPause.Value,
             (int)numConcurrency.Value, txtSubject.Text, txtBody.Text, txtDisplayName.Text,
