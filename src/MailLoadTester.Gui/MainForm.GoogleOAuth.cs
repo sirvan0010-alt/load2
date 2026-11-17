@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Net;
 using MailLoadTester;
 using MimeKit;
@@ -56,7 +58,8 @@ public sealed partial class MainForm
 
         try
         {
-            _googleOAuthClient = new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient);
+            var savedSecret = LoadGoogleOAuthClientSecret();
+            _googleOAuthClient = new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient, savedSecret);
             _googleOAuthStoredAccount = await _googleOAuthCredentialStore.LoadAsync();
             if (_googleOAuthStoredAccount is null)
             {
@@ -81,8 +84,104 @@ public sealed partial class MainForm
         }
     }
 
-    private GoogleOAuthClient EnsureGoogleOAuthClientWithCredentials() =>
-        _googleOAuthClient ??= new GoogleOAuthClient(GoogleOAuthClientId, _googleOAuthHttpClient);
+    private GoogleOAuthClient EnsureGoogleOAuthClientWithCredentials()
+    {
+        var secret = LoadGoogleOAuthClientSecret();
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            secret = PromptForGoogleOAuthClientSecret(this);
+            if (string.IsNullOrWhiteSpace(secret))
+                throw new OperationCanceledException("Zadání Google OAuth Client Secret bylo zrušeno.");
+            SaveGoogleOAuthClientSecret(secret);
+        }
+
+        return _googleOAuthClient = new GoogleOAuthClient(
+            GoogleOAuthClientId, _googleOAuthHttpClient, secret);
+    }
+
+    private static string SecretFilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MailLoadTester", "google-oauth-client-secret.dat");
+
+    private static string? LoadGoogleOAuthClientSecret()
+    {
+        if (!File.Exists(SecretFilePath))
+            return null;
+
+        var protector = new WindowsDpapiSecretProtector();
+        var encrypted = File.ReadAllBytes(SecretFilePath);
+        byte[]? clear = null;
+        try
+        {
+            clear = protector.Unprotect(encrypted);
+            return Encoding.UTF8.GetString(clear);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+            if (clear is not null) CryptographicOperations.ZeroMemory(clear);
+        }
+    }
+
+    private static void SaveGoogleOAuthClientSecret(string secret)
+    {
+        var directory = Path.GetDirectoryName(SecretFilePath)!;
+        Directory.CreateDirectory(directory);
+        var protector = new WindowsDpapiSecretProtector();
+        var clear = Encoding.UTF8.GetBytes(secret);
+        byte[]? encrypted = null;
+        try
+        {
+            encrypted = protector.Protect(clear);
+            File.WriteAllBytes(SecretFilePath, encrypted);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(clear);
+            if (encrypted is not null) CryptographicOperations.ZeroMemory(encrypted);
+        }
+    }
+
+    private static string? PromptForGoogleOAuthClientSecret(IWin32Window owner)
+    {
+        using var dialog = new Form
+        {
+            Text = "Jednorázové nastavení Google",
+            Width = 560,
+            Height = 205,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false
+        };
+        var label = new Label
+        {
+            Left = 16, Top = 16, Width = 510, Height = 54,
+            Text = "Google vyžaduje Client Secret pro tento OAuth klient. V Google Cloud Console přidej nový Client Secret a vlož jeho hodnotu sem. Uloží se pouze zašifrovaně pro tento účet Windows."
+        };
+        var input = new TextBox
+        {
+            Left = 16, Top = 78, Width = 510,
+            UseSystemPasswordChar = true
+        };
+        var ok = new Button
+        {
+            Text = "Uložit a pokračovat", Left = 300, Top = 118, Width = 145,
+            DialogResult = DialogResult.OK
+        };
+        var cancel = new Button
+        {
+            Text = "Zrušit", Left = 455, Top = 118, Width = 70,
+            DialogResult = DialogResult.Cancel
+        };
+        dialog.Controls.AddRange([label, input, ok, cancel]);
+        dialog.AcceptButton = ok;
+        dialog.CancelButton = cancel;
+        return dialog.ShowDialog(owner) == DialogResult.OK
+            ? input.Text.Trim()
+            : null;
+    }
 
     private async Task OnGoogleSignInAsync()
     {
@@ -259,6 +358,7 @@ public sealed partial class MainForm
         lblGoogleAccountStatus.Text = "Odesílám přes Gmail API…";
         try
         {
+            EnsureGoogleOAuthClientWithCredentials();
             var tokens = await GetCurrentGoogleTokensAsync(account, operationToken);
             var sender = new GoogleGmailApiClient(_gmailApiHttpClient);
             var result = await sender.SendAsync(message, _googleOAuthClient!, tokens, operationToken);
