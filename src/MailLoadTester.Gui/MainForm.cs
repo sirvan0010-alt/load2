@@ -13,7 +13,7 @@ public sealed partial class MainForm : Form
     private Label lblSafetyBanner = null!;
     private Button btnWizard = null!;
     private CheckBox chkDarkMode = null!;
-    private bool _darkMode;
+    private bool _darkMode;\n    private bool _loadingSmtpCredentials;
 
     // SMTP tab
     private ComboBox txtHost = null!;
@@ -179,7 +179,7 @@ public sealed partial class MainForm : Form
         Size = new Size(1280, 920);
         MinimumSize = new Size(1000, 750);
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Font;
+        AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
         txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
