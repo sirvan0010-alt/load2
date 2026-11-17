@@ -688,7 +688,14 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + AddGmailAppPasswordHint(BuildOptions(), ex.Message), "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+            {
+                var detail = ex.Message;
+                if (txtHost.Text.Trim().Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase))
+                    detail += Environment.NewLine + Environment.NewLine
+                        + "Gmail SMTP: použij celou Gmail adresu a Heslo aplikace Google, nikoli běžné heslo účtu. "
+                        + "Heslo aplikace vyžaduje zapnuté dvoufázové ověření a nemusí být dostupné u všech účtů.";
+                ShowErrorWithCopy("Chyba při testu:\n" + detail, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+            }
         }
         finally
         {
