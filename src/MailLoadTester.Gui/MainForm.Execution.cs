@@ -43,7 +43,9 @@ public sealed partial class MainForm
             || lower.Contains("5.7.8")
             || lower.Contains("credential")
             || lower.Contains("password")
-            || lower.Contains("username");
+            || lower.Contains("username")
+            || lower.Contains("autentiz")
+            || lower.Contains("přihláš");
 
         return likelyAuthenticationFailure
             ? detail + Environment.NewLine + Environment.NewLine
@@ -630,8 +632,9 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            AppendLog($"Testovací odeslání skončilo chybou: {Validation.ExplainSmtpError(ex)}", Color.Red);
-            ShowErrorWithCopy(ex.Message, "SMTP odeslání selhalo", ex.ToString(), GuiErrorCodes.SmtpSend);
+            var detail = AddGmailAppPasswordHint(options, Validation.ExplainSmtpError(ex));
+            AppendLog($"Testovací odeslání skončilo chybou: {detail}", Color.Red);
+            ShowErrorWithCopy(AddGmailAppPasswordHint(options, ex.Message), "SMTP odeslání selhalo", ex.ToString(), GuiErrorCodes.SmtpSend);
         }
         finally
         {
