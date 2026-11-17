@@ -28,7 +28,7 @@ public sealed partial class MainForm : Form
     private ComboBox txtUser = null!;
     private TextBox txtPass = null!;
     private Button btnTestConnection = null!, btnSendTest = null!;
-    private Button btnGoogleSignIn = null!, btnGoogleSignOut = null!, btnSendGoogleTest = null!;
+    private Button btnGoogleSignIn = null!, btnGoogleSignOut = null!, btnSendGoogleTest = null!, btnGoogleSecret = null!;
     private Label lblGoogleAccountStatus = null!;
     private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
