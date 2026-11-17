@@ -66,7 +66,7 @@ Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé pop
 
 ### Přihlášení Gmail přes Google
 
-MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Veřejné Client ID aplikace je součástí programu. Aktuální konfigurace používá také ručně zadaný Client Secret; zadává se přímo v aplikaci a ukládá se zašifrovaně pomocí DPAPI pro aktuální účet Windows. Není nutné stahovat ani importovat JSON soubor.
+MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Veřejné Client ID aplikace je součástí programu. Aktuální konfigurace používá také ručně zadaný Client Secret; zadává se přímo v aplikaci a ukládá se zašifrovaně pomocí DPAPI pro aktuální účet Windows. Nejde o heslo k Gmailu a u desktopové aplikace nejde o skutečné tajemství – DPAPI chrání pouze lokálně uloženou hodnotu před jinými Windows účty. Secret můžeš kdykoliv změnit tlačítkem Nastavit / změnit Client Secret. Není nutné stahovat ani importovat JSON soubor.
 
 1. V Google Cloud projektu musí být povolené **Gmail API**: [Google Cloud – Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
 2. V režimu OAuth **Testing** musí být tvůj Google účet uvedený v seznamu testovacích uživatelů (Audience → Test users).
