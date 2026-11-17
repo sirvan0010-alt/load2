@@ -28,6 +28,30 @@ public sealed partial class MainForm
                 "Odesílatel nebo příjemce stále používá ukázkovou doménu example.com / example.net / example.org. Zadej skutečné e-mailové adresy.");
     }
 
+    private static string AddGmailAppPasswordHint(MailTestOptions options, string detail)
+    {
+        if (!options.SmtpHost.Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase)
+            || !options.UseAuthentication
+            || string.IsNullOrWhiteSpace(detail))
+            return detail;
+
+        var lower = detail.ToLowerInvariant();
+        var likelyAuthenticationFailure =
+            lower.Contains("auth")
+            || lower.Contains("535")
+            || lower.Contains("534")
+            || lower.Contains("5.7.8")
+            || lower.Contains("credential")
+            || lower.Contains("password")
+            || lower.Contains("username");
+
+        return likelyAuthenticationFailure
+            ? detail + Environment.NewLine + Environment.NewLine
+                + "Gmail SMTP: použij celou Gmail adresu a Heslo aplikace Google, nikoli běžné heslo účtu. "
+                + "Heslo aplikace vyžaduje zapnuté dvoufázové ověření a nemusí být dostupné u všech účtů."
+            : detail;
+    }
+
     private MailTestOptions BuildOptions()
     {
         var recipients = txtTo.Text.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -590,12 +614,12 @@ public sealed partial class MainForm
             lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed}";
             AppendLog(result.Sent == 1
                 ? "SMTP server přijal testovací zprávu (2xx). To samo o sobě nepotvrzuje doručení do Inboxu."
-                : $"Testovací odeslání selhalo: {result.LastError}", result.Sent == 1 ? Color.LightGreen : Color.Red);
+                : $"Testovací odeslání selhalo: {AddGmailAppPasswordHint(options, result.LastError)}", result.Sent == 1 ? Color.LightGreen : Color.Red);
 
             MessageBox.Show(
                 result.Sent == 1
                     ? $"SMTP server zprávu přijal.\nPříjemce: {recipient}\nDoba: {result.AvgSmtpSendMs:F0} ms\n\nZkontroluj také složku Spam/Junk."
-                    : $"SMTP server zprávu nepřijal.\n\n{result.LastError}",
+                    : $"SMTP server zprávu nepřijal.\n\n{AddGmailAppPasswordHint(options, result.LastError)}",
                 "Výsledek testovacího odeslání",
                 MessageBoxButtons.OK,
                 result.Sent == 1 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -647,7 +671,10 @@ public sealed partial class MainForm
                     TryAuthenticate: options.UseAuthentication,
                     DryRun: options.DryRun),
                 cts.Token);
-            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
+            var diagnosticError = string.IsNullOrEmpty(report.Error)
+                ? string.Empty
+                : AddGmailAppPasswordHint(options, report.Error);
+            var result = report.Summary + (string.IsNullOrEmpty(diagnosticError) ? string.Empty : Environment.NewLine + Environment.NewLine + diagnosticError);
             if (report.Connected && string.IsNullOrWhiteSpace(report.Error))
                 await SaveRememberedSmtpCredentialsAsync(options);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
@@ -661,7 +688,7 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+                ShowErrorWithCopy("Chyba při testu:\n" + AddGmailAppPasswordHint(BuildOptions(), ex.Message), "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
         }
         finally
         {
