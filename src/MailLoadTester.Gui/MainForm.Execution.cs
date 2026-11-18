@@ -370,6 +370,8 @@ public sealed partial class MainForm
             if (r != DialogResult.Yes) { lblStatus.Text = "Připraveno"; return; }
         }
 
+        }
+
         // Volitelná RBL kontrola source IP
         if (IsTorMode(options) && chkRbl?.Checked == true)
             AppendLog("Tor režim: RBL DNS kontrola přes systémový resolver přeskočena.", Color.DarkOrange);
