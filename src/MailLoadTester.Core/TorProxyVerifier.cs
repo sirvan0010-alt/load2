@@ -29,7 +29,9 @@ public static class TorProxyVerifier
                 "check.torproject.org", 443, 10_000, timeout.Token).ConfigureAwait(false);
 
             await using var tls = new SslStream(network, leaveInnerStreamOpen: false);
-            await tls.AuthenticateAsClientAsync("check.torproject.org", timeout.Token).ConfigureAwait(false);
+            await tls.AuthenticateAsClientAsync(
+                new System.Net.Security.SslClientAuthenticationOptions { TargetHost = "check.torproject.org" },
+                timeout.Token).ConfigureAwait(false);
 
             var request = "GET /api/ip HTTP/1.1\r\nHost: check.torproject.org\r\nUser-Agent: MailLoadTester-TorCheck/1.0\r\nAccept: application/json\r\nConnection: close\r\n\r\n";
             var requestBytes = Encoding.ASCII.GetBytes(request);
