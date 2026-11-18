@@ -5,8 +5,9 @@ public sealed partial class MainForm
     private bool _responsiveLayoutRunning;
 
     /// <summary>
-    /// Reflows the SMTP page from three columns to one column on narrower windows
-    /// and sizes controls to the actual width of their FlowLayoutPanel.
+    /// Reflows the SMTP page when three columns would make fields too narrow,
+    /// then sizes controls in every vertical FlowLayoutPanel to the available width.
+    /// This method deliberately does not change authentication behavior or controls.
     /// </summary>
     private void ApplyResponsiveLayout()
     {
@@ -16,42 +17,60 @@ public sealed partial class MainForm
         _responsiveLayoutRunning = true;
         try
         {
+            // Three columns need enough room for usable input fields. The breakpoint
+            // is based on the layout's client width, not the outer window dimensions.
             var compact = _smtpLayout.ClientSize.Width < 1120;
-            if (_smtpLayout.ColumnCount != (compact ? 1 : 3))
+            var targetColumns = compact ? 1 : 3;
+
+            if (_smtpLayout.ColumnCount != targetColumns)
             {
                 _smtpLayout.SuspendLayout();
-                _smtpLayout.ColumnStyles.Clear();
-                _smtpLayout.RowStyles.Clear();
-                _smtpLayout.ColumnCount = compact ? 1 : 3;
-                _smtpLayout.RowCount = compact ? 3 : 1;
+                try
+                {
+                    _smtpLayout.ColumnStyles.Clear();
+                    _smtpLayout.RowStyles.Clear();
+                    _smtpLayout.ColumnCount = targetColumns;
+                    _smtpLayout.RowCount = compact ? 3 : 1;
 
-                if (compact)
-                {
-                    _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                    _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 470F));
-                    _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 620F));
-                    _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));
-                    _smtpLayout.Dock = DockStyle.Top;
-                    _smtpLayout.Height = 1340;
-                    if (_smtpLayout.Parent is ScrollableControl compactParent) compactParent.AutoScroll = true;
-                    for (var i = 0; i < _smtpLayout.Controls.Count; i++)
-                        _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(0, i));
+                    if (compact)
+                    {
+                        _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                        // Keep the sections independently scrollable rather than
+                        // forcing all controls into one very tall, clipped row.
+                        _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 470F));
+                        _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 620F));
+                        _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));
+                        _smtpLayout.Dock = DockStyle.Top;
+                        _smtpLayout.Height = 1340;
+                        if (_smtpLayout.Parent is ScrollableControl compactParent)
+                            compactParent.AutoScroll = true;
+
+                        for (var i = 0; i < _smtpLayout.Controls.Count; i++)
+                            _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(0, i));
+                    }
+                    else
+                    {
+                        _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+                        _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+                        _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
+                        _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+                        _smtpLayout.Dock = DockStyle.Fill;
+                        _smtpLayout.Height = 0;
+                        if (_smtpLayout.Parent is ScrollableControl wideParent)
+                            wideParent.AutoScroll = false;
+
+                        for (var i = 0; i < _smtpLayout.Controls.Count; i++)
+                            _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(i, 0));
+                    }
                 }
-                else
+                finally
                 {
-                    _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
-                    _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
-                    _smtpLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
-                    _smtpLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-                    _smtpLayout.Dock = DockStyle.Fill;
-                    _smtpLayout.Height = 0;
-                    if (_smtpLayout.Parent is ScrollableControl wideParent) wideParent.AutoScroll = false;
-                    for (var i = 0; i < _smtpLayout.Controls.Count; i++)
-                        _smtpLayout.SetCellPosition(_smtpLayout.Controls[i], new TableLayoutPanelCellPosition(i, 0));
+                    _smtpLayout.ResumeLayout(true);
                 }
-                _smtpLayout.ResumeLayout(true);
             }
 
+            // Let docking and table layout settle before measuring child widths.
+            PerformLayout();
             ResizeFlowContent(this);
         }
         finally
@@ -60,6 +79,11 @@ public sealed partial class MainForm
         }
     }
 
+    /// <summary>
+    /// Makes the controls inside vertical flow panels follow their actual parent
+    /// width. Labels wrap instead of retaining the old hard-coded 340/420/520 px
+    /// maximum widths; editable fields no longer remain at a fixed 360 px width.
+    /// </summary>
     private static void ResizeFlowContent(Control root)
     {
         foreach (Control child in root.Controls)
@@ -67,46 +91,64 @@ public sealed partial class MainForm
             if (child is FlowLayoutPanel flow &&
                 flow.FlowDirection is FlowDirection.TopDown or FlowDirection.BottomUp)
             {
-                var available = Math.Max(120, flow.ClientSize.Width - flow.Padding.Horizontal - 12);
+                var scrollbarAllowance = flow.AutoScroll ? SystemInformation.VerticalScrollBarWidth : 0;
+                var available = Math.Max(140,
+                    flow.ClientSize.Width - flow.Padding.Horizontal - scrollbarAllowance - 12);
+
                 flow.SuspendLayout();
-                foreach (Control item in flow.Controls)
+                try
                 {
-                    item.Margin = new Padding(item.Margin.Left, item.Margin.Top, 4, item.Margin.Bottom);
-                    if (item is Label label)
+                    foreach (Control item in flow.Controls)
                     {
-                        if (label.AutoSize)
-                            label.MaximumSize = new Size(available, 0);
-                        else
-                            label.Width = available;
-                    }
-                    else if (item is TextBox or ComboBox)
-                    {
-                        item.Width = available;
-                    }
-                    else if (item is CheckBox checkBox)
-                    {
-                        checkBox.AutoSize = false;
-                        checkBox.Width = available;
-                        var textSize = TextRenderer.MeasureText(checkBox.Text, checkBox.Font,
-                            new Size(Math.Max(80, available - 28), 0), TextFormatFlags.WordBreak);
-                        checkBox.Height = Math.Max(checkBox.Font.Height + 8, textSize.Height + 8);
-                    }
-                    else if (item is FlowLayoutPanel nested)
-                    {
-                        nested.Width = available;
-                        if (nested.FlowDirection is FlowDirection.LeftToRight or FlowDirection.RightToLeft)
-                            nested.WrapContents = true;
-                    }
-                    else if (item is Button)
-                    {
-                        item.Width = Math.Min(Math.Max(item.Width, 180), available);
-                    }
-                    else if (item is Panel or GroupBox or TableLayoutPanel)
-                    {
-                        item.Width = available;
+                        item.Margin = new Padding(item.Margin.Left, item.Margin.Top, 4, item.Margin.Bottom);
+
+                        switch (item)
+                        {
+                            case Label label:
+                                if (label.AutoSize)
+                                    label.MaximumSize = new Size(available, 0);
+                                else
+                                    label.Width = available;
+                                break;
+
+                            case TextBox:
+                            case ComboBox:
+                                item.Width = available;
+                                break;
+
+                            case CheckBox checkBox:
+                                checkBox.AutoSize = false;
+                                checkBox.Width = available;
+                                var textSize = TextRenderer.MeasureText(
+                                    checkBox.Text,
+                                    checkBox.Font,
+                                    new Size(Math.Max(80, available - 28), 0),
+                                    TextFormatFlags.WordBreak);
+                                checkBox.Height = Math.Max(checkBox.Font.Height + 8, textSize.Height + 8);
+                                break;
+
+                            case FlowLayoutPanel nested:
+                                nested.Width = available;
+                                if (nested.FlowDirection is FlowDirection.LeftToRight or FlowDirection.RightToLeft)
+                                    nested.WrapContents = true;
+                                break;
+
+                            case Button button:
+                                button.Width = Math.Min(Math.Max(button.Width, 180), available);
+                                break;
+
+                            case GroupBox:
+                            case Panel:
+                            case TableLayoutPanel:
+                                item.Width = available;
+                                break;
+                        }
                     }
                 }
-                flow.ResumeLayout(true);
+                finally
+                {
+                    flow.ResumeLayout(true);
+                }
             }
 
             if (child.HasChildren)
