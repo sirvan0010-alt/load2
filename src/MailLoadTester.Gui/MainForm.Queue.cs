@@ -121,6 +121,7 @@ public sealed partial class MainForm
             _torEndpointKey = string.Empty;
             _torStatusTimer?.Stop();
             lblProxyStatus.Text = "🧅 TOR VYPNUTO — přímé připojení; výstupní IP není chráněna Tor.";
+            SetTorIndicator("🧅 TOR VYPNUTO", Color.FromArgb(232, 232, 232), Color.DimGray);
             lblProxyStatus.BackColor = Color.FromArgb(232, 232, 232);
             lblProxyStatus.ForeColor = Color.DimGray;
             return;
@@ -151,6 +152,7 @@ public sealed partial class MainForm
         var host = listConfigured ? "seznam proxy" : txtProxyHost.Text.Trim();
         var port = listConfigured ? 0 : (int)numProxyPort.Value;
         lblProxyStatus.Text = $"PROXY KONFIGUROVÁNA ({host}{(port > 0 ? ":" + port : "")}) — Tor exit není ověřen.";
+        SetTorIndicator("🧅 TOR NEOVĚŘEN", Color.FromArgb(255, 239, 194), Color.FromArgb(110, 75, 0));
         lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
         lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
     }
@@ -194,6 +196,15 @@ public sealed partial class MainForm
         }
     }
 
+    private void SetTorIndicator(string text, Color backColor, Color foreColor)
+    {
+        if (lblTorPersistentStatus is null || lblTorPersistentStatus.Owner is null)
+            return;
+        lblTorPersistentStatus.Text = text;
+        lblTorPersistentStatus.BackColor = backColor;
+        lblTorPersistentStatus.ForeColor = foreColor;
+    }
+
     private void RenderTorStatus()
     {
         if (lblProxyStatus is null || lblProxyStatus.IsDisposed)
@@ -202,18 +213,21 @@ public sealed partial class MainForm
         if (_torVerified)
         {
             lblProxyStatus.Text = $"🧅 TOR AKTIVNÍ — exit IP: {_torExitIp ?? "ověřena"} · kontrola přes Tor Project.";
+            SetTorIndicator($"🧅 TOR OK · {_torExitIp ?? "ověřeno"}", Color.FromArgb(205, 240, 210), Color.DarkGreen);
             lblProxyStatus.BackColor = Color.FromArgb(205, 240, 210);
             lblProxyStatus.ForeColor = Color.DarkGreen;
         }
         else if (_torCheckRunning)
         {
             lblProxyStatus.Text = "🧅 TOR OVĚŘUJI — SMTP test zatím nespouštěj.";
+            SetTorIndicator("🧅 TOR OVĚŘUJI…", Color.FromArgb(255, 239, 194), Color.FromArgb(110, 75, 0));
             lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
             lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
         }
         else
         {
             lblProxyStatus.Text = "🧅 TOR NENÍ OVĚŘEN — " + _torDetail + " Odesílání přes Tor bude zablokováno, dokud ověření neprojde.";
+            SetTorIndicator("🧅 TOR CHYBA", Color.FromArgb(250, 220, 220), Color.DarkRed);
             lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
             lblProxyStatus.ForeColor = Color.DarkRed;
         }
