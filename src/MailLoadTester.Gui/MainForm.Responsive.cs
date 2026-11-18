@@ -127,6 +127,8 @@ public sealed partial class MainForm
 
                             case TextBox:
                             case ComboBox:
+                            case ListBox:
+                            case DataGridView:
                                 item.Width = available;
                                 break;
 
@@ -155,8 +157,21 @@ public sealed partial class MainForm
                             // be matched before the general Panel case.
                             case TableLayoutPanel:
                             case GroupBox:
-                            case Panel:
                                 item.Width = available;
+                                break;
+
+                            case Panel panel:
+                                panel.Width = available;
+                                // The EML template picker is a manually positioned
+                                // TextBox + browse Button inside a plain Panel.
+                                // Resize both children together to avoid overflow.
+                                var panelTextBox = panel.Controls.OfType<TextBox>().FirstOrDefault();
+                                var panelButton = panel.Controls.OfType<Button>().FirstOrDefault();
+                                if (panelTextBox is not null && panelButton is not null)
+                                {
+                                    panelButton.Left = Math.Max(0, available - panelButton.Width);
+                                    panelTextBox.Width = Math.Max(80, panelButton.Left - panelTextBox.Left - 4);
+                                }
                                 break;
                         }
                     }
