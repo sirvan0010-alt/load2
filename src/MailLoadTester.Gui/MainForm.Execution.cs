@@ -413,6 +413,7 @@ public sealed partial class MainForm
         btnStart.Enabled = false;
         btnStop.Enabled = true;
         rtbLog.Clear();
+        gridMessageAudit?.Rows.Clear();
         smtpLogTab?.ClearLog();
         AppendLog("=== START TESTU ===", Color.Cyan);
         AppendLog($"SMTP cíl: {options.SmtpHost}:{options.Port} · {options.Security}", Color.LightGray);
@@ -514,15 +515,20 @@ public sealed partial class MainForm
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
             if (result.MessageAudit is { Count: > 0 } auditRows)
             {
-                AppendLog($"=== PŘEHLED JEDNOTLIVÝCH ZPRÁV ({auditRows.Count}) ===", Color.Cyan);
+                gridMessageAudit.Rows.Clear();
                 foreach (var item in auditRows.OrderBy(x => x.MessageIndex))
                 {
-                    AppendLog($"#{item.MessageIndex} · {item.Status} · pokusy: {item.Attempts} · příjemce: {item.Recipient}", Color.LightBlue);
-                    AppendLog($"Od: {item.SenderDisplayName} · Předmět: {item.Subject}", Color.LightGray);
-                    AppendLog("Text zprávy: " + (string.IsNullOrEmpty(item.Body) ? "[prázdné tělo]" : item.Body), Color.Gainsboro);
-                    if (!string.IsNullOrWhiteSpace(item.ResultDetail))
-                        AppendLog("Výsledek: " + item.ResultDetail, item.Status == "Selhalo" ? Color.OrangeRed : Color.DarkGray);
+                    gridMessageAudit.Rows.Add(
+                        item.MessageIndex,
+                        item.Status,
+                        item.Recipient,
+                        item.SenderDisplayName,
+                        item.Subject,
+                        string.IsNullOrEmpty(item.Body) ? "[prázdné tělo]" : item.Body,
+                        item.Attempts,
+                        item.ResultDetail);
                 }
+                AppendLog($"Detailní přehled obsahu a výsledků {auditRows.Count} zpráv je na kartě „Přehled zpráv“.", Color.LightBlue);
             }
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
             AppendLog($"SMTP SEND volání: {result.SmtpSendAttempts:N0}" +
