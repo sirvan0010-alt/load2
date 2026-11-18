@@ -865,7 +865,20 @@ public sealed partial class MainForm
             new DataGridViewTextBoxColumn { Name = "Body", HeaderText = "Text zprávy", FillWeight = 260 },
             new DataGridViewTextBoxColumn { Name = "Attempts", HeaderText = "SMTP pokusy", FillWeight = 55 },
             new DataGridViewTextBoxColumn { Name = "ResultDetail", HeaderText = "Výsledek", FillWeight = 130 });
+        btnExportMessageAudit = new Button
+        {
+            Text = "Exportovat CSV…",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right,
+            Enabled = false,
+            Margin = new Padding(4)
+        };
+        btnExportMessageAudit.Click += (_, _) => ExportMessageAuditCsv();
+        var messageAuditToolbar = new Panel { Dock = DockStyle.Top, Height = 42 };
+        messageAuditToolbar.Controls.Add(btnExportMessageAudit);
+        btnExportMessageAudit.Location = new Point(4, 4);
         messageAuditPage.Controls.Add(gridMessageAudit);
+        messageAuditPage.Controls.Add(messageAuditToolbar);
         appLogPage.Controls.Add(rtbLog);
         smtpLogPage.Controls.Add(smtpLogTab);
         logTabs.TabPages.Add(appLogPage);
