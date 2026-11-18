@@ -304,6 +304,14 @@ public sealed partial class MainForm
             return;
         }
 
+        // Fail-closed ochrana: pokud je zvolen lokální Tor SOCKS5 endpoint,
+        // před každým startem ověř skutečný Tor exit. Při neúspěchu se SMTP vůbec nespustí.
+        if (!await EnsureTorVerifiedBeforeStartAsync(options))
+        {
+            lblStatus.Text = "Připraveno — Tor nebyl ověřen";
+            return;
+        }
+
         // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET).
         // Obě kontroly se zobrazí společně v jednom kopírovatelném dialogu.
         try
