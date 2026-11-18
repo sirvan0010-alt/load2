@@ -165,7 +165,6 @@ public sealed partial class MainForm : Form
     private TaskCompletionSource<bool>? _runCompletion;
     private CancellationTokenSource? _testConnectionCts;
     private TaskCompletionSource<bool>? _testConnectionCompletion;
-    private System.Windows.Forms.Timer? _torStatusTimer;
     private System.Windows.Forms.Timer? _mailboxMonitorTimer;
     private CancellationTokenSource? _mailboxMonitorCts;
     private TaskCompletionSource<bool>? _mailboxMonitorCompletion;
