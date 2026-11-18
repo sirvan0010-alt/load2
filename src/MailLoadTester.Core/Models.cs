@@ -186,7 +186,9 @@ public sealed record MailTestResult(
     /// <summary>Independent IMAP before/after observations; not causal proof of messages stored by this run.</summary>
     MailboxRunDelta? MailboxRunDelta = null,
     /// <summary>True when the opt-in startup validation message failed; AutoRestart must not retry it.</summary>
-    bool StartupValidationFailed = false,\n    /// <summary>Per-message content and delivery outcome for reviewing generated test payloads.</summary>\n    IReadOnlyList<MessageAuditRecord>? MessageAudit = null);
+    bool StartupValidationFailed = false,
+    /// <summary>Per-message content and delivery outcome for reviewing generated test payloads.</summary>
+    IReadOnlyList<MessageAuditRecord>? MessageAudit = null);
 
 public static class Validation
 {
