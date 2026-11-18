@@ -98,12 +98,16 @@ public sealed class SmtpTestRunner
     {
         options = CapacityRunPlanner.Apply(options);
         var ledger = new DeliveryLedger(options.MessageCount);
+        var messageAudit = new ConcurrentDictionary<int, MessageAuditRecord>();
         var capacityGuard = options.CapacityRun is { Enabled: true } limits
             ? new CapacityRunGuard(limits)
             : null;
 
         if (!options.AutoRestartOnFailure)
-            return await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger, capacityGuard).ConfigureAwait(false);
+        {
+            var singleResult = await RunSingleAsync(options, progress, ct, attemptIndex: 0, ledger, capacityGuard, messageAudit).ConfigureAwait(false);
+            return singleResult with { MessageAudit = messageAudit.Values.OrderBy(x => x.MessageIndex).ToArray() };
+        }
 
         var current = options;
         MailTestResult result;
@@ -124,7 +128,7 @@ public sealed class SmtpTestRunner
 
         while (true)
         {
-            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger, capacityGuard).ConfigureAwait(false);
+            result = await RunSingleAsync(current, progress, ct, attemptIndex: attempt, ledger, capacityGuard, messageAudit).ConfigureAwait(false);
             attempt++;
 
             sumRetries += result.Retries;
@@ -194,7 +198,8 @@ public sealed class SmtpTestRunner
             RetryMetrics = aggregatedRetryMetrics,
             OutcomeCounts = aggregatedOutcomeCounts,
             LatencyHistogram = aggregatedLatencyHistogram,
-            EndpointHealth = aggregatedEndpointHealth
+            EndpointHealth = aggregatedEndpointHealth,
+            MessageAudit = messageAudit.Values.OrderBy(x => x.MessageIndex).ToArray()
         };
     }
 
@@ -218,7 +223,8 @@ public sealed class SmtpTestRunner
         CancellationToken ct,
         int attemptIndex,
         DeliveryLedger ledger,
-        CapacityRunGuard? capacityGuard)
+        CapacityRunGuard? capacityGuard,
+        ConcurrentDictionary<int, MessageAuditRecord> messageAudit)
     {
         CancellationTokenSource? durationCts = null;
         var queueMetrics = new ScenarioQueueMetrics();
@@ -883,6 +889,22 @@ public sealed class SmtpTestRunner
                         if (options.RandomizeMessageBody)
                             data = data with { Body = RandomTestData.CreateRandomBody() };
 
+                        var auditBody = options.HideMessageBody
+                            ? string.Empty
+                            : TemplateTags.Process(data.Body, i);
+                        var auditName = options.HideSenderDisplayName ? string.Empty : data.Name;
+                        var auditSubject = TemplateTags.Process(data.Subject, i);
+                        messageAudit[i] = new MessageAuditRecord(
+                            i,
+                            recipient,
+                            auditName,
+                            auditSubject,
+                            auditBody,
+                            DateTimeOffset.UtcNow,
+                            "Připraveno",
+                            "Zpráva byla vytvořena; čeká na výsledek SMTP.",
+                            0);
+
                         var msgSw = Stopwatch.StartNew();
                         Exception? lastEx = null;
                         bool success = false;
@@ -1188,6 +1210,16 @@ public sealed class SmtpTestRunner
                         var explained = lastEx != null ? Validation.ExplainSmtpError(lastEx) : "";
                         if (success)
                         {
+                            if (messageAudit.TryGetValue(i, out var acceptedAudit))
+                                messageAudit[i] = acceptedAudit with
+                                {
+                                    Status = options.DryRun ? "Simulováno" : "Přijato SMTP",
+                                    ResultDetail = options.DryRun
+                                        ? "Dry-run: zpráva nebyla skutečně odeslána."
+                                        : "SMTP server přijal zprávu bez chyby.",
+                                    Attempts = Math.Max(1, acceptedAudit.Attempts + 1)
+                                };
+
                             // SMTP SendAsync returning successfully means the logical message
                             // was accepted. Commit it exactly once in the shared ledger.
                             if (ledger.TryMarkAccepted(i))
@@ -1222,6 +1254,14 @@ public sealed class SmtpTestRunner
                         }
                         else
                         {
+                            if (messageAudit.TryGetValue(i, out var failedAudit))
+                                messageAudit[i] = failedAudit with
+                                {
+                                    Status = "Selhalo",
+                                    ResultDetail = explained,
+                                    Attempts = Math.Max(1, options.MaxRetries + 1)
+                                };
+
                             if (retryable)
                                 retryMetrics.RecordExhausted();
                             else
