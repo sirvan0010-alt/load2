@@ -645,7 +645,7 @@ public sealed partial class MainForm
         chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
         lblProxyStatus = new Label
         {
-            AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
+            AutoSize = false, Width = 720, Height = 58, Padding = new Padding(10, 8, 10, 8),
             Margin = new Padding(0, 4, 0, 12), BorderStyle = BorderStyle.FixedSingle,
             TextAlign = ContentAlignment.MiddleLeft,
             Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
@@ -1194,6 +1194,10 @@ public sealed partial class MainForm
         txtSubject.Text = "MailLoadTester test";
         txtBody.Text = "Toto je testovací zpráva generovaná aplikací MailLoadTester.";
         txtDisplayName.Text = "MailLoadTester";
+        chkHideMessageBody.Checked = false;
+        chkHideSenderDisplayName.Checked = false;
+        chkRandomizeMessageBody.Checked = false;
+        chkRandomizeSenderDisplayName.Checked = false;
         txtProxyHost.Text = "127.0.0.1";
         txtSessionLogPath.Text = Path.Combine(AppContext.BaseDirectory, "smtp-session.log");
         UpdateRandomAttachmentSafetyInfo();
