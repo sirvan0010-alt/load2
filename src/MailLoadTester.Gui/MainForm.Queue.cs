@@ -127,6 +127,7 @@ public sealed partial class MainForm
             if (!key.Equals(_torEndpointKey, StringComparison.Ordinal))
             {
                 _torEndpointKey = key;
+                _lastTorCheckUtc = DateTime.MinValue;
                 _torVerified = false;
                 _torExitIp = null;
                 _torDetail = "Ověřuji Tor exit přes SOCKS5.";
