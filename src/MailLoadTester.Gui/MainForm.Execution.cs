@@ -395,7 +395,14 @@ public sealed partial class MainForm
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
-        if (IsMailboxMonitorConfigured())
+        if (IsTorMode(options))
+        {
+            StopMailboxMonitorPolling();
+            _mailboxMonitorCts?.Cancel();
+            if (IsMailboxMonitorConfigured())
+                AppendLog("Tor režim: IMAP Mailbox Monitor je pozastaven, aby nevytvářel přímé spojení mimo SOCKS5.", Color.DarkOrange);
+        }
+        else if (IsMailboxMonitorConfigured())
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
@@ -449,7 +456,7 @@ public sealed partial class MainForm
             AppendLog($"IMAP výchozí stav již dosahuje limitu { (int)numMailboxStopPercent.Value } %. SMTP test nebude spuštěn.", Color.OrangeRed);
             _cts.Cancel();
         }
-        if (!_cts.IsCancellationRequested)
+        if (!_cts.IsCancellationRequested && !IsTorMode(options))
             StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
         _runner.SetMailboxFeedbackBaseline(
@@ -471,7 +478,9 @@ public sealed partial class MainForm
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
-            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            var finalMailboxSnapshot = IsTorMode(options)
+                ? null
+                : await CaptureFinalMailboxSnapshotAsync();
             result = result with
             {
                 MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
@@ -510,6 +519,8 @@ public sealed partial class MainForm
                 AppendLog($"IMAP změna během běhu: quota zprávy {FormatDelta(mailboxDelta.QuotaMessageCountDelta)}; quota objem {FormatByteDelta(mailboxDelta.QuotaStorageBytesDelta)}; INBOX {FormatDelta(mailboxDelta.InboxMessageCountDelta)}; Junk/Spam {FormatDelta(mailboxDelta.JunkMessageCountDelta)}.", Color.LightBlue);
                 AppendLog(mailboxDelta.Note, Color.DarkGray);
             }
+            else if (IsTorMode(options) && IsMailboxMonitorConfigured())
+                AppendLog("IMAP změna nebyla měřena: Mailbox Monitor je v Tor režimu záměrně vypnut kvůli přímému IMAP spojení.", Color.DarkOrange);
             else if (IsMailboxMonitorConfigured())
                 AppendLog("IMAP změnu během běhu nelze vyčíslit: chybí platný počáteční nebo konečný snímek či podporované metriky.", Color.Orange);
             AppendLog(RunObservability.FormatSummaryLine(RunObservability.FromReport(runReport)), Color.LightBlue);
