@@ -918,9 +918,18 @@ public sealed partial class MainForm
         statusStrip = new StatusStrip { Dock = DockStyle.Bottom };
         progressBar = new ToolStripProgressBar { Width = 200, Maximum = 100 };
         lblStatus = new ToolStripStatusLabel { Text = "Připraveno", Spring = true };
+        lblTorPersistentStatus = new ToolStripStatusLabel
+        {
+            Text = "🧅 TOR VYPNUTO",
+            Spring = false,
+            BackColor = Color.FromArgb(232, 232, 232),
+            ForeColor = Color.DimGray,
+            ToolTipText = "Stálý stav Toru. Zelená znamená, že výstupní IP byla ověřena přes Tor Project."
+        };
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
         lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
+        statusStrip.Items.Add(lblTorPersistentStatus);
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
