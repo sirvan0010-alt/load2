@@ -316,8 +316,15 @@ public sealed partial class MainForm
             return;
         }
 
-        // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET).
+        // Pre-flight SPF/DMARC používá systémový DNS resolver. V Tor režimu jej přeskočíme,
+        // protože by DNS dotaz odešel mimo SOCKS5 a mohl prozradit síťovou identitu.
         // Obě kontroly se zobrazí společně v jednom kopírovatelném dialogu.
+        if (IsTorMode(options))
+        {
+            AppendLog("Tor režim: SPF/DMARC kontrola přes systémový DNS přeskočena, aby DNS dotaz nešel mimo Tor.", Color.DarkOrange);
+        }
+        else
+        {
         try
         {
             var domain = DnsPolicyChecker.ExtractDomain(txtFrom.Text.Trim());
@@ -364,7 +371,9 @@ public sealed partial class MainForm
         }
 
         // Volitelná RBL kontrola source IP
-        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
+        if (IsTorMode(options) && chkRbl?.Checked == true)
+            AppendLog("Tor režim: RBL DNS kontrola přes systémový resolver přeskočena.", Color.DarkOrange);
+        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text) && !IsTorMode(options))
         {
             try
             {
