@@ -46,6 +46,8 @@ public sealed partial class MainForm : Form
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
+    private CheckBox chkHideMessageBody = null!, chkHideSenderDisplayName = null!;
+    private CheckBox chkRandomizeMessageBody = null!, chkRandomizeSenderDisplayName = null!;
     private NumericUpDown numMaxRandomAttachments = null!, numRandomAttachmentSizeMb = null!;
     private Label lblRandomAttachmentSafety = null!;
     private ListBox lstAttachments = null!, lstInlineAttachments = null!;
