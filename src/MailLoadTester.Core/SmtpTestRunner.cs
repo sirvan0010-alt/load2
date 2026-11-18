@@ -1059,6 +1059,12 @@ public sealed class SmtpTestRunner
                                         var smtpT0 = Stopwatch.GetTimestamp();
                                         try
                                         {
+                                            if (messageAudit.TryGetValue(i, out var sendingAudit))
+                                                messageAudit[i] = sendingAudit with
+                                                {
+                                                    Status = "Odesílá se",
+                                                    Attempts = sendingAudit.Attempts + 1
+                                                };
                                             Interlocked.Increment(ref smtpSendAttempts);
                                             if (utf8Format != null)
                                                 await client.SendAsync(utf8Format, message, workerCt).ConfigureAwait(false);
@@ -1216,8 +1222,7 @@ public sealed class SmtpTestRunner
                                     Status = options.DryRun ? "Simulováno" : "Přijato SMTP",
                                     ResultDetail = options.DryRun
                                         ? "Dry-run: zpráva nebyla skutečně odeslána."
-                                        : "SMTP server přijal zprávu bez chyby.",
-                                    Attempts = Math.Max(1, acceptedAudit.Attempts + 1)
+                                        : "SMTP server přijal zprávu bez chyby."
                                 };
 
                             // SMTP SendAsync returning successfully means the logical message
@@ -1258,8 +1263,7 @@ public sealed class SmtpTestRunner
                                 messageAudit[i] = failedAudit with
                                 {
                                     Status = "Selhalo",
-                                    ResultDetail = explained,
-                                    Attempts = Math.Max(1, options.MaxRetries + 1)
+                                    ResultDetail = explained
                                 };
 
                             if (retryable)
@@ -1305,7 +1309,18 @@ public sealed class SmtpTestRunner
                         // If cancellation/exception happened after the logical claim but
                         // before acceptance, leave the message retryable for AutoRestart.
                         if (!ledgerAccepted)
+                        {
                             ledger.MarkFailed(i);
+                            if (messageAudit.TryGetValue(i, out var unfinishedAudit)
+                                && unfinishedAudit.Status is "Připraveno" or "Odesílá se")
+                                messageAudit[i] = unfinishedAudit with
+                                {
+                                    Status = workerCt.IsCancellationRequested ? "Přerušeno" : "Nedokončeno",
+                                    ResultDetail = workerCt.IsCancellationRequested
+                                        ? "Odesílání bylo přerušeno před potvrzením SMTP serverem."
+                                        : "Zpráva nebyla dokončena; podrobnosti jsou v aplikačním logu."
+                                };
+                        }
 
                         if (!recipientCommitted)
                             pace.ReleaseRecipient(recipient);
