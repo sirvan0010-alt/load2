@@ -54,6 +54,76 @@ public sealed partial class MainForm
             : detail;
     }
 
+    private DialogResult ShowDnsPolicyConfirmationWithCopy(string message)
+    {
+        using var dialog = new Form
+        {
+            Text = "Kontrola DNS – SPF / DMARC",
+            Width = 700,
+            Height = 390,
+            MinimumSize = new Size(540, 300),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoScaleMode = AutoScaleMode.Font,
+            Font = Font
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+
+        var details = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            WordWrap = true,
+            Text = message
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+
+        var no = new Button { Text = "Ne", Width = 90, Height = 30, DialogResult = DialogResult.No };
+        var yes = new Button { Text = "Ano, spustit test", Width = 135, Height = 30, DialogResult = DialogResult.Yes };
+        var copy = new Button { Text = "Kopírovat upozornění", Width = 155, Height = 30 };
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(message);
+                copy.Text = "Zkopírováno";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Text se nepodařilo zkopírovat: " + ex.Message,
+                    "Schránka", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+
+        buttons.Controls.Add(no);
+        buttons.Controls.Add(yes);
+        buttons.Controls.Add(copy);
+        layout.Controls.Add(details, 0, 0);
+        layout.Controls.Add(buttons, 0, 1);
+        dialog.Controls.Add(layout);
+        dialog.AcceptButton = yes;
+        dialog.CancelButton = no;
+        return dialog.ShowDialog(this);
+    }
+
     private MailTestOptions BuildOptions()
     {
         var recipients = txtTo.Text.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -234,7 +304,8 @@ public sealed partial class MainForm
             return;
         }
 
-        // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET)
+        // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET).
+        // Obě kontroly se zobrazí společně v jednom kopírovatelném dialogu.
         try
         {
             var domain = DnsPolicyChecker.ExtractDomain(txtFrom.Text.Trim());
@@ -242,42 +313,42 @@ public sealed partial class MainForm
             {
                 lblStatus.Text = $"Kontroluji SPF/DMARC pro {domain}…";
                 var policy = await DnsPolicyChecker.CheckAsync(domain);
+                var warnings = new List<string>();
+
                 if (!policy.HasSpf)
-                {
-                    var text = policy.SpfCheckFailed
-                        ? $"Nepodařilo se ověřit SPF záznam domény {domain} (DNS dotaz selhal).\n" +
-                          "Nejde o potvrzeně chybějící SPF — DNS prostě teď neodpověděl.\n\n" +
-                          "Chcete i přesto spustit test?"
-                        : $"Doména {domain} nemá platný SPF záznam (TXT v=spf1).\n" +
-                          "Bez SPF Gmail/Microsoft často zprávy zahodí nebo označí jako spam a poškodí reputaci IP/domény.\n\n" +
-                          "Chcete i přesto spustit test?";
-                    var r = MessageBox.Show(text,
-                        policy.SpfCheckFailed ? "SPF neověřeno" : "Varování: Chybí SPF",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
-                }
+                    warnings.Add(policy.SpfCheckFailed
+                        ? $"SPF – NEOVĚŘENO pro doménu {domain}: DNS dotaz selhal. To neznamená, že SPF záznam chybí."
+                        : $"SPF – CHYBÍ pro doménu {domain}: nebyl nalezen TXT záznam začínající v=spf1.");
+
                 if (!policy.HasDmarc)
+                    warnings.Add(policy.DmarcCheckFailed
+                        ? $"DMARC – NEOVĚŘENO pro doménu {domain}: DNS dotaz selhal. To neznamená, že DMARC politika chybí."
+                        : $"DMARC – CHYBÍ pro doménu {domain}: nebyl nalezen TXT záznam _dmarc.{domain} začínající v=DMARC1.");
+
+                if (warnings.Count > 0)
                 {
-                    var text = policy.DmarcCheckFailed
-                        ? $"Nepodařilo se ověřit DMARC politiku domény {domain} (DNS dotaz selhal).\n" +
-                          "Nejde o potvrzeně chybějící DMARC — DNS prostě teď neodpověděl.\n\n" +
-                          "Chcete i přesto spustit test?"
-                        : $"Doména {domain} nemá DMARC politiku (_dmarc.{domain}, TXT v=DMARC1).\n" +
-                          "Pro hromadné testy vůči Gmail/Yahoo je DMARC často vyžadován.\n\n" +
-                          "Chcete i přesto spustit test?";
-                    var r = MessageBox.Show(text,
-                        policy.DmarcCheckFailed ? "DMARC neověřeno" : "Varování: Chybí DMARC",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
+                    var message = string.Join(Environment.NewLine + Environment.NewLine, warnings)
+                        + Environment.NewLine + Environment.NewLine
+                        + "SPF/DMARC jsou DNS politiky domény uvedené v poli Od, nikoli SMTP serveru. "
+                        + "Chybějící záznam sám o sobě nedokazuje, že poskytovatel zprávu odmítne; "
+                        + "může však zhoršit ověřitelnost a doručitelnost zpráv."
+                        + Environment.NewLine + Environment.NewLine
+                        + "Chcete i přesto spustit test?";
+                    var r = ShowDnsPolicyConfirmationWithCopy(message);
+                    if (r != DialogResult.Yes) { lblStatus.Text = "Připraveno"; return; }
                 }
             }
         }
         catch (Exception ex)
         {
-            var r = MessageBox.Show(
-                $"Kontrola SPF/DMARC selhala ({ex.Message}).\nPokračovat bez ověření?",
-                "DNS kontrola", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
+            var message = $"Kontrola SPF/DMARC selhala: {ex.Message}"
+                + Environment.NewLine + Environment.NewLine
+                + "Kontrola DNS nedokázala určit stav politik domény. "
+                + "Nejde o potvrzení, že SPF nebo DMARC chybí."
+                + Environment.NewLine + Environment.NewLine
+                + "Chcete pokračovat bez ověření?";
+            var r = ShowDnsPolicyConfirmationWithCopy(message);
+            if (r != DialogResult.Yes) { lblStatus.Text = "Připraveno"; return; }
         }
 
         // Volitelná RBL kontrola source IP
