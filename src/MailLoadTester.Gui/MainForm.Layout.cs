@@ -630,7 +630,7 @@ public sealed partial class MainForm
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
         txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
-        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9050, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
+        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9150, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
         numProxyPort.ValueChanged += (_, _) => UpdateProxyStatus();
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
