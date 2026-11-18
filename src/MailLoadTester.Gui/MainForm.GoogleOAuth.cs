@@ -85,12 +85,12 @@ public sealed partial class MainForm
         if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
-        if (TryGetConfiguredTorEndpoint(out _))
+        if (IsAnyProxyConfiguredInUi())
         {
             ShowErrorWithCopy(
-                "Google OAuth přihlášení není směrováno přes SOCKS5/Tor. Operace byla zablokována, aby se při zapnutém Toru neodesílaly požadavky přímo na Google.",
+                "Google OAuth přihlášení nepoužívá nakonfigurovanou proxy. Operace byla zablokována, aby se proxy požadavek neobešel přímým spojením na Google.",
                 "Google OAuth mimo Tor",
-                "Nejdříve vypni Tor režim, nebo používej SMTP transport přes ověřený Tor SOCKS5.",
+                "Nejdříve vypni proxy, nebo používej SMTP transport přes nakonfigurovanou a ověřenou proxy.",
                 GuiErrorCodes.Validation);
             return;
         }
@@ -172,9 +172,9 @@ public sealed partial class MainForm
         {
             if (account is not null && _googleOAuthClient is not null)
             {
-                if (TryGetConfiguredTorEndpoint(out _))
+                if (IsAnyProxyConfiguredInUi())
                 {
-                    revokeWarning = "\nVzdálené odvolání u Google bylo přeskočeno, protože OAuth požadavek by obešel Tor. Místní token byl odstraněn; vzdálené odvolání proveď v nastavení Google účtu.";
+                    revokeWarning = "\nVzdálené odvolání u Google bylo přeskočeno, protože OAuth požadavek by obešel nakonfigurovanou proxy. Místní token byl odstraněn; vzdálené odvolání proveď v nastavení Google účtu.";
                 }
                 else
                 {
@@ -228,12 +228,12 @@ public sealed partial class MainForm
         if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
-        if (TryGetConfiguredTorEndpoint(out _))
+        if (IsAnyProxyConfiguredInUi())
         {
             ShowErrorWithCopy(
-                "Gmail API odesílání není v této verzi směrováno přes SOCKS5/Tor. Zpráva nebyla odeslána, aby nedošlo k přímému síťovému spojení mimo Tor.",
+                "Gmail API odesílání nepoužívá nakonfigurovanou proxy. Zpráva nebyla odeslána, aby nedošlo k přímému síťovému spojení mimo proxy.",
                 "Gmail API mimo Tor",
-                "Pro odesílání přes Tor použij SMTP transport se zapnutou a ověřenou SOCKS5 proxy.",
+                "Pro odesílání přes proxy použij SMTP transport s ověřenou SOCKS5 proxy.",
                 GuiErrorCodes.Validation);
             return;
         }
