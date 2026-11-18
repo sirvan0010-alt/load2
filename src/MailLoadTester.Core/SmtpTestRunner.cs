@@ -878,6 +878,11 @@ public sealed class SmtpTestRunner
                                 emlIsHtml || options.HtmlBody,
                                 Array.Empty<RandomTestData.GeneratedAttachment>());
 
+                        if (options.RandomizeSenderDisplayName)
+                            data = data with { Name = RandomTestData.CreateRandomDisplayName() };
+                        if (options.RandomizeMessageBody)
+                            data = data with { Body = RandomTestData.CreateRandomBody() };
+
                         var msgSw = Stopwatch.StartNew();
                         Exception? lastEx = null;
                         bool success = false;
@@ -1460,7 +1465,7 @@ public sealed class SmtpTestRunner
         bool isHtml)
     {
         var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(data.Name, options.From));
+        message.From.Add(new MailboxAddress(options.HideSenderDisplayName ? string.Empty : data.Name, options.From));
         message.To.Add(MailboxAddress.Parse(recipient));
 
         // BCC & CC
@@ -1476,7 +1481,7 @@ public sealed class SmtpTestRunner
         // SMTPUTF8 is an SMTP transport option, not a MIME message header.
         // The runner enables MimeKit FormatOptions.International when requested.
 
-        var processedBody = TemplateTags.Process(data.Body, testId);
+        var processedBody = options.HideMessageBody ? string.Empty : TemplateTags.Process(data.Body, testId);
         var builder = new BodyBuilder();
         if (isHtml)
             builder.HtmlBody = processedBody;
