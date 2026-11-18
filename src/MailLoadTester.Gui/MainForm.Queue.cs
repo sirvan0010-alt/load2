@@ -225,6 +225,16 @@ public sealed partial class MainForm
             || !IsLocalTorEndpoint(options.ProxyHost, options.ProxyPort))
             return true;
 
+        if (options.DirectMxDelivery || !string.IsNullOrWhiteSpace(options.WebhookUrl))
+        {
+            ShowErrorWithCopy(
+                "SMTP test nebyl spuštěn. V Tor režimu jsou Direct MX a externí webhook zakázány, protože jejich DNS/HTTP provoz by mohl odejít mimo SOCKS5.",
+                "Funkce mimo Tor",
+                "Vypni Direct MX a vymaž Webhook URL, nebo tyto funkce používej mimo Tor režim.",
+                GuiErrorCodes.Validation);
+            return false;
+        }
+
         var endpoint = new ProxyEndpoint(ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
             string.IsNullOrWhiteSpace(options.ProxyUsername) ? null : options.ProxyUsername,
             string.IsNullOrWhiteSpace(options.ProxyPassword) ? null : options.ProxyPassword);
