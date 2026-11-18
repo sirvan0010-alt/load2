@@ -80,6 +80,22 @@ Export reportu neobsahuje hesla a známé tajné hodnoty. Před sdílením zkont
 
 Webhook může odeslat výsledek běhu na nakonfigurovanou URL. Používej pouze důvěryhodný endpoint a ověř, jaké údaje přijímá a kam je ukládá.
 
-## 8. Data a grafy
+## 8. SOCKS5 / Tor: co je chráněno a co ne
+
+Tor je prostředník mezi počítačem a cílovým serverem.
+
+- Když se SMTP spojení naváže přes funkční Tor SOCKS5 proxy, cílový SMTP server vidí jako zdroj síťovou adresu výstupního uzlu Tor, nikoli přímo veřejnou IP adresu domácího připojení.
+- Když Tor Browser nebo Tor služba přestane fungovat, spojení přes SOCKS5 obvykle selže. Aplikace musí odesílání zastavit; nesmí zkusit přímé připojení jako náhradní cestu.
+- MailLoadTester používá pro SMTP nakonfigurovanou proxy. V tomto režimu není záměrná automatická záložní cesta přes běžné internetové připojení. Pokud proxy není dostupná, SMTP spojení se nemá podařit.
+- Zelený indikátor znamená, že kontrolní požadavek přes SOCKS5 potvrdil Tor exit. Není to nepřetržitý důkaz pro každý paket ani záruka anonymity.
+- Během běhu se ověření Toru opakuje. Pokud kontrola selže, aktivní test se zruší. Již předané zprávy nelze vzít zpět; zprávy, které SMTP server ještě nepřijal, se nemusí odeslat.
+
+**Tor chrání síťovou IP, ne identitu e-mailového účtu.** Pokud se přes Tor přihlásíš ke svému osobnímu Gmailu a odešleš zprávu, Google stále ví, který účet používáš. Příjemce obvykle uvidí skutečnou e-mailovou adresu účtu v hlavičce From, i když nastavíš jiné zobrazované jméno. Náhodné jméno mění pouze text zobrazený vedle adresy; nemění účet, přihlašovací údaje ani vlastnictví schránky.
+
+Příklad: přihlásíš se k účtu `mojeadresa@gmail.com` a nastavíš zobrazované jméno `Alex Morgan`. Příjemce může vidět „Alex Morgan“, ale adresa účtu zůstane `mojeadresa@gmail.com` a Google zná účet, ze kterého zpráva odešla.
+
+Tor proto nepovažuj za anonymizaci osobního Gmail účtu. Jde o ochranu síťové cesty, nikoli o skrytí identity odesílatele.
+
+## 9. Data a grafy
 
 SMTP Accepted není důkaz uložení do schránky. IMAP delta může zahrnovat aktivitu jiných klientů. Chybějící kvóta je Unknown, ne nula. Tyto rozdíly jsou bezpečnostní i metodický požadavek, nikoli kosmetické označení.
