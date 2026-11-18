@@ -359,7 +359,7 @@ public sealed partial class MainForm
         chkHideMessageBody = AddCheckBox(flRecipient, "Skrýt text zprávy", false,
             "Odešle zprávu bez viditelného textového/HTML těla. Hlavička X-MailLoadTester-Test-ID zůstane pro interní identifikaci.");
         chkRandomizeMessageBody = AddCheckBox(flRecipient, "Náhodný text zprávy", false,
-            "Pro každou zprávu vybere jiné předpřipravené testovací tělo. Volba Skrýt má přednost.");
+            "Pro každou zprávu náhodně vybere předpřipravené testovací tělo (výběr se může opakovat). Volba Skrýt má přednost.");
         chkHideMessageBody.CheckedChanged += (_, _) =>
         {
             if (chkHideMessageBody.Checked) chkRandomizeMessageBody.Checked = false;
