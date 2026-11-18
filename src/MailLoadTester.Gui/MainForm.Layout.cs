@@ -972,7 +972,7 @@ public sealed partial class MainForm
             Spring = false,
             BackColor = Color.FromArgb(232, 232, 232),
             ForeColor = Color.DimGray,
-            ToolTipText = "Stálý stav Toru. Zelená znamená, že výstupní IP byla ověřena přes Tor Project."
+            ToolTipText = "Zelená znamená, že Tor Project ověřil Tor výstup. Kontrola se opakuje každých 5 sekund; při ztrátě ověření se běžící test zruší. Tor chrání síťovou IP, nikoli identitu Gmail účtu."
         };
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
