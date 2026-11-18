@@ -239,6 +239,18 @@ public sealed partial class MainForm
             || !IsLocalTorEndpoint(options.ProxyHost, options.ProxyPort))
             return true;
 
+        if (!string.IsNullOrWhiteSpace(options.SourceIp)
+            || !string.IsNullOrWhiteSpace(options.Ipv4Rotation)
+            || !string.IsNullOrWhiteSpace(options.Ipv6Prefix))
+        {
+            ShowErrorWithCopy(
+                "SMTP test nebyl spuštěn. Source IP a IP rotace nejsou v tomto režimu slučitelné s Tor proxy; mohly by vynutit přímý socket mimo SOCKS5.",
+                "Konflikt nastavení s Tor",
+                "Vypni Source IP, IPv4 rotaci a IPv6 prefix. Při použití Toru musí SMTP spojení vzniknout výhradně přes SOCKS5 proxy.",
+                GuiErrorCodes.Validation);
+            return false;
+        }
+
         if (options.DirectMxDelivery || !string.IsNullOrWhiteSpace(options.WebhookUrl))
         {
             ShowErrorWithCopy(
