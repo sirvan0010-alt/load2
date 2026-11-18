@@ -30,6 +30,7 @@ public sealed partial class MainForm : Form
     private Button btnTestConnection = null!, btnSendTest = null!;
     private Button btnGoogleSignIn = null!, btnGoogleSignOut = null!, btnSendGoogleTest = null!;
     private Label lblGoogleAccountStatus = null!;
+    private ToolStripStatusLabel lblTorPersistentStatus = null!;
     private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
