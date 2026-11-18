@@ -406,6 +406,7 @@ public sealed partial class MainForm
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
+        _torProtectedRunActive = IsTorMode(options);
         _mailboxQuotaStopTriggered = false;
         _lastRunReport = null;
         btnExportReport.Enabled = false;
@@ -511,6 +512,18 @@ public sealed partial class MainForm
 
             AppendLog($"\n=== VÝSLEDEK ===", Color.Cyan);
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
+            if (result.MessageAudit is { Count: > 0 } auditRows)
+            {
+                AppendLog($"=== PŘEHLED JEDNOTLIVÝCH ZPRÁV ({auditRows.Count}) ===", Color.Cyan);
+                foreach (var item in auditRows.OrderBy(x => x.MessageIndex))
+                {
+                    AppendLog($"#{item.MessageIndex} · {item.Status} · pokusy: {item.Attempts} · příjemce: {item.Recipient}", Color.LightBlue);
+                    AppendLog($"Od: {item.SenderDisplayName} · Předmět: {item.Subject}", Color.LightGray);
+                    AppendLog("Text zprávy: " + (string.IsNullOrEmpty(item.Body) ? "[prázdné tělo]" : item.Body), Color.Gainsboro);
+                    if (!string.IsNullOrWhiteSpace(item.ResultDetail))
+                        AppendLog("Výsledek: " + item.ResultDetail, item.Status == "Selhalo" ? Color.OrangeRed : Color.DarkGray);
+                }
+            }
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
             AppendLog($"SMTP SEND volání: {result.SmtpSendAttempts:N0}" +
                 (result.CapacitySendReservations.HasValue ? $"; kapacitní rezervace: {result.CapacitySendReservations.Value:N0}; rezervovaný MIME objem {FormatMailboxBytes(result.CapacityMimeBytesReserved)}." : "."), Color.LightBlue);
@@ -575,6 +588,7 @@ public sealed partial class MainForm
         {
             StopMailboxMonitorPolling();
             _isRunning = false;
+            _torProtectedRunActive = false;
             btnStart.Enabled = true;
             btnStop.Enabled = false;
             _cts?.Dispose();
