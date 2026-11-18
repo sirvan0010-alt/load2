@@ -130,7 +130,7 @@ public sealed partial class MainForm
         }
 
         AddStep("1", "SMTP připojení", "Vyplň server, port a TLS. Otestuj připojení; heslo lze volitelně zapamatovat přes DPAPI.", "SMTP Server", "Otevřít SMTP");
-        AddStep("2", "Zpráva a příjemce", "Nastav From, To, předmět a krátké tělo. Začni s jedním autorizovaným příjemcem.", "E-mail (Od / obsah)", "Otevřít zprávu");
+        AddStep("2", "Zpráva a příjemce", "Na kartě SMTP Server nastav příjemce, zobrazované jméno a tělo zprávy. Na kartě E-mail nastav From a předmět.", "SMTP Server", "Otevřít příjemce");
         AddStep("3", "Bezpečný test", "Zapni Test mode, nastav povolenou doménu, 1 zprávu a paralelismus 1. Dry-run nejprve ověří konfiguraci.", "Test", "Otevřít test");
         AddStep("4", "Pokročilé funkce", "Proxy, rotace IP, pacing a další limity nech vypnuté, dokud základní test nefunguje.", "Proxy", "Otevřít Proxy");
 
