@@ -83,6 +83,11 @@ public sealed partial class MainForm
          || host.Equals("::1", StringComparison.OrdinalIgnoreCase))
         && port is 9050 or 9150;
 
+    private static bool IsTorMode(MailTestOptions options) =>
+        string.IsNullOrWhiteSpace(options.ProxyList)
+        && options.UseSocks5Proxy
+        && IsLocalTorEndpoint(options.ProxyHost, options.ProxyPort);
+
     private bool TryGetConfiguredTorEndpoint(out ProxyEndpoint? endpoint)
     {
         endpoint = null;
