@@ -166,7 +166,7 @@ public sealed partial class MainForm
     {
         if (_torStatusTimer is null)
         {
-            _torStatusTimer = new System.Windows.Forms.Timer { Interval = 20_000 };
+            _torStatusTimer = new System.Windows.Forms.Timer { Interval = 5_000 };
             _torStatusTimer.Tick += async (_, _) => await VerifyConfiguredTorAsync();
         }
         if (!_torStatusTimer.Enabled)
@@ -190,6 +190,11 @@ public sealed partial class MainForm
                 _torVerified = result.IsTor;
                 _torExitIp = result.ExitIp;
                 _torDetail = result.Detail;
+                if (!result.IsTor && _torProtectedRunActive)
+                {
+                    _torDetail += " Aktivní test byl automaticky zastaven; aplikace nesmí pokračovat mimo SOCKS5.";
+                    _cts?.Cancel();
+                }
                 RenderTorStatus();
             }
         }
