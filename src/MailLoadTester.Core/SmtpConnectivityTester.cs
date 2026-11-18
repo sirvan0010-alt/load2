@@ -8,6 +8,14 @@ public static class SmtpConnectivityTester
     public static async Task<string> TestAsync(MailTestOptions o, CancellationToken ct)
     {
         Validation.Validate(o);
+
+        var proxyConfigured = !string.IsNullOrWhiteSpace(o.ProxyList) || o.UseSocks5Proxy;
+        var sourceBindingConfigured = !string.IsNullOrWhiteSpace(o.SourceIp)
+            || !string.IsNullOrWhiteSpace(o.Ipv4Rotation)
+            || !string.IsNullOrWhiteSpace(o.Ipv6Prefix);
+        if (proxyConfigured && sourceBindingConfigured)
+            throw new InvalidOperationException(
+                "Source IP binding/rotace nelze bezpečně kombinovat s proxy. Test připojení byl zablokován, aby se předešlo přímému spojení mimo SOCKS/HTTP proxy.");
         if (o.DryRun)
             return $"DRY-RUN: simulace připojení k {o.SmtpHost}:{o.Port} (Zabezpečení={o.Security}) — žádné reálné spojení.";
 
