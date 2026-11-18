@@ -137,9 +137,11 @@ public sealed partial class MainForm
                                 button.Width = Math.Min(Math.Max(button.Width, 180), available);
                                 break;
 
+                            // TableLayoutPanel derives from Panel, so it must
+                            // be matched before the general Panel case.
+                            case TableLayoutPanel:
                             case GroupBox:
                             case Panel:
-                            case TableLayoutPanel:
                                 item.Width = available;
                                 break;
                         }
