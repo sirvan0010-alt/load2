@@ -72,6 +72,7 @@ public sealed partial class MainForm
 
     private System.Windows.Forms.Timer? _torStatusTimer;
     private bool _torVerified;
+    private bool _torProtectedRunActive;
     private bool _torCheckRunning;
     private string _torEndpointKey = string.Empty;
     private string? _torExitIp;
