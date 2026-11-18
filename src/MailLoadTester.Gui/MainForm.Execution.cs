@@ -208,7 +208,11 @@ public sealed partial class MainForm
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
-                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked),
+            HideMessageBody: chkHideMessageBody.Checked,
+            HideSenderDisplayName: chkHideSenderDisplayName.Checked,
+            RandomizeMessageBody: chkRandomizeMessageBody.Checked,
+            RandomizeSenderDisplayName: chkRandomizeSenderDisplayName.Checked);
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
