@@ -40,6 +40,16 @@ public sealed class SmtpConnectionPool : IAsyncDisposable
     public SmtpConnectionPool(MailTestOptions options, SmtpSessionLogger? sessionLogger = null, ProtocolPathObserver? pathObserver = null)
     {
         _options = options;
+
+        // A caller-supplied socket (SourceIp / IP rotation) can bypass MailKit's
+        // ProxyClient path. Fail closed instead of risking direct SMTP outside SOCKS.
+        var proxyConfigured = !string.IsNullOrWhiteSpace(options.ProxyList) || options.UseSocks5Proxy;
+        var sourceBindingConfigured = !string.IsNullOrWhiteSpace(options.SourceIp)
+            || !string.IsNullOrWhiteSpace(options.Ipv4Rotation)
+            || !string.IsNullOrWhiteSpace(options.Ipv6Prefix);
+        if (proxyConfigured && sourceBindingConfigured)
+            throw new InvalidOperationException(
+                "Source IP binding/rotation nelze kombinovat s HTTP/SOCKS proxy. Vynucený socket by mohl obejít ProxyClient a odhalit skutečnou IP. Vypni Source IP, IPv4 rotaci i IPv6 prefix.");
         _socket = SmtpConnectivityTester.ToSocketOptions(options.Security);
         _gate = new SemaphoreSlim(options.MaxConcurrency, options.MaxConcurrency);
         _sessionLogger = sessionLogger;
