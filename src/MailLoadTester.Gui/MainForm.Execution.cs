@@ -3,6 +3,49 @@ namespace MailLoadTester.Gui;
 public sealed partial class MainForm
 {
 
+    private void ExportMessageAuditCsv()
+    {
+        if (gridMessageAudit.Rows.Count == 0)
+        {
+            MessageBox.Show(this, "Pro aktuální běh nejsou k dispozici žádné záznamy zpráv.",
+                "Přehled zpráv", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Exportovat přehled zpráv",
+            Filter = "CSV soubor (*.csv)|*.csv",
+            FileName = $"MailLoadTester-message-audit-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
+            AddExtension = true,
+            DefaultExt = "csv"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        static string Csv(string? value) =>
+            "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
+
+        var columns = gridMessageAudit.Columns.Cast<DataGridViewColumn>()
+            .Where(column => column.Visible)
+            .OrderBy(column => column.DisplayIndex)
+            .ToArray();
+        var lines = new List<string>
+        {
+            string.Join(";", columns.Select(column => Csv(column.HeaderText)))
+        };
+        foreach (DataGridViewRow row in gridMessageAudit.Rows)
+        {
+            if (row.IsNewRow) continue;
+            lines.Add(string.Join(";", columns.Select(column =>
+                Csv(row.Cells[column.Index].Value?.ToString()))));
+        }
+
+        File.WriteAllText(dialog.FileName, string.Join(Environment.NewLine, lines),
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        AppendLog($"Přehled {gridMessageAudit.Rows.Count} zpráv exportován do CSV: {dialog.FileName}", Color.LightGreen);
+    }
+
     private static void EnsureRealSmtpConfiguration(MailTestOptions options)
     {
         static bool IsExampleDomain(string value)
@@ -414,6 +457,7 @@ public sealed partial class MainForm
         btnStop.Enabled = true;
         rtbLog.Clear();
         gridMessageAudit?.Rows.Clear();
+        if (btnExportMessageAudit != null) btnExportMessageAudit.Enabled = false;
         smtpLogTab?.ClearLog();
         AppendLog("=== START TESTU ===", Color.Cyan);
         AppendLog($"SMTP cíl: {options.SmtpHost}:{options.Port} · {options.Security}", Color.LightGray);
@@ -528,6 +572,7 @@ public sealed partial class MainForm
                         item.Attempts,
                         item.ResultDetail);
                 }
+                btnExportMessageAudit.Enabled = auditRows.Count > 0;
                 AppendLog($"Detailní přehled obsahu a výsledků {auditRows.Count} zpráv je na kartě „Přehled zpráv“.", Color.LightBlue);
             }
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
