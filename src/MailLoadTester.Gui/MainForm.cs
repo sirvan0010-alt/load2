@@ -142,6 +142,7 @@ public sealed partial class MainForm : Form
     // Bottom panels
     private RichTextBox rtbLog = null!;
     private SmtpLogTab smtpLogTab = null!;
+    private DataGridView gridMessageAudit = null!;
     private FlowLayoutPanel pnlWorkers = null!;
     private Label[]? _workerLabels;
     private Label[] _checklistLabels = new Label[6];
