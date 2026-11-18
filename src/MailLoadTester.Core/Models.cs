@@ -109,7 +109,11 @@ public sealed record MailTestOptions(
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
     int DurationSeconds = 0,
     /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
-    CapacityRunLimits? CapacityRun = null);
+    CapacityRunLimits? CapacityRun = null,
+    bool HideMessageBody = false,
+    bool HideSenderDisplayName = false,
+    bool RandomizeMessageBody = false,
+    bool RandomizeSenderDisplayName = false);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
 
