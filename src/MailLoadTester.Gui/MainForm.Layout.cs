@@ -332,7 +332,43 @@ public sealed partial class MainForm
             ForeColor = SystemColors.GrayText,
             Margin = new Padding(0, 4, 0, 8)
         };
+        lblRecipientNote.Text = "Předmět nastav na kartě E-mail. Zobrazované jméno a tělo zprávy jsou níže — jde o údaje viditelné příjemci.";
         flRecipient.Controls.Add(lblRecipientNote);
+
+        txtDisplayName = AddLabeledText(flRecipient, "Jméno odesílatele:", "Text zobrazovaný vedle e-mailové adresy odesílatele v poštovním klientu příjemce.");
+        chkHideSenderDisplayName = AddCheckBox(flRecipient, "Skrýt jméno odesílatele", false,
+            "Příjemce uvidí pouze e-mailovou adresu odesílatele, nikoli textové jméno.");
+        chkRandomizeSenderDisplayName = AddCheckBox(flRecipient, "Náhodné jméno odesílatele", false,
+            "Pro každou zprávu vygeneruje náhodné zobrazované jméno. Volba Skrýt má přednost.");
+        chkHideSenderDisplayName.CheckedChanged += (_, _) =>
+        {
+            if (chkHideSenderDisplayName.Checked) chkRandomizeSenderDisplayName.Checked = false;
+        };
+        chkRandomizeSenderDisplayName.CheckedChanged += (_, _) =>
+        {
+            if (chkRandomizeSenderDisplayName.Checked) chkHideSenderDisplayName.Checked = false;
+        };
+
+        var lblBody = new Label { Text = "Text zprávy viditelný příjemci:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        flRecipient.Controls.Add(lblBody);
+        txtBody = new TextBox { Multiline = true, Height = 100, Width = 310, ScrollBars = ScrollBars.Vertical };
+        flRecipient.Controls.Add(txtBody);
+        toolTip.SetToolTip(lblBody, "Obsah e-mailu, který uvidí příjemce. Lze použít prostý text, HTML nebo dynamické značky.");
+        toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
+        chkHtmlBody = AddCheckBox(flRecipient, "HTML tělo", false, "Zpráva bude odeslána jako text/html.");
+        chkHideMessageBody = AddCheckBox(flRecipient, "Skrýt text zprávy", false,
+            "Odešle zprávu bez viditelného textového/HTML těla. Hlavička X-MailLoadTester-Test-ID zůstane pro interní identifikaci.");
+        chkRandomizeMessageBody = AddCheckBox(flRecipient, "Náhodný text zprávy", false,
+            "Pro každou zprávu vybere jiné předpřipravené testovací tělo. Volba Skrýt má přednost.");
+        chkHideMessageBody.CheckedChanged += (_, _) =>
+        {
+            if (chkHideMessageBody.Checked) chkRandomizeMessageBody.Checked = false;
+        };
+        chkRandomizeMessageBody.CheckedChanged += (_, _) =>
+        {
+            if (chkRandomizeMessageBody.Checked) chkHideMessageBody.Checked = false;
+        };
+
         gbRecipient.Controls.Add(flRecipient);
         tblSmtp.Controls.Add(gbRecipient, 2, 0);
 
@@ -364,19 +400,6 @@ public sealed partial class MainForm
             AutoSize = true, MaximumSize = new Size(380, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        txtDisplayName = AddLabeledText(flAddr, "Zobrazované jméno:", "Jméno, které se zobrazí v mail klientu.");
-        chkHideSenderDisplayName = AddCheckBox(flAddr, "Skrýt zobrazované jméno", false,
-            "Příjemce uvidí pouze e-mailovou adresu odesílatele, nikoli textové jméno.");
-        chkRandomizeSenderDisplayName = AddCheckBox(flAddr, "Náhodné zobrazované jméno", false,
-            "Pro každou zprávu vygeneruje náhodné zobrazované jméno. Volba Skrýt má přednost.");
-        chkHideSenderDisplayName.CheckedChanged += (_, _) =>
-        {
-            if (chkHideSenderDisplayName.Checked) chkRandomizeSenderDisplayName.Checked = false;
-        };
-        chkRandomizeSenderDisplayName.CheckedChanged += (_, _) =>
-        {
-            if (chkRandomizeSenderDisplayName.Checked) chkHideSenderDisplayName.Checked = false;
-        };
         gbAddr.Controls.Add(flAddr);
         tblMsg.Controls.Add(gbAddr, 0, 0);
 
@@ -384,25 +407,6 @@ public sealed partial class MainForm
         var flContent = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         txtSubject = AddLabeledText(flContent, "Předmět:",
             "Předmět e-mailu. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID} – každá zpráva bude unikátní.");
-        var lblBody = new Label { Text = "Tělo zprávy:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
-        flContent.Controls.Add(lblBody);
-        txtBody = new TextBox { Multiline = true, Height = 110, Width = 360, ScrollBars = ScrollBars.Vertical, Anchor = AnchorStyles.Left | AnchorStyles.Right };
-        flContent.Controls.Add(txtBody);
-        toolTip.SetToolTip(lblBody, "Obsah každé odesílané zprávy. Lze použít prostý text, HTML nebo dynamické značky.");
-        toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
-        chkHtmlBody = AddCheckBox(flContent, "HTML tělo", false, "Zpráva bude odeslána jako text/html.");
-        chkHideMessageBody = AddCheckBox(flContent, "Skrýt tělo zprávy", false,
-            "Odešle zprávu bez viditelného textového/HTML těla. Hlavička X-MailLoadTester-Test-ID zůstane pro interní identifikaci.");
-        chkRandomizeMessageBody = AddCheckBox(flContent, "Náhodný text těla", false,
-            "Pro každou zprávu vybere jiné předpřipravené testovací tělo. Volba Skrýt má přednost.");
-        chkHideMessageBody.CheckedChanged += (_, _) =>
-        {
-            if (chkHideMessageBody.Checked) chkRandomizeMessageBody.Checked = false;
-        };
-        chkRandomizeMessageBody.CheckedChanged += (_, _) =>
-        {
-            if (chkRandomizeMessageBody.Checked) chkHideMessageBody.Checked = false;
-        };
         chkRandomData = AddCheckBox(flContent, "Náhodná testovací data", false, "Automaticky vygeneruje náhodný předmět, tělo a jméno.");
         chkBogusData = AddCheckBox(flContent, "Realistická data (Bogus)", false,
             "Použije realistická jména, názvy produktů a text. Nemění From.");
