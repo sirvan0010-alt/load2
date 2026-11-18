@@ -181,7 +181,7 @@ Pokud Tor přestane fungovat, spojení přes SOCKS5 má selhat. MailLoadTester n
 
 **Důležité:** Tor skryje síťovou IP před cílovým serverem, ale neskryje účet, kterým ses přihlásil. Pokud odešleš zprávu ze svého osobního Gmailu, Google zná tvůj účet a příjemce zpravidla uvidí skutečnou adresu Gmailu. Náhodné zobrazované jméno tuto adresu nemění.
 
-Po dokončení běhu se na samostatné kartě **Přehled zpráv** zobrazí jednotlivé zprávy: příjemce, zobrazované jméno, předmět, tělo zprávy, počet skutečných SMTP SEND pokusů a výsledek. Tabulku můžeš označit a zkopírovat pomocí Ctrl+C. U prázdného těla se zobrazí `[prázdné tělo]`. Přehled je pouze v paměti aplikace a nový běh jej nahradí; zatím se samostatně neukládá do CSV. Před kopírováním nebo sdílením zkontroluj, zda neobsahuje citlivé údaje.
+Po dokončení běhu se na samostatné kartě **Přehled zpráv** zobrazí jednotlivé zprávy: příjemce, zobrazované jméno, předmět, tělo po generování náhodného obsahu a zpracování šablon, počet skutečných SMTP SEND pokusů a výsledek. Pokud vlastní payload plugin následně změní MIME obsah, tato tabulka zobrazuje obsah před touto úpravou. Tabulku můžeš označit a zkopírovat pomocí Ctrl+C. U prázdného těla se zobrazí `[prázdné tělo]`. Přehled je pouze v paměti aplikace a nový běh jej nahradí; zatím se samostatně neukládá do CSV. Před kopírováním nebo sdílením zkontroluj, zda neobsahuje citlivé údaje.
 
 ## 9. Mailbox Monitor (IMAP)
 
