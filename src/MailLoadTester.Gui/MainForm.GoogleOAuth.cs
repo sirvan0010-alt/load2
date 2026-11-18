@@ -85,6 +85,16 @@ public sealed partial class MainForm
         if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
 
+        if (TryGetConfiguredTorEndpoint(out _))
+        {
+            ShowErrorWithCopy(
+                "Google OAuth přihlášení není směrováno přes SOCKS5/Tor. Operace byla zablokována, aby se při zapnutém Toru neodesílaly požadavky přímo na Google.",
+                "Google OAuth mimo Tor",
+                "Nejdříve vypni Tor režim, nebo používej SMTP transport přes ověřený Tor SOCKS5.",
+                GuiErrorCodes.Validation);
+            return;
+        }
+
         var operationToken = BeginGoogleOAuthOperation();
         btnGoogleSignIn.Enabled = false;
         btnGoogleSignOut.Enabled = false;
@@ -162,13 +172,20 @@ public sealed partial class MainForm
         {
             if (account is not null && _googleOAuthClient is not null)
             {
-                try
+                if (TryGetConfiguredTorEndpoint(out _))
                 {
-                    await _googleOAuthClient.RevokeAsync(account.RefreshToken, operationToken);
+                    revokeWarning = "\nVzdálené odvolání u Google bylo přeskočeno, protože OAuth požadavek by obešel Tor. Místní token byl odstraněn; vzdálené odvolání proveď v nastavení Google účtu.";
                 }
-                catch (Exception ex)
+                else
                 {
-                    revokeWarning = "\nGoogle se nepodařilo potvrdit vzdálené odvolání: " + ex.Message;
+                    try
+                    {
+                        await _googleOAuthClient.RevokeAsync(account.RefreshToken, operationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        revokeWarning = "\nGoogle se nepodařilo potvrdit vzdálené odvolání: " + ex.Message;
+                    }
                 }
             }
 
@@ -210,6 +227,16 @@ public sealed partial class MainForm
     {
         if (_isRunning || _testConnectionCts is not null || _googleOAuthOperationCts is not null)
             return;
+
+        if (TryGetConfiguredTorEndpoint(out _))
+        {
+            ShowErrorWithCopy(
+                "Gmail API odesílání není v této verzi směrováno přes SOCKS5/Tor. Zpráva nebyla odeslána, aby nedošlo k přímému síťovému spojení mimo Tor.",
+                "Gmail API mimo Tor",
+                "Pro odesílání přes Tor použij SMTP transport se zapnutou a ověřenou SOCKS5 proxy.",
+                GuiErrorCodes.Validation);
+            return;
+        }
 
         var account = _googleOAuthStoredAccount;
         if (account is null)
@@ -345,10 +372,12 @@ public sealed partial class MainForm
                 "Pole Od musí odpovídat přihlášenému Gmail účtu (" + account.Email + ").");
 
         var message = new MimeMessage();
-        var displayName = txtDisplayName.Text.Trim();
-        message.From.Add(new MailboxAddress(
-            string.IsNullOrWhiteSpace(displayName) ? account.Email : displayName,
-            account.Email));
+        var displayName = chkHideSenderDisplayName.Checked
+            ? string.Empty
+            : chkRandomizeSenderDisplayName.Checked
+                ? RandomTestData.CreateRandomDisplayName()
+                : txtDisplayName.Text.Trim();
+        message.From.Add(new MailboxAddress(displayName, account.Email));
 
         AddGoogleRecipients(message.To, txtTo.Text, "Komu");
         AddGoogleRecipients(message.Cc, txtCc.Text, "Kopie");
@@ -358,10 +387,15 @@ public sealed partial class MainForm
 
         message.Subject = txtSubject.Text ?? string.Empty;
         var body = new BodyBuilder();
+        var messageBody = chkHideMessageBody.Checked
+            ? string.Empty
+            : chkRandomizeMessageBody.Checked
+                ? RandomTestData.CreateRandomBody()
+                : txtBody.Text;
         if (chkHtmlBody.Checked)
-            body.HtmlBody = txtBody.Text;
+            body.HtmlBody = messageBody;
         else
-            body.TextBody = txtBody.Text;
+            body.TextBody = messageBody;
 
         foreach (var attachment in lstAttachments.Items.Cast<string>())
         {
