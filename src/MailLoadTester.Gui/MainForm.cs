@@ -207,6 +207,7 @@ public sealed partial class MainForm : Form
             await InitializeGoogleOAuthAsync();
         };
         FormClosed += (_, _) => DisposeGoogleOAuthResources();
+        FormClosed += (_, _) => { _torStatusTimer?.Stop(); _torStatusTimer?.Dispose(); _torStatusTimer = null; };
         FormClosed += (_, _) => SaveLayoutPreferences();
     }
 
