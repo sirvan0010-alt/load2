@@ -45,7 +45,16 @@ public sealed partial class MainForm
         };
 
         // === Top button bar ===
-        var topPanel = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(8, 6, 8, 6) };
+        var topPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Padding = new Padding(8, 6, 8, 6),
+            Margin = Padding.Empty
+        };
         btnStart = new Button
         {
             Text = "▶ START", Width = 120, Height = 36, Left = 8, Top = 6,
