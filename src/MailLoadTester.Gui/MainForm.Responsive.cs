@@ -89,6 +89,8 @@ public sealed partial class MainForm
         foreach (Control child in root.Controls)
         {
             if (child is FlowLayoutPanel flow &&
+                flow.Visible &&
+                flow.ClientSize.Width > 0 &&
                 flow.FlowDirection is FlowDirection.TopDown or FlowDirection.BottomUp)
             {
                 var scrollbarAllowance = flow.AutoScroll ? SystemInformation.VerticalScrollBarWidth : 0;
@@ -106,9 +108,21 @@ public sealed partial class MainForm
                         {
                             case Label label:
                                 if (label.AutoSize)
+                                {
                                     label.MaximumSize = new Size(available, 0);
+                                }
                                 else
+                                {
                                     label.Width = available;
+                                    var labelTextSize = TextRenderer.MeasureText(
+                                        label.Text,
+                                        label.Font,
+                                        new Size(Math.Max(80, available - label.Padding.Horizontal - 8), int.MaxValue),
+                                        TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+                                    label.Height = Math.Max(
+                                        label.Height,
+                                        labelTextSize.Height + label.Padding.Vertical + 4);
+                                }
                                 break;
 
                             case TextBox:
