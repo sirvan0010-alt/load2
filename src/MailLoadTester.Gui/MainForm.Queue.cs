@@ -88,6 +88,9 @@ public sealed partial class MainForm
         && options.UseSocks5Proxy
         && IsLocalTorEndpoint(options.ProxyHost, options.ProxyPort);
 
+    private bool IsAnyProxyConfiguredInUi() =>
+        chkSocks5?.Checked == true || !string.IsNullOrWhiteSpace(txtProxyList?.Text);
+
     private bool TryGetConfiguredTorEndpoint(out ProxyEndpoint? endpoint)
     {
         endpoint = null;
