@@ -836,10 +836,41 @@ public sealed partial class MainForm
         var logTabs = new TabControl { Dock = DockStyle.Fill };
         var appLogPage = new TabPage("Aplikační log") { Padding = new Padding(3) };
         var smtpLogPage = new TabPage("SMTP události") { Padding = new Padding(3) };
+        var messageAuditPage = new TabPage("Přehled zpráv") { Padding = new Padding(3) };
+        gridMessageAudit = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = true,
+            AutoGenerateColumns = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = true,
+            ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText,
+            DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True, Padding = new Padding(4) },
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize
+        };
+        gridMessageAudit.Columns.AddRange(
+            new DataGridViewTextBoxColumn { Name = "MessageIndex", HeaderText = "#", FillWeight = 35 },
+            new DataGridViewTextBoxColumn { Name = "Status", HeaderText = "Stav", FillWeight = 65 },
+            new DataGridViewTextBoxColumn { Name = "Recipient", HeaderText = "Příjemce", FillWeight = 100 },
+            new DataGridViewTextBoxColumn { Name = "SenderName", HeaderText = "Zobrazované jméno", FillWeight = 90 },
+            new DataGridViewTextBoxColumn { Name = "Subject", HeaderText = "Předmět", FillWeight = 120 },
+            new DataGridViewTextBoxColumn { Name = "Body", HeaderText = "Text zprávy", FillWeight = 260 },
+            new DataGridViewTextBoxColumn { Name = "Attempts", HeaderText = "SMTP pokusy", FillWeight = 55 },
+            new DataGridViewTextBoxColumn { Name = "ResultDetail", HeaderText = "Výsledek", FillWeight = 130 });
+        messageAuditPage.Controls.Add(gridMessageAudit);
         appLogPage.Controls.Add(rtbLog);
         smtpLogPage.Controls.Add(smtpLogTab);
         logTabs.TabPages.Add(appLogPage);
         logTabs.TabPages.Add(smtpLogPage);
+        logTabs.TabPages.Add(messageAuditPage);
         bottomSplit.Panel1.Controls.Add(logTabs);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
