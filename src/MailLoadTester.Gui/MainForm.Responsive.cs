@@ -117,7 +117,7 @@ public sealed partial class MainForm
                                     var labelTextSize = TextRenderer.MeasureText(
                                         label.Text,
                                         label.Font,
-                                        new Size(Math.Max(80, available - label.Padding.Horizontal - 8), int.MaxValue),
+                                        new Size(Math.Max(80, available - label.Padding.Horizontal - 8), 0),
                                         TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
                                     label.Height = Math.Max(
                                         label.Height,
