@@ -201,6 +201,7 @@ public sealed partial class MainForm : Form
         UpdateSafetyBanner();
         ApplyTheme(false);
         Resize += (_, _) => ApplyResponsiveLayout();
+        tabs.SelectedIndexChanged += (_, _) => ApplyResponsiveLayout();
         FormClosing += MainForm_FormClosing;
         Shown += async (_, _) =>
         {
