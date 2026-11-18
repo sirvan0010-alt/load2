@@ -173,6 +173,16 @@ Tyto volby slouží k řízenému a autorizovanému testování. Nepoužívej je
 - **Auto-restart** může opakovat nevyřešené části testu. Sleduj počet pokusů a výsledky; již přijaté logické zprávy se díky delivery ledgeru znovu neposílají.
 - **SMTP session log** je ve výchozím stavu vypnutý. Při zapnutí může zaznamenat adresy, hlavičky a obsah. Aktivní soubor má limit 8 MiB a uchovávají se nejvýše tři zálohy.
 
+## Tor / SOCKS5 – srozumitelné vysvětlení
+
+Tor funguje jako prostředník mezi tvým počítačem a SMTP serverem. Pokud se e-mail posílá přes Tor, SMTP server vidí síťovou adresu Tor výstupního uzlu, nikoli přímo veřejnou IP adresu tvého domácího připojení.
+
+Pokud Tor přestane fungovat, spojení přes SOCKS5 má selhat. MailLoadTester nesmí přepnout na přímé připojení jako náhradní řešení. V případě neúspěšného ověření Toru aplikace aktivní test zastaví. Kontrola stavu se opakuje každých 5 sekund; mezi kontrolami se ale mohou projevit síťové chyby dříve. Samotná zelená ikona není zárukou anonymity každého jednotlivého síťového paketu.
+
+**Důležité:** Tor skryje síťovou IP před cílovým serverem, ale neskryje účet, kterým ses přihlásil. Pokud odešleš zprávu ze svého osobního Gmailu, Google zná tvůj účet a příjemce zpravidla uvidí skutečnou adresu Gmailu. Náhodné zobrazované jméno tuto adresu nemění.
+
+Po dokončení běhu se v aplikačním logu zobrazí přehled jednotlivých zpráv: příjemce, zobrazované jméno, předmět, skutečně připravené tělo zprávy, počet SMTP pokusů a výsledek. U prázdného těla se zobrazí `[prázdné tělo]`. Obsah je součástí dočasného aplikačního logu v paměti; před sdílením logu zkontroluj, zda neobsahuje citlivé údaje.
+
 ## 9. Mailbox Monitor (IMAP)
 
 IMAP je volitelný. Typicky se používá port 993 s ImplicitTls nebo port 143 se StartTls. Přihlašovací údaje IMAP zůstávají pouze v paměti aplikace a neukládají se do profilu.
