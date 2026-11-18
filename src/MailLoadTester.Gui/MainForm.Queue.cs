@@ -70,6 +70,36 @@ public sealed partial class MainForm
             _queueFlowLabels["VÝSLEDEK"].BackColor = Color.LightGray;
     }
 
+    private System.Windows.Forms.Timer? _torStatusTimer;
+    private bool _torVerified;
+    private bool _torCheckRunning;
+    private string _torEndpointKey = string.Empty;
+    private string? _torExitIp;
+    private string _torDetail = "Tor zatím nebyl ověřen.";
+
+    private static bool IsLocalTorEndpoint(string host, int port) =>
+        (host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+         || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+         || host.Equals("::1", StringComparison.OrdinalIgnoreCase))
+        && port is 9050 or 9150;
+
+    private bool TryGetConfiguredTorEndpoint(out ProxyEndpoint? endpoint)
+    {
+        endpoint = null;
+        if (!string.IsNullOrWhiteSpace(txtProxyList?.Text) || chkSocks5?.Checked != true)
+            return false;
+
+        var host = txtProxyHost.Text.Trim();
+        var port = (int)numProxyPort.Value;
+        if (!IsLocalTorEndpoint(host, port))
+            return false;
+
+        endpoint = new ProxyEndpoint(ProxyType.Socks5, host, port,
+            string.IsNullOrWhiteSpace(txtProxyUser.Text) ? null : txtProxyUser.Text,
+            string.IsNullOrWhiteSpace(txtProxyPass.Text) ? null : txtProxyPass.Text);
+        return true;
+    }
+
     private void UpdateProxyStatus(bool smtpProxyWasUsed = false)
     {
         if (lblProxyStatus is null || lblProxyStatus.IsDisposed)
@@ -78,25 +108,136 @@ public sealed partial class MainForm
         var listConfigured = !string.IsNullOrWhiteSpace(txtProxyList?.Text);
         var singleConfigured = chkSocks5?.Checked == true;
         var enabled = listConfigured || singleConfigured;
+
         if (!enabled)
         {
-            lblProxyStatus.Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí.";
-            lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
-            lblProxyStatus.ForeColor = Color.DarkRed;
+            _torVerified = false;
+            _torExitIp = null;
+            _torEndpointKey = string.Empty;
+            _torStatusTimer?.Stop();
+            lblProxyStatus.Text = "🧅 TOR VYPNUTO — přímé připojení; výstupní IP není chráněna Tor.";
+            lblProxyStatus.BackColor = Color.FromArgb(232, 232, 232);
+            lblProxyStatus.ForeColor = Color.DimGray;
             return;
         }
 
+        if (TryGetConfiguredTorEndpoint(out var endpoint) && endpoint is not null)
+        {
+            var key = endpoint.DisplayKey;
+            if (!key.Equals(_torEndpointKey, StringComparison.Ordinal))
+            {
+                _torEndpointKey = key;
+                _torVerified = false;
+                _torExitIp = null;
+                _torDetail = "Ověřuji Tor exit přes SOCKS5.";
+            }
+
+            EnsureTorStatusTimer();
+            RenderTorStatus();
+            if (!_torCheckRunning && (DateTime.UtcNow - _lastTorCheckUtc).TotalSeconds >= 15)
+                _ = VerifyConfiguredTorAsync();
+            return;
+        }
+
+        _torStatusTimer?.Stop();
+        _torVerified = false;
+        _torExitIp = null;
         var host = listConfigured ? "seznam proxy" : txtProxyHost.Text.Trim();
         var port = listConfigured ? 0 : (int)numProxyPort.Value;
-        var isLocalTorEndpoint = !listConfigured
-            && (host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
-                || host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
-            && port is 9050 or 9150;
-        var kind = isLocalTorEndpoint ? "Tor SOCKS5" : "SOCKS5 proxy";
-        lblProxyStatus.Text = smtpProxyWasUsed
-            ? $"● {kind} použita pro SMTP spojení — výstupní IP zatím NEOVĚŘENA."
-            : $"● {kind} nakonfigurována — spojení a výstupní IP zatím NEOVĚŘENY.";
+        lblProxyStatus.Text = $"PROXY KONFIGUROVÁNA ({host}{(port > 0 ? ":" + port : "")}) — Tor exit není ověřen.";
         lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
         lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+    }
+
+    private DateTime _lastTorCheckUtc = DateTime.MinValue;
+
+    private void EnsureTorStatusTimer()
+    {
+        if (_torStatusTimer is null)
+        {
+            _torStatusTimer = new System.Windows.Forms.Timer { Interval = 20_000 };
+            _torStatusTimer.Tick += async (_, _) => await VerifyConfiguredTorAsync();
+        }
+        if (!_torStatusTimer.Enabled)
+            _torStatusTimer.Start();
+    }
+
+    private async Task VerifyConfiguredTorAsync()
+    {
+        if (_torCheckRunning || !TryGetConfiguredTorEndpoint(out var endpoint) || endpoint is null)
+            return;
+
+        var key = endpoint.DisplayKey;
+        _torCheckRunning = true;
+        _lastTorCheckUtc = DateTime.UtcNow;
+        RenderTorStatus();
+        try
+        {
+            var result = await TorProxyVerifier.VerifyAsync(endpoint);
+            if (!IsDisposed && key.Equals(_torEndpointKey, StringComparison.Ordinal))
+            {
+                _torVerified = result.IsTor;
+                _torExitIp = result.ExitIp;
+                _torDetail = result.Detail;
+                RenderTorStatus();
+            }
+        }
+        finally
+        {
+            _torCheckRunning = false;
+        }
+    }
+
+    private void RenderTorStatus()
+    {
+        if (lblProxyStatus is null || lblProxyStatus.IsDisposed)
+            return;
+
+        if (_torVerified)
+        {
+            lblProxyStatus.Text = $"🧅 TOR AKTIVNÍ — exit IP: {_torExitIp ?? "ověřena"} · kontrola přes Tor Project.";
+            lblProxyStatus.BackColor = Color.FromArgb(205, 240, 210);
+            lblProxyStatus.ForeColor = Color.DarkGreen;
+        }
+        else if (_torCheckRunning)
+        {
+            lblProxyStatus.Text = "🧅 TOR OVĚŘUJI — SMTP test zatím nespouštěj.";
+            lblProxyStatus.BackColor = Color.FromArgb(255, 239, 194);
+            lblProxyStatus.ForeColor = Color.FromArgb(110, 75, 0);
+        }
+        else
+        {
+            lblProxyStatus.Text = "🧅 TOR NENÍ OVĚŘEN — " + _torDetail + " Odesílání přes Tor bude zablokováno, dokud ověření neprojde.";
+            lblProxyStatus.BackColor = Color.FromArgb(250, 220, 220);
+            lblProxyStatus.ForeColor = Color.DarkRed;
+        }
+    }
+
+    private async Task<bool> EnsureTorVerifiedBeforeStartAsync(MailTestOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ProxyList) || !options.UseSocks5Proxy
+            || !IsLocalTorEndpoint(options.ProxyHost, options.ProxyPort))
+            return true;
+
+        var endpoint = new ProxyEndpoint(ProxyType.Socks5, options.ProxyHost, options.ProxyPort,
+            string.IsNullOrWhiteSpace(options.ProxyUsername) ? null : options.ProxyUsername,
+            string.IsNullOrWhiteSpace(options.ProxyPassword) ? null : options.ProxyPassword);
+        var result = await TorProxyVerifier.VerifyAsync(endpoint);
+        _torEndpointKey = endpoint.DisplayKey;
+        _torVerified = result.IsTor;
+        _torExitIp = result.ExitIp;
+        _torDetail = result.Detail;
+        RenderTorStatus();
+        if (!result.IsTor)
+        {
+            ShowErrorWithCopy(
+                "SMTP test nebyl spuštěn, protože Tor nebyl ověřen. Aplikace nesmí při požadavku na Tor potichu přejít na přímé připojení.\r\n\r\n"
+                + result.Detail,
+                "Tor není ověřen",
+                $"Proxy: {endpoint.DisplayKey}\r\nVýstupní IP: {result.ExitIp ?? "nezjištěna"}",
+                GuiErrorCodes.Validation);
+            return false;
+        }
+        return true;
     }
 }
