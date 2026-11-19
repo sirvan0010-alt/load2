@@ -2,7 +2,7 @@
 
 ## Scope and non-goals
 
-This roadmap covers UI responsiveness/redesign, SMTP credential persistence, privacy auditing of messages, SMTP route verification, alias/relay support and post-delivery verification.
+This roadmap covers UI responsiveness/redesign, migration to .NET 10, ongoing GitHub module/dependency maintenance, SMTP credential persistence, privacy auditing of messages, SMTP route verification, privacy-service comparison, safe alias/relay interoperability and post-delivery verification.
 
 **Authentication is frozen and out of scope for this work.** Do not modify, refactor, reorder, or redesign:
 - Google OAuth sign-in/sign-out, consent, token exchange, refresh, revocation or DPAPI token storage.
@@ -43,7 +43,31 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** at 100%, 125%, 150% and 200% scaling; narrow, normal and maximized windows; no clipped labels/inputs, unintended horizontal scroll or inaccessible controls. Add tests where practical and provide manual verification checklist.
 
-## Phase 2 – SMTP credential persistence review
+## Phase 2 – .NET 10 migration
+
+- Confirm current target frameworks, SDK pinning, runtime assumptions, Windows support matrix and deployment model before changing project files.
+- Migrate application and test projects to .NET 10 in a dedicated, reviewable change; update `global.json`, target frameworks, build scripts, CI workflows and Windows packaging consistently where applicable.
+- Audit WinForms, MailKit, MimeKit, OAuth/Gmail API, proxy, charting and other third-party library compatibility with .NET 10; do not assume compatibility from package version alone.
+- Resolve obsolete APIs and compiler/analyzer warnings without changing authentication behavior, SMTP semantics or user-visible defaults.
+- Test clean restore, Debug/Release builds, all automated tests, Windows packaging and supported Windows runtime behavior.
+- Keep the previous known-good branch/commit available for rollback; document required .NET 10 runtime/SDK installation for contributors and end users.
+
+**Acceptance:** CI builds and tests all target projects on .NET 10; Windows package starts on a supported Windows machine; no OAuth or SMTP sign-in changes; migration notes and rollback reference are documented.
+
+## Phase 3 – GitHub module and dependency maintenance
+
+- Inventory direct and transitive NuGet dependencies, SDK/tool versions, GitHub Actions and any vendored modules.
+- Track upstream releases, security advisories, end-of-support notices, breaking changes and license changes.
+- Prioritize security fixes and supported patch/minor updates; group related upgrades into small pull requests with changelog and compatibility notes.
+- For major upgrades, review migration guides and API changes before implementation; do not batch unrelated major-version jumps.
+- Run restore, tests, analyzers, CodeQL, dependency review, architecture checks and Windows packaging for each update group.
+- Pin GitHub Actions to reviewed immutable commit SHAs where practical; periodically refresh pins and verify permissions are least-privilege.
+- Produce a dependency status report (current version, candidate version, reason, risk, tests and decision); do not auto-merge or auto-deploy unreviewed updates.
+- Preserve a rollback path and record any intentionally deferred vulnerable/outdated dependency with owner and rationale.
+
+**Acceptance:** reproducible dependency inventory, no unreviewed critical/high vulnerability, CI green for each accepted update, and documented update cadence.
+
+## Phase 4 – SMTP credential persistence review
 
 - Inspect the existing `SmtpCredentialStore` and its GUI integration (already present in the current branch).
 - Verify opt-in default, DPAPI CurrentUser protection, save-after-success behavior, restore behavior, deletion on opt-out, error handling and secret zeroing where feasible.
@@ -52,7 +76,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** unit tests plus Windows-user smoke-test instructions; profile JSON remains free of secrets.
 
-## Phase 3 – Privacy Audit model and MIME inspection
+## Phase 5 – Privacy Audit model and MIME inspection
 
 - Add a deterministic audit over the final composed `MimeMessage` before SMTP submission.
 - Inspect From, Sender, Reply-To, To/Cc/Bcc exposure, Message-ID, custom headers and known identifying headers (for example X-Originating-IP, X-Mailer, User-Agent, X-Client-IP and X-Forwarded-For).
@@ -63,7 +87,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** unit tests for clean messages, personal-address matches, custom headers, malformed values and false-positive handling.
 
-## Phase 4 – Origin Preview
+## Phase 6 – Origin Preview
 
 - Display the exact MIME headers/body as submitted by the application, clearly labeled **Pre-send preview**.
 - Mark server-added headers as unknown/not yet observable; do not fabricate them.
@@ -72,7 +96,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** preview is generated from the same MimeMessage instance that is submitted; tests verify parity.
 
-## Phase 5 – SMTP Route Check
+## Phase 7 – SMTP Route Check
 
 - Trace the actual transport path used by the SMTP connection.
 - Distinguish configured proxy, direct connection and unsupported network paths.
@@ -82,7 +106,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** mocked tests for proxy success, proxy failure, direct mode and no-fallback behavior. No external IP checks in ordinary unit tests.
 
-## Phase 6 – Alias and dedicated relay support
+## Phase 8 – Alias and dedicated relay support
 
 - Document supported alias providers and their actual outbound SMTP/API capabilities and limits; do not assume forwarding aliases are outbound relays.
 - Support ordinary SMTP relay configuration through existing SMTP settings, without changing authentication UI or OAuth.
@@ -92,7 +116,20 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** integration tests against a local SMTP test server and documented manual test with a domain/account the operator controls.
 
-## Phase 7 – Post-delivery forensic audit
+## Phase 8 – Privacy-service comparison and safe interoperability
+
+- Build a documented capability matrix for legitimate privacy services and architectures, including email alias/forwarding providers (for example SimpleLogin and addy.io), browser/email masking services (for example Firefox Relay and DuckDuckGo Email Protection), self-hosted alias/relay options, encrypted mailbox providers and Tor as a network transport layer.
+- Compare what each option actually protects: primary-address exposure, sender identity, reply-from-alias, metadata visibility, content encryption, IP exposure, logging/retention, self-hosting, SMTP/API availability, domain control, abuse controls, deliverability and operational trust.
+- Distinguish an alias/forwarder from an outbound SMTP relay, disposable inbox, encrypted mailbox and network anonymizer; do not present them as interchangeable.
+- Verify each candidate against its official documentation and current terms before claiming SMTP/API integration. Add only documented, authorized integrations; otherwise provide configuration guidance and a clear boundary.
+- Add an interoperability test profile using a mailbox/domain controlled by the operator, with explicit recipient allowlists, conservative rate/volume caps, a hard stop, and no arbitrary recipient-list import.
+- Include a defensive email-abuse validation checklist: rate limiting, per-recipient quotas, duplicate suppression, unsubscribe/consent controls where applicable, bounce handling, abuse reporting and audit trail.
+- Do not implement email bombing, signup flooding, CAPTCHA/rate-limit evasion, sender spoofing, provider-limit bypass or mechanisms intended to conceal abusive bulk sending. Any load test must target an owned test system and be explicitly authorized.
+- Explain that Tor can conceal the client IP from the SMTP endpoint when the actual SMTP socket uses Tor, but it does not conceal account identity, message content, relay identity or provider-side records.
+
+**Acceptance:** sourced comparison matrix, threat-model notes, tested safe interoperability against controlled endpoints, and explicit abuse-prevention controls.
+
+## Phase 9 – Post-delivery forensic audit
 
 - Retrieve a delivered test message only from a mailbox/server the operator controls (or accept an uploaded .eml).
 - Parse actual received headers and compare them with the pre-send MIME.
@@ -102,7 +139,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** fixture-based .eml tests plus optional controlled end-to-end test.
 
-## Phase 8 – Documentation, packaging and release
+## Phase 10 – Documentation, packaging and release
 
 - Update user guide and threat-model limitations.
 - Add screenshots only from the real updated application.
@@ -113,11 +150,13 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 1. Phase 0 baseline audit.
 2. Phase 1 responsive UI redesign.
-3. Phase 2 verify existing SMTP DPAPI persistence without touching sign-in flows.
-4. Phases 3–5 privacy and route diagnostics.
-5. Phases 6–7 relay and post-delivery validation.
-6. Phase 8 release.
+3. Phase 2 migrate to .NET 10.
+4. Phase 3 review and update GitHub modules/dependencies.
+5. Phase 4 verify existing SMTP DPAPI persistence without touching sign-in flows.
+6. Phases 5–7 privacy, MIME and route diagnostics.
+7. Phase 8 compare privacy services and validate safe interoperability.
+8. Phase 9 post-delivery forensic validation and release preparation.
 
 ## Explicit exclusions
 
-The following are not part of this roadmap: changing Google OAuth, changing the division between Google OAuth and classic SMTP sign-in, spoofing third-party identities, hiding or falsifying SMTP routing/authentication evidence, bypassing provider rate limits, or sending unsolicited bulk mail.
+The following are not part of this roadmap: changing Google OAuth, changing the division between Google OAuth and classic SMTP sign-in, spoofing third-party identities, hiding or falsifying SMTP routing/authentication evidence, bypassing provider rate limits, email bombing, signup flooding, CAPTCHA evasion, concealing abusive bulk sending, or sending unsolicited bulk mail.
