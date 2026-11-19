@@ -129,6 +129,10 @@ public sealed partial class MainForm
                             case ComboBox:
                             case ListBox:
                             case DataGridView:
+                            case ProgressBar:
+                            case MailboxUsageChart:
+                                // Keep quota indicators and the custom mailbox chart
+                                // inside the summary column when the window is narrowed.
                                 item.Width = available;
                                 break;
 
