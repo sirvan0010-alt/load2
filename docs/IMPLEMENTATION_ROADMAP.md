@@ -102,14 +102,15 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 ## Phase 7 – SMTP Route Check
 
 - Trace the actual transport path used by the SMTP connection.
-- Implement **Relay Capability Check** as a separate diagnostic, not as a modification of the existing sign-in or SMTP authentication flow.
-- In a non-authenticated protocol inspection, record the server greeting, EHLO extensions, advertised SASL mechanism names, STARTTLS support, negotiated TLS state/version/cipher where available, SMTPUTF8, SIZE limit, DSN, PIPELINING, 8BITMIME, CHUNKING/BINARYMIME and REQUIRETLS. Clearly mark that capabilities may change after authentication.
-- Keep authentication optional and out of the first implementation. Do not collect, persist, or replay credentials; do not alter Google OAuth or classic SMTP sign-in. If a later authenticated capability view is considered, it requires separate approval and must reuse no new login flow.
+- Audit and extend the existing `TransportDiagnostics` and `SmtpCapabilityDiscoveryService` implementations; do not create a second parallel capability-discovery subsystem without a demonstrated need. `TransportDiagnostics` already supports SMTP/DNS/MX observations and applies configured proxy settings; `SmtpCapabilityDiscoveryService` performs focused read-only EHLO discovery but currently has a separate direct-connect path. Decide whether to consolidate or clearly scope these services, and add regression tests.
+- Keep **Relay Capability Check** as a separate diagnostic, not as a modification of the existing sign-in or SMTP authentication flow.
+- In the first, non-authenticated protocol inspection, record the server greeting, EHLO extensions, advertised SASL mechanism names, STARTTLS support, negotiated TLS state/version and certificate details (cipher suite only if the library exposes it reliably), SMTPUTF8, SIZE limit, DSN, PIPELINING, 8BITMIME, CHUNKING/BINARYMIME and REQUIRETLS. Clearly mark which fields the current MailKit implementation can observe and which are not yet exposed; capabilities may change after authentication.
+- Keep authentication disabled in the first capability-check UI path even though the existing diagnostic model has an optional authentication switch. Do not collect, persist, or replay credentials; do not alter Google OAuth or classic SMTP sign-in. If a later authenticated capability view is considered, it requires separate approval and must reuse no new login flow.
 - Separate facts observed from the SMTP session from provider-policy information sourced from official documentation. Do not infer that EHLO proves sender/domain authorization, reputation, inbox placement, rate limits or anonymity.
 - Report whether sender identity and envelope sender constraints are documented by the provider; only test acceptance with an explicitly controlled sender domain and recipient, and only after a separately approved implementation.
 - Explain which identity is visible to the relay, which sender identity is presented to recipients, and which metadata is added by the relay.
 - Distinguish configured proxy, direct connection and unsupported network paths.
-- Fail closed when the user explicitly requires a proxy/Tor route and the connection cannot be proven to use it; never silently fall back to direct.
+- Fail closed when the user explicitly requires a proxy/Tor route and the connection cannot be proven to use it; never silently fall back to direct. Test both the focused discovery service and the general transport diagnostics so a direct-connect helper cannot accidentally bypass the selected route.
 - Clearly distinguish the SMTP server RemoteEndPoint from the client's public egress IP.
 - Audit auxiliary network features separately (DNS/RBL, webhooks, IMAP, Gmail API) and report if they do not use the SMTP proxy.
 
