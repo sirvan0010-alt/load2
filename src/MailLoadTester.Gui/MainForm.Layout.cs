@@ -45,7 +45,16 @@ public sealed partial class MainForm
         };
 
         // === Top button bar ===
-        var topPanel = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(8, 6, 8, 6) };
+        var topPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Padding = new Padding(8, 6, 8, 6),
+            Margin = Padding.Empty
+        };
         btnStart = new Button
         {
             Text = "▶ START", Width = 120, Height = 36, Left = 8, Top = 6,
@@ -97,9 +106,11 @@ public sealed partial class MainForm
 
         // --- Tab: SMTP Server ---
         var tabSmtp = new TabPage("SMTP Server") { Padding = new Padding(12) };
-        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        var tblSmtp = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };
+        _smtpLayout = tblSmtp;
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        tblSmtp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
 
         var gbConn = new GroupBox { Text = "Připojení", Dock = DockStyle.Fill };
         var flConn = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
@@ -126,58 +137,256 @@ public sealed partial class MainForm
         };
         cmbSecurity = AddLabeledCombo(flConn, "Zabezpečení:", ["None", "StartTls", "ImplicitTls"], "StartTls", "None=bez šifrování, StartTLS=TLS po EHLO, ImplicitTLS=SSL hned po connectu.");
         chkIgnoreCert = AddCheckBox(flConn, "Ignorovat chyby certifikátu", false, "Pouze pro testování – nepoužívej v produkci!");
+        var chkAdvancedNetwork = new CheckBox
+        {
+            Text = "Pokročilé síťové možnosti (IP / rotace)",
+            AutoSize = true,
+            Checked = false,
+            Margin = new Padding(0, 10, 0, 6),
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+        };
+        flConn.Controls.Add(chkAdvancedNetwork);
+        var pnlAdvancedNetwork = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Visible = false,
+            Padding = new Padding(8, 2, 4, 4),
+            Margin = new Padding(0, 0, 0, 8),
+            BorderStyle = BorderStyle.FixedSingle
+        };
         string[] localIpSuggestions;
         try { localIpSuggestions = NetworkAdapterInfo.GetLocalIPv4Addresses().ToArray(); }
         catch { localIpSuggestions = Array.Empty<string>(); }
-        txtSourceIp = AddLabeledEditableCombo(flConn, "Source IP (volitelné):",
+        txtSourceIp = AddLabeledEditableCombo(pnlAdvancedNetwork, "Source IP (volitelné):",
             localIpSuggestions,
             "Začni psát lokální IPv4 adresu nebo rozbal seznam. Prázdné pole = automatický výběr operačním systémem.");
-        txtIpv6Prefix = AddLabeledText(flConn, "IPv6 prefix (rotace):",
+        txtIpv6Prefix = AddLabeledText(pnlAdvancedNetwork, "IPv6 prefix (rotace):",
             "Např. 2001:db8:85a3:0:: — každé nové SMTP spojení dostane náhodnou adresu z /N. OS musí prefix routovat. Prázdné = vypnuto. Má přednost před Source IP.");
-        numIpv6PrefixLen = AddLabeledNumeric(flConn, "IPv6 prefix length:", 1, 128, 64,
+        numIpv6PrefixLen = AddLabeledNumeric(pnlAdvancedNetwork, "IPv6 prefix length:", 1, 128, 64,
             "Délka prefixu v bitech (běžně 64).");
-        txtIpv4Rotation = AddLabeledText(flConn, "IPv4 rotace (seznam/CIDR):",
-            "Příklady: 192.0.2.10,192.0.2.11  nebo  192.0.2.0/28. Každé NOVÉ SMTP spojení použije další adresu. Musí existovat na síťové kartě. Prázdné = vypnuto. Priorita: IPv6 rotace > IPv4 rotace > Source IP.");
-        chkIpv4RotationRandom = AddCheckBox(flConn, "IPv4 rotace náhodně (ne round-robin)", false,
+        txtIpv4Rotation = AddLabeledText(pnlAdvancedNetwork, "IPv4 rotace (seznam/CIDR):",
+            "Příklady: 192.0.2.10,192.0.2.11 nebo 192.0.2.0/28. Každé nové SMTP spojení použije další adresu. Priorita: IPv6 > IPv4 > Source IP.");
+        chkIpv4RotationRandom = AddCheckBox(pnlAdvancedNetwork, "IPv4 rotace náhodně (ne round-robin)", false,
             "Zapnuto = náhodná adresa z poolu. Vypnuto = postupně dokola.");
-        cmbIpVersion = AddLabeledCombo(flConn, "IP verze:", ["Any", "IPv4Only", "IPv6Only", "DualStack"], "Any", "Výběr IP verze pro spojení.");
+        cmbIpVersion = AddLabeledCombo(pnlAdvancedNetwork, "IP verze:", ["Any", "IPv4Only", "IPv6Only", "DualStack"], "Any", "Výběr IP verze pro spojení.");
+        chkAdvancedNetwork.CheckedChanged += (_, _) =>
+        {
+            pnlAdvancedNetwork.Visible = chkAdvancedNetwork.Checked;
+            pnlAdvancedNetwork.PerformLayout();
+            flConn.PerformLayout();
+            ApplyResponsiveLayout();
+        };
+        flConn.Controls.Add(pnlAdvancedNetwork);
         gbConn.Controls.Add(flConn);
         tblSmtp.Controls.Add(gbConn, 0, 0);
 
-        var gbAuth = new GroupBox { Text = "Autentizace & Certifikáty", Dock = DockStyle.Fill };
-        var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        chkAuth = AddCheckBox(flAuth, "Použít autentizaci", false, "Zaškrtni, pokud server vyžaduje jméno a heslo.");
+        // Google and SMTP are intentionally separate paths: Gmail OAuth is not SMTP auth.
+        var authLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(4)
+        };
+        authLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        authLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Google OAuth is intentionally optional and collapsed by default.
+        // The normal Gmail path is SMTP + Google App Password.
+        var gbGoogle = new GroupBox { Text = "Pokročilé: Google OAuth / Gmail API (není potřeba pro SMTP)", Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(10), Visible = false };
+        var flGoogle = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(6)
+        };
+        lblGoogleAccountStatus = new Label
+        {
+            Text = "Google účet: kontroluji uložené přihlášení…",
+            AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 2, 0, 6)
+        };
+        flGoogle.Controls.Add(lblGoogleAccountStatus);
+        btnGoogleSignIn = new Button { Text = "Přihlásit přes Google", Width = 230, Height = 36, Margin = new Padding(0, 2, 0, 4), Cursor = Cursors.Hand };
+        flGoogle.Controls.Add(btnGoogleSignIn);
+        btnGoogleSignOut = new Button { Text = "Odpojit Google účet", Width = 230, Height = 30, Margin = new Padding(0, 2, 0, 2), Enabled = false };
+        flGoogle.Controls.Add(btnGoogleSignOut);
+        btnSendGoogleTest = new Button
+        {
+            Text = "Odeslat 1 zprávu přes Gmail API", Width = 280, Height = 36,
+            Margin = new Padding(0, 4, 0, 0), FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(50, 115, 75), ForeColor = Color.White,
+            Cursor = Cursors.Hand, Enabled = false
+        };
+        btnSendGoogleTest.FlatAppearance.BorderSize = 0;
+        flGoogle.Controls.Add(btnSendGoogleTest);
+        gbGoogle.Controls.Add(flGoogle);
+        toolTip.SetToolTip(btnGoogleSignIn, "Experimentální volitelná funkce: spustí Google OAuth a následné odeslání přes Gmail API. Nejde o SMTP přihlášení ani SMTP test.");
+        toolTip.SetToolTip(btnGoogleSignOut, "Odvolá uložený Google refresh token a odstraní jej z tohoto počítače.");
+        toolTip.SetToolTip(btnSendGoogleTest, "Odešle jednu zprávu přes Gmail API. Nejde o SMTP test ani o zátěžový běh.");
+        var chkAdvancedGoogleOAuth = new CheckBox
+        {
+            Text = "Pokročilé: přihlášení Google OAuth přes Gmail API (volitelné)",
+            AutoSize = true,
+            Margin = new Padding(2, 8, 2, 4)
+        };
+        chkAdvancedGoogleOAuth.CheckedChanged += (_, _) =>
+        {
+            gbGoogle.Visible = chkAdvancedGoogleOAuth.Checked;
+            authLayout.PerformLayout();
+            ApplyResponsiveLayout();
+        };
+        toolTip.SetToolTip(chkAdvancedGoogleOAuth,
+            "Volitelná alternativa k SMTP. Používá Gmail API, nikoli SMTP; pro běžné SMTP přihlášení pomocí Hesla aplikace Google tuto funkci nepotřebuješ.");
+        authLayout.Controls.Add(chkAdvancedGoogleOAuth, 0, 1);
+        authLayout.Controls.Add(gbGoogle, 0, 2);
+
+        var gbAuth = new GroupBox { Text = "SMTP účet a certifikáty — hlavní způsob přihlášení", Dock = DockStyle.Fill };
+        var flAuth = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
+        chkAuth = AddCheckBox(flAuth, "Použít SMTP autentizaci", false, "Zaškrtni, pokud SMTP server vyžaduje uživatelské jméno a heslo. Gmail SMTP vyžaduje autentizaci.");
         cmbAuthMethod = AddLabeledCombo(flAuth, "Auth metoda:", ["Auto", "Plain", "Login", "CramMd5", "ScramSha1", "Ntlm", "OAuth2"], "Auto", "Výběr SMTP autentizační metody. Auto zvolí nejlepší podle serveru. OAuth2: do pole Heslo vlož access token (ne refresh token).");
-        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa. Návrhy se doplňují z již použitých adres a SMTP účtů.");
-        txtPass = AddLabeledText(flAuth, "Heslo:", "SMTP heslo, app-password, nebo při OAuth2 access token.");
+        txtUser = AddEditableAddressCombo(flAuth, "Uživatel:", "SMTP přihlašovací jméno – obvykle celá e-mailová adresa.");
+        txtPass = AddLabeledText(flAuth, "Heslo / Heslo aplikace:", "Pro Gmail zadej 16místné Heslo aplikace Google, nikoli běžné heslo Google. Pro jiné SMTP servery použij heslo nebo aplikační heslo daného poskytovatele.");
         txtPass.PasswordChar = '●';
-        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta k klientskému certifikátu pro mTLS.");
+        var btnUseGmailSmtp = new Button
+        {
+            Text = "Nastavit Gmail SMTP",
+            Width = 190,
+            Height = 30,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+        btnUseGmailSmtp.Click += (_, _) =>
+        {
+            txtHost.Text = "smtp.gmail.com";
+            ApplySmtpHostPreset();
+            cmbAuthMethod.SelectedItem = "Auto";
+            lblStatus.Text = "Gmail SMTP nastaveno. Doplň celou Gmail adresu a Heslo aplikace Google.";
+        };
+        toolTip.SetToolTip(btnUseGmailSmtp,
+            "Vyplní smtp.gmail.com, port 587, STARTTLS a zapne SMTP autentizaci. Potom doplň celou Gmail adresu a Heslo aplikace Google.");
+        flAuth.Controls.Add(btnUseGmailSmtp);
+        flAuth.Controls.Add(new Label
+        {
+            Text = "Gmail SMTP: smtp.gmail.com · port 587 · STARTTLS · celé Gmail uživatelské jméno · Heslo aplikace Google (ne běžné heslo účtu).",
+            AutoSize = true, MaximumSize = new Size(520, 0),
+            ForeColor = SystemColors.GrayText, Margin = new Padding(0, 2, 0, 4)
+        });
+        var linkGoogleAppPassword = new LinkLabel
+        {
+            Text = "Vytvořit Heslo aplikace Google",
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        linkGoogleAppPassword.LinkClicked += (_, _) =>
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "https://myaccount.google.com/apppasswords") { UseShellExecute = true });
+        toolTip.SetToolTip(linkGoogleAppPassword,
+            "Otevře nastavení Hesel aplikací Google. Je vyžadováno zapnuté dvoufázové ověření; Google tuto možnost nenabízí všem typům účtů.");
+        flAuth.Controls.Add(linkGoogleAppPassword);
+        chkRememberSmtpPassword = AddCheckBox(flAuth, "Zapamatovat heslo na tomto počítači", false,
+            "Volitelné. Heslo se uloží pouze po úspěšném ověření/odeslání, zašifrovaně přes Windows DPAPI pro tento účet Windows. Uložení lze kdykoliv zrušit odškrtnutím.");
+        txtClientCert = AddLabeledText(flAuth, "Client cert (.pfx):", "Cesta ke klientskému certifikátu pro mTLS.");
         txtClientCertPass = AddLabeledText(flAuth, "Heslo certifikátu:", "Heslo k .pfx souboru (pokud je zašifrovaný).");
         txtClientCertPass.PasswordChar = '●';
         numConnectTimeout = AddLabeledNumeric(flAuth, "Connect timeout (ms):", 1000, 300000, 20000, "Max čas na navázání TCP spojení.");
         numReadTimeout = AddLabeledNumeric(flAuth, "Read timeout (ms):", 1000, 300000, 20000, "Max čas na čekání na odpověď serveru.");
-        btnTestConnection = new Button { Text = "🖧 Otestovat připojení", Width = 180, Height = 32, Margin = new Padding(0, 8, 0, 0) };
+        btnTestConnection = new Button { Text = "Otestovat SMTP připojení", Width = 230, Height = 34, Margin = new Padding(0, 8, 0, 0) };
         flAuth.Controls.Add(btnTestConnection);
         toolTip.SetToolTip(btnTestConnection, "Ověří TCP/TLS spojení a případnou SMTP autentizaci, ale neodešle zprávu.");
         btnSendTest = new Button
         {
-            Text = "Odeslat 1 testovací e-mail", Width = 230, Height = 36,
+            Text = "Odeslat 1 testovací e-mail", Width = 250, Height = 38,
             Margin = new Padding(0, 8, 0, 0), FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White,
-            Cursor = Cursors.Hand
+            BackColor = Color.FromArgb(38, 105, 170), ForeColor = Color.White, Cursor = Cursors.Hand
         };
         btnSendTest.FlatAppearance.BorderSize = 0;
         flAuth.Controls.Add(btnSendTest);
-        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu na první adresu v poli Komu. Nepoužívá zátěžový režim.");
+        toolTip.SetToolTip(btnSendTest, "Po potvrzení odešle jednu skutečnou testovací zprávu přes SMTP na první adresu v poli Komu. Nepoužívá zátěžový režim.");
         gbAuth.Controls.Add(flAuth);
-        tblSmtp.Controls.Add(gbAuth, 1, 0);
+        authLayout.Controls.Add(gbAuth, 0, 0);
+        authLayout.RowStyles[0].SizeType = SizeType.Percent;
+        authLayout.RowStyles[0].Height = 100F;
+        authLayout.RowStyles[1].SizeType = SizeType.AutoSize;
+        authLayout.RowStyles[2].SizeType = SizeType.AutoSize;
+        tblSmtp.Controls.Add(authLayout, 1, 0);
+
+        // Keep the primary recipient visible beside SMTP/authentication settings.
+        // The same To field is shared by the SMTP one-message action and Gmail API.
+        var gbRecipient = new GroupBox { Text = "Příjemce e-mailu", Dock = DockStyle.Fill };
+        var flRecipient = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            Padding = new Padding(8)
+        };
+        txtTo = AddEditableAddressCombo(
+            flRecipient,
+            "Komu:",
+            "PŘÍJEMCE E-MAILU pro SMTP i Gmail API. Více adres odděl čárkou nebo středníkem.");
+        flRecipient.Controls.Add(new Label
+        {
+            Text = "Zadej cílovou e-mailovou adresu. Toto pole používá také tlačítko Odeslat 1 zprávu přes Gmail API.",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 10)
+        });
+        var lblRecipientNote = new Label
+        {
+            Text = "Předmět a tělo zprávy nastav na kartě E-mail (Od / Komu).",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 4, 0, 8)
+        };
+        lblRecipientNote.Text = "Předmět nastav na kartě E-mail. Zobrazované jméno a tělo zprávy jsou níže — jde o údaje viditelné příjemci.";
+        flRecipient.Controls.Add(lblRecipientNote);
+
+        txtDisplayName = AddLabeledText(flRecipient, "Jméno odesílatele:", "Text zobrazovaný vedle e-mailové adresy odesílatele v poštovním klientu příjemce.");
+        chkHideSenderDisplayName = AddCheckBox(flRecipient, "Skrýt jméno odesílatele", false,
+            "Příjemce uvidí pouze e-mailovou adresu odesílatele, nikoli textové jméno.");
+        chkRandomizeSenderDisplayName = AddCheckBox(flRecipient, "Náhodné jméno odesílatele", false,
+            "Pro každou zprávu vygeneruje náhodné zobrazované jméno. Volba Skrýt má přednost.");
+        chkHideSenderDisplayName.CheckedChanged += (_, _) =>
+        {
+            if (chkHideSenderDisplayName.Checked) chkRandomizeSenderDisplayName.Checked = false;
+        };
+        chkRandomizeSenderDisplayName.CheckedChanged += (_, _) =>
+        {
+            if (chkRandomizeSenderDisplayName.Checked) chkHideSenderDisplayName.Checked = false;
+        };
+
+        var lblBody = new Label { Text = "Text zprávy viditelný příjemci:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+        flRecipient.Controls.Add(lblBody);
+        txtBody = new TextBox { Multiline = true, Height = 100, Width = 310, ScrollBars = ScrollBars.Vertical };
+        flRecipient.Controls.Add(txtBody);
+        toolTip.SetToolTip(lblBody, "Obsah e-mailu, který uvidí příjemce. Lze použít prostý text, HTML nebo dynamické značky.");
+        toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
+        chkHtmlBody = AddCheckBox(flRecipient, "HTML tělo", false, "Zpráva bude odeslána jako text/html.");
+        chkHideMessageBody = AddCheckBox(flRecipient, "Skrýt text zprávy", false,
+            "Odešle zprávu bez viditelného textového/HTML těla. Hlavička X-MailLoadTester-Test-ID zůstane pro interní identifikaci.");
+        chkRandomizeMessageBody = AddCheckBox(flRecipient, "Náhodný text zprávy", false,
+            "Pro každou zprávu náhodně vybere předpřipravené testovací tělo (výběr se může opakovat). Volba Skrýt má přednost.");
+        chkHideMessageBody.CheckedChanged += (_, _) =>
+        {
+            if (chkHideMessageBody.Checked) chkRandomizeMessageBody.Checked = false;
+        };
+        chkRandomizeMessageBody.CheckedChanged += (_, _) =>
+        {
+            if (chkRandomizeMessageBody.Checked) chkHideMessageBody.Checked = false;
+        };
+
+        gbRecipient.Controls.Add(flRecipient);
+        tblSmtp.Controls.Add(gbRecipient, 2, 0);
 
         tabSmtp.Controls.Add(tblSmtp);
         tabs.TabPages.Add(tabSmtp);
         InitAccountsTab(tabs);
 
         // --- Tab: Zpráva ---
-        var tabMsg = new TabPage("E-mail (Od / Komu)") { Padding = new Padding(12) };
+        var tabMsg = new TabPage("E-mail (Od / obsah)") { Padding = new Padding(12) };
         var tblMsg = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tblMsg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -191,7 +400,7 @@ public sealed partial class MainForm
             AutoSize = true, MaximumSize = new Size(380, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        txtTo = AddEditableAddressCombo(flAddr, "Komu:", "PŘÍJEMCE E-MAILU. Začni psát adresu a vyber návrh; více adres odděl čárkou nebo středníkem.");
+        // The shared To field is placed in the third column of the SMTP Server tab.
         txtCc = AddEditableAddressCombo(flAddr, "Kopie (CC):", "Viditelná kopie – adresu uvidí všichni příjemci.");
         txtBcc = AddEditableAddressCombo(flAddr, "Skrytá kopie (BCC):", "Skrytá kopie – její adresu ostatní příjemci neuvidí.");
         flAddr.Controls.Add(new Label
@@ -200,7 +409,6 @@ public sealed partial class MainForm
             AutoSize = true, MaximumSize = new Size(380, 0),
             ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 8)
         });
-        txtDisplayName = AddLabeledText(flAddr, "Zobrazované jméno:", "Jméno, které se zobrazí v mail klientu.");
         gbAddr.Controls.Add(flAddr);
         tblMsg.Controls.Add(gbAddr, 0, 0);
 
@@ -208,13 +416,6 @@ public sealed partial class MainForm
         var flContent = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
         txtSubject = AddLabeledText(flContent, "Předmět:",
             "Předmět e-mailu. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID} – každá zpráva bude unikátní.");
-        var lblBody = new Label { Text = "Tělo zprávy:", AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
-        flContent.Controls.Add(lblBody);
-        txtBody = new TextBox { Multiline = true, Height = 80, Width = 360, ScrollBars = ScrollBars.Vertical };
-        flContent.Controls.Add(txtBody);
-        toolTip.SetToolTip(lblBody, "Obsah každé odesílané zprávy. Lze použít prostý text, HTML nebo dynamické značky.");
-        toolTip.SetToolTip(txtBody, "Text e-mailu. HTML: zaškrtni HTML tělo. Inline obrázky: {{cid:nazev}}. Dynamické tagy: {TIMESTAMP}, {GUID}, {RANDOM_WORD}, {RANDOM_WORD:12}, {TEST_ID}.");
-        chkHtmlBody = AddCheckBox(flContent, "HTML tělo", false, "Zpráva bude odeslána jako text/html.");
         chkRandomData = AddCheckBox(flContent, "Náhodná testovací data", false, "Automaticky vygeneruje náhodný předmět, tělo a jméno.");
         chkBogusData = AddCheckBox(flContent, "Realistická data (Bogus)", false,
             "Použije realistická jména, názvy produktů a text. Nemění From.");
@@ -457,7 +658,7 @@ public sealed partial class MainForm
         chkSocks5 = AddCheckBox(flProxy, "Použít SOCKS5 proxy (Tor / jiná proxy)", false, "Připojení SMTP povede přes zadanou SOCKS5 proxy. Samotné nastavení ještě neověřuje výstupní IP.");
         lblProxyStatus = new Label
         {
-            AutoSize = false, Width = 720, Height = 42, Padding = new Padding(10, 8, 10, 8),
+            AutoSize = false, Width = 720, Height = 58, Padding = new Padding(10, 8, 10, 8),
             Margin = new Padding(0, 4, 0, 12), BorderStyle = BorderStyle.FixedSingle,
             TextAlign = ContentAlignment.MiddleLeft,
             Text = "● PROXY VYPNUTA — SMTP spojení půjde běžnou sítí."
@@ -466,7 +667,7 @@ public sealed partial class MainForm
         chkSocks5.CheckedChanged += (_, _) => UpdateProxyStatus();
         txtProxyHost = AddLabeledText(flProxy, "Proxy host:", "SOCKS5 proxy host (Tor obvykle 127.0.0.1).");
         txtProxyHost.TextChanged += (_, _) => UpdateProxyStatus();
-        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9050, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
+        numProxyPort = AddLabeledNumeric(flProxy, "Proxy port:", 1, 65535, 9150, "Tor Browser obvykle 9150; služba Tor často 9050. Ověř port ve své instalaci.");
         numProxyPort.ValueChanged += (_, _) => UpdateProxyStatus();
         txtProxyList = AddLabeledText(flProxy, "Proxy seznam (rotace):",
             "Jeden záznam na řádek nebo středník. Příklady: socks5://127.0.0.1:1080  |  http://user:pass@proxy:8080  |  host:1080");
@@ -549,18 +750,18 @@ public sealed partial class MainForm
         numBackoffAfter = AddLabeledNumeric(flPace, "Úspěchů do zpomalení:", 1, 10000, 50, "Po kolika úspěšných zprávách se interval prodlouží.");
         numBackoffMult = AddLabeledNumeric(flPace, "Násobitel intervalu (×10):", 11, 50, 15, "1.5 = hodnota 15. Interval se vynásobí tímto číslem.");
         numMaxInterval = AddLabeledNumeric(flPace, "Max. interval (ms):", 100, 3600000, 60000, "Strop, kam až může interval narůst.");
-        chkPerRecipient = AddCheckBox(flPace, "Limit na příjemce", false, "Max. X zpráv na jednu adresu za časové okno.");
-        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "");
-        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "");
+        chkPerRecipient = AddCheckBox(flPace, "Limit na příjemce", false, "Zapne samostatný limit pro každou e-mailovou adresu. Po dosažení limitu se další zprávy tomuto příjemci pozastaví do konce časového okna.");
+        numMaxPerRecipient = AddLabeledNumeric(flPace, "Max. zpráv / příjemce:", 1, 10000, 20, "Kolik zpráv smí jít na jednu e-mailovou adresu během časového okna nastaveného v poli 'Okno (minuty)' níže. Po překročení appka tomuto konkrétnímu příjemci dál neposílá, dokud okno neuplyne.");
+        numPerRecipientWindow = AddLabeledNumeric(flPace, "Okno (minuty):", 1, 10080, 60, "Délka časového okna v minutách, ve kterém appka počítá zprávy na jednoho příjemce (viz 'Max. zpráv / příjemce' výše). Po uplynutí okna se počítadlo pro daného příjemce vynuluje.");
         chkTimeWindow = AddCheckBox(flPace, "Omezit na denní dobu", false, "Odesílat jen v zadaném intervalu hodin.");
-        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "");
-        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "");
+        numWindowFrom = AddLabeledNumeric(flPace, "Od hodiny:", 0, 23, 8, "Hodina (0–23, lokální čas tohoto počítače), od které appka smí odesílat zprávy — platí jen když je zapnuté 'Omezit na denní dobu' výše. Např. 8 = appka začne odesílat od 8:00.");
+        numWindowTo = AddLabeledNumeric(flPace, "Do hodiny:", 0, 23, 18, "Hodina (0–23, lokální čas tohoto počítače), do které appka smí odesílat zprávy — platí jen když je zapnuté 'Omezit na denní dobu' výše. Např. 18 = appka po 18:00 počká na další povolené okno.");
         chkWarmup = AddCheckBox(flPace, "Warm-up plán", false, "Postupně zvyšuje tempo řízeného testu. Neobchází pravidla poskytovatele ani nezaručuje doručení do Inboxu.");
         txtWarmupPhases = AddLabeledText(flPace, "Fáze (zprávy; oddělené):", "Např. 50;150;500 – počet zpráv v jednotlivých fázích.");
         txtWarmupPhases.Text = "50;150;500";
-        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "451/452/try again – odložený retry.");
-        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "");
-        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "");
+        chkGreylist = AddCheckBox(flPace, "Detekovat greylist", true, "Greylisting je běžná ochrana proti spamu: server zprávu poprvé dočasně odmítne (kódy 451/452/'try again') a čeká, jestli ji odesílatel zkusí poslat znovu — spamboti to obvykle nedělají. Appka takové dočasné odmítnutí pozná a sama zprávu později zopakuje (viz nastavení retry níže), místo aby ji rovnou vyhodnotila jako chybu.");
+        numGreylistMinutes = AddLabeledNumeric(flPace, "Greylist retry (min):", 1, 120, 10, "Kolik minut appka počká, než znovu zkusí odeslat zprávu, kterou server dočasně odmítl kvůli greylistingu (viz 'Detekovat greylist' výše).");
+        numGreylistRetries = AddLabeledNumeric(flPace, "Max. greylist retry:", 0, 20, 3, "Kolikrát appka zprávu znovu zkusí odeslat, když ji server opakovaně odmítá kvůli greylistingu, než to vzdá a označí ji jako neúspěšnou.");
         chkRbl = AddCheckBox(flPace, "Zkontrolovat RBL před startem", false, "Spamhaus Zen – pouze varování, nestopuje test.");
         chkCollectObserved = AddCheckBox(flPace, "Sbírat pozorované SMTP odpovědi", true, "Živá tabulka kódů a doporučení.");
 
@@ -644,10 +845,54 @@ public sealed partial class MainForm
         var logTabs = new TabControl { Dock = DockStyle.Fill };
         var appLogPage = new TabPage("Aplikační log") { Padding = new Padding(3) };
         var smtpLogPage = new TabPage("SMTP události") { Padding = new Padding(3) };
+        var messageAuditPage = new TabPage("Přehled zpráv") { Padding = new Padding(3) };
+        gridMessageAudit = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = true,
+            AutoGenerateColumns = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            MultiSelect = true,
+            ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText,
+            DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True, Padding = new Padding(4) },
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize
+        };
+        gridMessageAudit.Columns.AddRange(
+            new DataGridViewTextBoxColumn { Name = "MessageIndex", HeaderText = "#", FillWeight = 35 },
+            new DataGridViewTextBoxColumn { Name = "Status", HeaderText = "Stav", FillWeight = 65 },
+            new DataGridViewTextBoxColumn { Name = "Recipient", HeaderText = "Příjemce", FillWeight = 100 },
+            new DataGridViewTextBoxColumn { Name = "SenderName", HeaderText = "Zobrazované jméno", FillWeight = 90 },
+            new DataGridViewTextBoxColumn { Name = "Subject", HeaderText = "Předmět", FillWeight = 120 },
+            new DataGridViewTextBoxColumn { Name = "Body", HeaderText = "Text zprávy", FillWeight = 260 },
+            new DataGridViewTextBoxColumn { Name = "Attempts", HeaderText = "SMTP pokusy", FillWeight = 55 },
+            new DataGridViewTextBoxColumn { Name = "ResultDetail", HeaderText = "Výsledek", FillWeight = 130 });
+        btnExportMessageAudit = new Button
+        {
+            Text = "Exportovat CSV…",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right,
+            Enabled = false,
+            Margin = new Padding(4)
+        };
+        btnExportMessageAudit.Click += (_, _) => ExportMessageAuditCsv();
+        var messageAuditToolbar = new Panel { Dock = DockStyle.Top, Height = 42 };
+        messageAuditToolbar.Controls.Add(btnExportMessageAudit);
+        btnExportMessageAudit.Location = new Point(4, 4);
+        messageAuditPage.Controls.Add(gridMessageAudit);
+        messageAuditPage.Controls.Add(messageAuditToolbar);
         appLogPage.Controls.Add(rtbLog);
         smtpLogPage.Controls.Add(smtpLogTab);
         logTabs.TabPages.Add(appLogPage);
         logTabs.TabPages.Add(smtpLogPage);
+        logTabs.TabPages.Add(messageAuditPage);
         bottomSplit.Panel1.Controls.Add(logTabs);
 
         var rightPanel = new Panel { Dock = DockStyle.Fill };
@@ -730,9 +975,18 @@ public sealed partial class MainForm
         statusStrip = new StatusStrip { Dock = DockStyle.Bottom };
         progressBar = new ToolStripProgressBar { Width = 200, Maximum = 100 };
         lblStatus = new ToolStripStatusLabel { Text = "Připraveno", Spring = true };
+        lblTorPersistentStatus = new ToolStripStatusLabel
+        {
+            Text = "🧅 TOR VYPNUTO",
+            Spring = false,
+            BackColor = Color.FromArgb(232, 232, 232),
+            ForeColor = Color.DimGray,
+            ToolTipText = "Zelená znamená, že Tor Project ověřil Tor výstup. Kontrola se opakuje každých 5 sekund; při ztrátě ověření se běžící test zruší. Tor chrání síťovou IP, nikoli identitu Gmail účtu."
+        };
         lblEta = new ToolStripStatusLabel { Text = "ETA: —" };
         lblSentFailed = new ToolStripStatusLabel { Text = "OK:0 FAIL:0" };
         lblCapacityRun = new ToolStripStatusLabel { Text = string.Empty };
+        statusStrip.Items.Add(lblTorPersistentStatus);
         statusStrip.Items.Add(lblStatus);
         statusStrip.Items.Add(progressBar);
         statusStrip.Items.Add(lblEta);
@@ -976,8 +1230,12 @@ public sealed partial class MainForm
         btnWizard.Click += (s, e) => ShowGettingStartedWizard();
         chkDarkMode.CheckedChanged += (s, e) => ApplyTheme(chkDarkMode.Checked);
         chkTestMode.CheckedChanged += (s, e) => UpdateSafetyBanner();
+        chkIgnoreCert.CheckedChanged += (s, e) => UpdateSafetyBanner();
         btnTestConnection.Click += async (s, e) => await OnTestConnectionAsync();
         btnSendTest.Click += async (s, e) => await OnSendTestMessageAsync();
+        btnGoogleSignIn.Click += async (s, e) => await OnGoogleSignInAsync();
+        btnGoogleSignOut.Click += async (s, e) => await OnGoogleSignOutAsync();
+        btnSendGoogleTest.Click += async (s, e) => await OnSendGoogleTestMessageAsync();
         numMaxRandomAttachments.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numRandomAttachmentSizeMb.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
         numConcurrency.ValueChanged += (s, e) => UpdateRandomAttachmentSafetyInfo();
@@ -985,6 +1243,11 @@ public sealed partial class MainForm
         {
             using var dlg = new OpenFileDialog { Filter = "EML files|*.eml|All files|*.*" };
             if (dlg.ShowDialog() == DialogResult.OK) txtEmlTemplate.Text = dlg.FileName;
+        };
+        chkRememberSmtpPassword.CheckedChanged += (_, _) =>
+        {
+            if (!_loadingSmtpCredentials && !chkRememberSmtpPassword.Checked)
+                DeleteRememberedSmtpCredentials();
         };
         WireMailboxMonitorEvents();
     }
@@ -997,6 +1260,10 @@ public sealed partial class MainForm
         txtSubject.Text = "MailLoadTester test";
         txtBody.Text = "Toto je testovací zpráva generovaná aplikací MailLoadTester.";
         txtDisplayName.Text = "MailLoadTester";
+        chkHideMessageBody.Checked = false;
+        chkHideSenderDisplayName.Checked = false;
+        chkRandomizeMessageBody.Checked = false;
+        chkRandomizeSenderDisplayName.Checked = false;
         txtProxyHost.Text = "127.0.0.1";
         txtSessionLogPath.Text = Path.Combine(AppContext.BaseDirectory, "smtp-session.log");
         UpdateRandomAttachmentSafetyInfo();

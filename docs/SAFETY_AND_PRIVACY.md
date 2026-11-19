@@ -45,7 +45,20 @@ Při 4xx zpomal a zjisti příčinu. Při 5xx/policy odmítnutí test nezvyšuj 
 - IMAP přihlašovací údaje zůstávají v paměti aplikace a do profilu se neukládají.
 - Sdílený profil může přesto obsahovat hosty, adresy, cesty k souborům a další provozní konfiguraci; před sdílením jej zkontroluj.
 
-## 6. Logy, reporty a webhooky
+## 6. Gmail SMTP a volitelné Google OAuth
+
+- Výchozí cesta pro Gmail je SMTP + Heslo aplikace Google. Běžné heslo Google do SMTP klienta nezadávej. Heslo aplikace vyžaduje dvoufázové ověření a není dostupné u všech typů účtů.
+- Google OAuth/Gmail API je samostatná pokročilá funkce. Používá Authorization Code + PKCE a oprávnění `gmail.send` spolu s OpenID Connect identitou. Není součástí běžného SMTP toku.
+- OAuth přihlášení není v této verzi ověřené end-to-end; známý pokus vrátil `invalid_request: client_secret is missing`. Nepovažuj jej za garantovanou cestu přihlášení.
+- Desktopový klient je veřejný: používá veřejné Client ID a Authorization Code + PKCE. Aplikace nevyžaduje ani neposílá Client Secret; PKCE chrání autorizační kód.
+- Obnovovací token se ukládá samostatně, zašifrovaný Windows DPAPI CurrentUser. Jiný účet Windows jej nemůže běžně dešifrovat. Access token zůstává v paměti procesu.
+- Odpojení požádá Google o odvolání refresh tokenu a odstraní lokální uložené údaje.
+- Gmail API odesílání je oddělené od SMTP runneru. Nejde o SMTP test a nesmí se vykazovat jako SMTP throughput, SMTP AUTH nebo SMTP SEND.
+- Gmail API nepoužívej k obcházení limitů Gmailu. Respektuj kvóty, zásady proti zneužití a případná omezení účtu.
+- OAuth projekt v režimu Testing dovoluje pouze uvedené testovací účty; pro veřejnou distribuci je nutné produkční publikování a ověření citlivého scope `gmail.send` podle pravidel Googlu.
+- Pokud API vrátí HTTP 401, aplikace může jednou obnovit token a opakovat požadavek. Při timeoutu nebo jiné nejednoznačné síťové chybě se odeslání automaticky neopakuje, aby nevznikly duplicitní zprávy.
+
+## 7. Logy, reporty a webhooky
 
 ### SMTP session log
 
@@ -67,6 +80,22 @@ Export reportu neobsahuje hesla a známé tajné hodnoty. Před sdílením zkont
 
 Webhook může odeslat výsledek běhu na nakonfigurovanou URL. Používej pouze důvěryhodný endpoint a ověř, jaké údaje přijímá a kam je ukládá.
 
-## 7. Data a grafy
+## 8. SOCKS5 / Tor: co je chráněno a co ne
+
+Tor je prostředník mezi počítačem a cílovým serverem.
+
+- Když se SMTP spojení naváže přes funkční Tor SOCKS5 proxy, cílový SMTP server vidí jako zdroj síťovou adresu výstupního uzlu Tor, nikoli přímo veřejnou IP adresu domácího připojení.
+- Když Tor Browser nebo Tor služba přestane fungovat, spojení přes SOCKS5 obvykle selže. Aplikace musí odesílání zastavit; nesmí zkusit přímé připojení jako náhradní cestu.
+- MailLoadTester používá pro SMTP nakonfigurovanou proxy. V tomto režimu není záměrná automatická záložní cesta přes běžné internetové připojení. Pokud proxy není dostupná, SMTP spojení se nemá podařit.
+- Zelený indikátor znamená, že kontrolní požadavek přes SOCKS5 potvrdil Tor exit. Není to nepřetržitý důkaz pro každý paket ani záruka anonymity.
+- Během běhu se ověření Toru opakuje. Pokud kontrola selže, aktivní test se zruší. Již předané zprávy nelze vzít zpět; zprávy, které SMTP server ještě nepřijal, se nemusí odeslat.
+
+**Tor chrání síťovou IP, ne identitu e-mailového účtu.** Pokud se přes Tor přihlásíš ke svému osobnímu Gmailu a odešleš zprávu, Google stále ví, který účet používáš. Příjemce obvykle uvidí skutečnou e-mailovou adresu účtu v hlavičce From, i když nastavíš jiné zobrazované jméno. Náhodné jméno mění pouze text zobrazený vedle adresy; nemění účet, přihlašovací údaje ani vlastnictví schránky.
+
+Příklad: přihlásíš se k účtu `mojeadresa@gmail.com` a nastavíš zobrazované jméno `Alex Morgan`. Příjemce může vidět „Alex Morgan“, ale adresa účtu zůstane `mojeadresa@gmail.com` a Google zná účet, ze kterého zpráva odešla.
+
+Tor proto nepovažuj za anonymizaci osobního Gmail účtu. Jde o ochranu síťové cesty, nikoli o skrytí identity odesílatele.
+
+## 9. Data a grafy
 
 SMTP Accepted není důkaz uložení do schránky. IMAP delta může zahrnovat aktivitu jiných klientů. Chybějící kvóta je Unknown, ne nula. Tyto rozdíly jsou bezpečnostní i metodický požadavek, nikoli kosmetické označení.

@@ -48,6 +48,18 @@ public static class RandomTestData
     private static readonly byte[] PdfMinimal = Encoding.ASCII.GetBytes(
         "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
 
+    public static string CreateRandomDisplayName()
+    {
+        var faker = new Faker("en");
+        return faker.Name.FullName();
+    }
+
+    public static string CreateRandomBody()
+    {
+        var faker = new Faker("en");
+        return faker.Lorem.Sentences(Random.Shared.Next(2, 5));
+    }
+
     public sealed record GeneratedAttachment(string FileName, byte[] Content);
 
     public sealed record GeneratedMessageContent(

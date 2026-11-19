@@ -44,9 +44,46 @@ Port a režim TLS musí odpovídat dokumentaci konkrétního poskytovatele. Port
 ### Autentizace
 
 - **Auto** nechá MailKit vybrat kompatibilní metodu podle serveru.
-- Při OAuth2 patří do pole Heslo access token, nikoli refresh token.
+- Pro Gmail použij SMTP server `smtp.gmail.com`, port **587 + STARTTLS** (nebo 465 + Implicit TLS), jako uživatelské jméno celou Gmail adresu a do pole **Heslo / Heslo aplikace** vlož **Heslo aplikace Google**. Běžné heslo Google sem nezadávej.
+- Heslo aplikace vytvoříš na [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Google vyžaduje zapnuté dvoufázové ověření. Možnost nemusí být dostupná u účtů používajících pouze bezpečnostní klíče, u účtů s Advanced Protection nebo u pracovních/školních účtů, kde ji správce nepovolil.
+- Heslo aplikace je samostatný přístupový údaj. Po změně běžného hesla Google může být odvoláno a bude nutné vytvořit nové.
+- Při ruční SMTP metodě OAuth2 patří do pole Heslo access token, nikoli refresh token.
 - Client certificate (.pfx) je určen pro mTLS, pokud jej server vyžaduje.
 - Hesla a tokeny nevkládej do screenshotů, sdílených profilů ani veřejných issue.
+
+### Zapamatování SMTP hesla
+
+V kartě **SMTP účet a certifikáty** je volba **Zapamatovat heslo na tomto počítači**. Je standardně vypnutá.
+
+- Zaškrtni ji, pokud chceš, aby aplikace po úspěšném testu připojení, jednorázovém odeslání nebo úspěšném běhu testu uložila SMTP host, port, uživatelské jméno, heslo, TLS a autentizační metodu.
+- Údaje se ukládají do `%LOCALAPPDATA%\\MailLoadTester\\smtp-credential.dat` zašifrované Windows DPAPI v rozsahu aktuálního Windows uživatele.
+- Při dalším spuštění se údaje automaticky načtou a volba zůstane zaškrtnutá.
+- Odškrtnutím volby se uložený soubor smaže. Jiný Windows účet jej nemůže dešifrovat.
+- Profily JSON nadále hesla neukládají. Tato funkce je samostatná a výslovně volitelná.
+
+Pokud se přihlašuješ pomocí OAuth2 access tokenu v poli Heslo, nezapínej ukládání, pokud nechceš uložit i tento token.
+
+### Přizpůsobení rozhraní
+
+Pole a nápovědy se přizpůsobují šířce dostupného prostoru a dlouhé popisky se zalamují. Na kartě **SMTP Server** se při užším okně tři skupiny nastavení přeskládají pod sebe a stránka se zpřístupní svislým posuvníkem. Klasické SMTP přihlášení je hlavní a výchozí cesta; Google OAuth/Gmail API je skryté v rozšířených volitelných funkcích. Rozhraní používá škálování DPI pro monitory s různou hustotou pixelů.
+
+### Volitelné přihlášení Gmail přes Google
+
+MailLoadTester nabízí samostatné přihlášení Google a odeslání jedné zprávy přes Gmail API. Desktopová aplikace používá veřejné Client ID a Authorization Code + PKCE; ruční zadání Client Secret, hesla Gmailu ani import JSON souboru není potřeba. Obnovovací token Google účtu se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows.
+
+1. V Google Cloud projektu musí být povolené **Gmail API**: [Google Cloud – Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
+2. V režimu OAuth **Testing** musí být tvůj Google účet uvedený v seznamu testovacích uživatelů (Audience → Test users).
+3. V MailLoadTester na kartě **SMTP Server** klikni na **Přihlásit přes Google**.
+4. V otevřeném systémovém prohlížeči vyber Gmail účet a potvrď oprávnění k odesílání e-mailů.
+5. Po návratu do aplikace uvidíš připojenou e-mailovou adresu. Obnovovací token se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows.
+6. Příjemce nastav přímo ve třetím sloupci na kartě **SMTP Server**. Předmět, tělo a případné běžné přílohy nastav na kartě **E-mail (Od / obsah)**. Odesílatel musí odpovídat přihlášenému Gmail účtu.
+7. Klikni na **Odeslat 1 zprávu přes Gmail API** a zkontroluj potvrzovací dialog.
+
+Tato akce odešle právě jednu zprávu přes Gmail API. Nejde o SMTP spojení ani zátěžový test a výsledek se nezapočítává do SMTP metrik. Běžné přílohy ze seznamu Přílohy se připojí; inline obrázky, EML šablona a náhodné generování se v tomto samostatném API odeslání nepoužívají. Aplikace nikdy automaticky nepřepne na SMTP, pokud Gmail API selže.
+
+Při odpojení aplikace požádá Google o odvolání obnovovacího tokenu a odstraní jeho místní zašifrovanou kopii.
+
+**Pozor na režim Testing:** přihlásit se mohou pouze přidaní testovací uživatelé a Google omezuje životnost refresh tokenů. Pro veřejné vydání je nutné nastavit produkční OAuth projekt a dokončit požadované ověření citlivého oprávnění `gmail.send`.
 
 ### Source IP a Direct MX
 
@@ -70,7 +107,7 @@ Při běžném uložení profilu se hesla všech SMTP účtů odstraní. Po nač
 
 Na záložce **Zpráva** nastav:
 
-- From, To, CC a BCC;
+- From, CC a BCC; příjemce To je společný a nastavuje se ve třetím sloupci karty SMTP Server;
 - předmět, text nebo HTML tělo;
 - SMTPUTF8 pro Unicode adresy, pokud jej server podporuje;
 - přílohy, inline obrázky a vlastní hlavičky;
@@ -136,6 +173,16 @@ Tyto volby slouží k řízenému a autorizovanému testování. Nepoužívej je
 - **Auto-restart** může opakovat nevyřešené části testu. Sleduj počet pokusů a výsledky; již přijaté logické zprávy se díky delivery ledgeru znovu neposílají.
 - **SMTP session log** je ve výchozím stavu vypnutý. Při zapnutí může zaznamenat adresy, hlavičky a obsah. Aktivní soubor má limit 8 MiB a uchovávají se nejvýše tři zálohy.
 
+## Tor / SOCKS5 – srozumitelné vysvětlení
+
+Tor funguje jako prostředník mezi tvým počítačem a SMTP serverem. Pokud se e-mail posílá přes Tor, SMTP server vidí síťovou adresu Tor výstupního uzlu, nikoli přímo veřejnou IP adresu tvého domácího připojení.
+
+Pokud Tor přestane fungovat, spojení přes SOCKS5 má selhat. MailLoadTester nesmí přepnout na přímé připojení jako náhradní řešení. V případě neúspěšného ověření Toru aplikace aktivní test zastaví. Kontrola stavu se opakuje každých 5 sekund; mezi kontrolami se ale mohou projevit síťové chyby dříve. Samotná zelená ikona není zárukou anonymity každého jednotlivého síťového paketu.
+
+**Důležité:** Tor skryje síťovou IP před cílovým serverem, ale neskryje účet, kterým ses přihlásil. Pokud odešleš zprávu ze svého osobního Gmailu, Google zná tvůj účet a příjemce zpravidla uvidí skutečnou adresu Gmailu. Náhodné zobrazované jméno tuto adresu nemění.
+
+Po dokončení běhu se na samostatné kartě **Přehled zpráv** zobrazí jednotlivé zprávy: příjemce, zobrazované jméno, předmět, tělo po generování náhodného obsahu a zpracování šablon, počet skutečných SMTP SEND pokusů a výsledek. Pokud vlastní payload plugin následně změní MIME obsah, tato tabulka zobrazuje obsah před touto úpravou. Tabulku můžeš označit a zkopírovat pomocí Ctrl+C. U prázdného těla se zobrazí `[prázdné tělo]`. Přehled je pouze v paměti aplikace a nový běh jej nahradí; zatím se samostatně neukládá do CSV. Před kopírováním nebo sdílením zkontroluj, zda neobsahuje citlivé údaje.
+
 ## 9. Mailbox Monitor (IMAP)
 
 IMAP je volitelný. Typicky se používá port 993 s ImplicitTls nebo port 143 se StartTls. Přihlašovací údaje IMAP zůstávají pouze v paměti aplikace a neukládají se do profilu.
@@ -166,3 +213,7 @@ IMAP změna je nezávislé pozorování schránky. Může ji ovlivnit jiný klie
 ## 12. Zastavení a zavření
 
 Tlačítko **STOP** požádá o zrušení běhu. Již předané SMTP zprávy nelze vzít zpět. Při zavírání aplikace během běhu program nejprve požádá o zrušení a čeká na dokončení úklidu běžících operací.
+
+### Google OAuth – první přihlášení
+
+Klikni na **Přihlásit přes Google**, v systémovém prohlížeči vyber účet a potvrď oprávnění k odesílání e-mailů. Aplikace používá veřejné Desktop Client ID a PKCE; není potřeba vytvářet, kopírovat ani zadávat Client Secret. Obnovovací token se ukládá zašifrovaně pomocí Windows DPAPI pro aktuální účet Windows. Pokud je OAuth projekt v režimu Testing, musí být účet přidaný mezi testovací uživatele a platí omezení testovacího režimu.

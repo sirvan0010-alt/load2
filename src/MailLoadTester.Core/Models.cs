@@ -109,9 +109,24 @@ public sealed record MailTestOptions(
     /// <summary>Optional wall-clock limit for a run (seconds). 0 = disabled.</summary>
     int DurationSeconds = 0,
     /// <summary>Optional bounded capacity-run guardrails; null/disabled preserves legacy behavior.</summary>
-    CapacityRunLimits? CapacityRun = null);
+    CapacityRunLimits? CapacityRun = null,
+    bool HideMessageBody = false,
+    bool HideSenderDisplayName = false,
+    bool RandomizeMessageBody = false,
+    bool RandomizeSenderDisplayName = false);
 
 public enum SmtpSecurity { None, StartTls, ImplicitTls }
+
+public sealed record MessageAuditRecord(
+    int MessageIndex,
+    string Recipient,
+    string SenderDisplayName,
+    string Subject,
+    string Body,
+    DateTimeOffset CreatedAtUtc,
+    string Status,
+    string ResultDetail,
+    int Attempts);
 
 public sealed record MailTestResult(
     int Requested,
@@ -171,7 +186,9 @@ public sealed record MailTestResult(
     /// <summary>Independent IMAP before/after observations; not causal proof of messages stored by this run.</summary>
     MailboxRunDelta? MailboxRunDelta = null,
     /// <summary>True when the opt-in startup validation message failed; AutoRestart must not retry it.</summary>
-    bool StartupValidationFailed = false);
+    bool StartupValidationFailed = false,
+    /// <summary>Per-message content and delivery outcome for reviewing generated test payloads.</summary>
+    IReadOnlyList<MessageAuditRecord>? MessageAudit = null);
 
 public static class Validation
 {

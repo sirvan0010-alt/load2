@@ -5,6 +5,8 @@ public sealed partial class MainForm : Form
     // === Controls ===
     private Button btnStart = null!, btnStop = null!, btnSaveProfile = null!, btnLoadProfile = null!;
     private TabControl tabs = null!;
+    private TableLayoutPanel _smtpLayout = null!;
+    private CheckBox chkRememberSmtpPassword = null!;
     private SplitContainer workspaceSplit = null!, bottomSplit = null!;
     private ToolTip toolTip = null!;
 
@@ -14,6 +16,7 @@ public sealed partial class MainForm : Form
     private Button btnWizard = null!;
     private CheckBox chkDarkMode = null!;
     private bool _darkMode;
+    private bool _loadingSmtpCredentials;
 
     // SMTP tab
     private ComboBox txtHost = null!;
@@ -25,6 +28,9 @@ public sealed partial class MainForm : Form
     private ComboBox txtUser = null!;
     private TextBox txtPass = null!;
     private Button btnTestConnection = null!, btnSendTest = null!;
+    private Button btnGoogleSignIn = null!, btnGoogleSignOut = null!, btnSendGoogleTest = null!;
+    private Label lblGoogleAccountStatus = null!;
+    private ToolStripStatusLabel lblTorPersistentStatus = null!;
     private ComboBox txtSourceIp = null!;
     private ComboBox cmbLocalIp = null!;
     private TextBox txtIpv6Prefix = null!;
@@ -41,6 +47,8 @@ public sealed partial class MainForm : Form
     private TextBox txtDisplayName = null!, txtSubject = null!, txtBody = null!;
     private CheckBox chkHtmlBody = null!, chkRandomData = null!, chkSmtpUtf8 = null!;
     private CheckBox chkBogusData = null!, chkRandomHtml = null!, chkRandomAttachments = null!, chkVaryMessage = null!;
+    private CheckBox chkHideMessageBody = null!, chkHideSenderDisplayName = null!;
+    private CheckBox chkRandomizeMessageBody = null!, chkRandomizeSenderDisplayName = null!;
     private NumericUpDown numMaxRandomAttachments = null!, numRandomAttachmentSizeMb = null!;
     private Label lblRandomAttachmentSafety = null!;
     private ListBox lstAttachments = null!, lstInlineAttachments = null!;
@@ -134,6 +142,8 @@ public sealed partial class MainForm : Form
     // Bottom panels
     private RichTextBox rtbLog = null!;
     private SmtpLogTab smtpLogTab = null!;
+    private DataGridView gridMessageAudit = null!;
+    private Button btnExportMessageAudit = null!;
     private FlowLayoutPanel pnlWorkers = null!;
     private Label[]? _workerLabels;
     private Label[] _checklistLabels = new Label[6];
@@ -177,7 +187,7 @@ public sealed partial class MainForm : Form
         Size = new Size(1280, 920);
         MinimumSize = new Size(1000, 750);
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Font;
+        AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular);
         InitializeComponent();
         txtUser.TextChanged += (_, _) => SyncFromAddressSuggestions();
@@ -190,8 +200,18 @@ public sealed partial class MainForm : Form
         SyncFromAddressSuggestions();
         UpdateSafetyBanner();
         ApplyTheme(false);
+        Resize += (_, _) => ApplyResponsiveLayout();
+        tabs.SelectedIndexChanged += (_, _) => ApplyResponsiveLayout();
         FormClosing += MainForm_FormClosing;
-        Shown += (_, _) => LoadLayoutPreferences();
+        Shown += async (_, _) =>
+        {
+            LoadLayoutPreferences();
+            LoadRememberedSmtpCredentials();
+            ApplyResponsiveLayout();
+            await InitializeGoogleOAuthAsync();
+        };
+        FormClosed += (_, _) => DisposeGoogleOAuthResources();
+        FormClosed += (_, _) => { _torStatusTimer?.Stop(); _torStatusTimer?.Dispose(); _torStatusTimer = null; };
         FormClosed += (_, _) => SaveLayoutPreferences();
     }
 
@@ -277,7 +297,9 @@ public sealed partial class MainForm : Form
         var runActive = _isRunning;
         var connectionTestActive = _testConnectionCts != null;
         var mailboxMonitorActive = _mailboxMonitorCts != null;
-        if (!runActive && !connectionTestActive && !mailboxMonitorActive)
+        var googleOperationActive = _googleOAuthOperationCts != null;
+        var googleOperationCompletion = _googleOAuthOperationCompletion;
+        if (!runActive && !connectionTestActive && !mailboxMonitorActive && !googleOperationActive)
             return;
 
         e.Cancel = true;
@@ -286,6 +308,7 @@ public sealed partial class MainForm : Form
         _testConnectionCts?.Cancel();
         _mailboxMonitorTimer?.Stop();
         _mailboxMonitorCts?.Cancel();
+        _googleOAuthOperationCts?.Cancel();
 
         if (runActive)
         {
@@ -315,6 +338,12 @@ public sealed partial class MainForm : Form
                 try { await completion.Task.ConfigureAwait(true); }
                 catch { /* Mailbox monitor owns its cancellation/error handling. */ }
             }
+        }
+
+        if (googleOperationActive && googleOperationCompletion != null)
+        {
+            try { await googleOperationCompletion.Task.ConfigureAwait(true); }
+            catch { /* Google OAuth operation owns its cancellation/error handling. */ }
         }
 
         _closeApproved = true;

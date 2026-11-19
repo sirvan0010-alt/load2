@@ -3,6 +3,49 @@ namespace MailLoadTester.Gui;
 public sealed partial class MainForm
 {
 
+    private void ExportMessageAuditCsv()
+    {
+        if (gridMessageAudit.Rows.Count == 0)
+        {
+            MessageBox.Show(this, "Pro aktuální běh nejsou k dispozici žádné záznamy zpráv.",
+                "Přehled zpráv", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Title = "Exportovat přehled zpráv",
+            Filter = "CSV soubor (*.csv)|*.csv",
+            FileName = $"MailLoadTester-message-audit-{DateTime.Now:yyyyMMdd-HHmmss}.csv",
+            AddExtension = true,
+            DefaultExt = "csv"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+            return;
+
+        static string Csv(string? value) =>
+            "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
+
+        var columns = gridMessageAudit.Columns.Cast<DataGridViewColumn>()
+            .Where(column => column.Visible)
+            .OrderBy(column => column.DisplayIndex)
+            .ToArray();
+        var lines = new List<string>
+        {
+            string.Join(";", columns.Select(column => Csv(column.HeaderText)))
+        };
+        foreach (DataGridViewRow row in gridMessageAudit.Rows)
+        {
+            if (row.IsNewRow) continue;
+            lines.Add(string.Join(";", columns.Select(column =>
+                Csv(row.Cells[column.Index].Value?.ToString()))));
+        }
+
+        File.WriteAllText(dialog.FileName, string.Join(Environment.NewLine, lines),
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        AppendLog($"Přehled {gridMessageAudit.Rows.Count} zpráv exportován do CSV: {dialog.FileName}", Color.LightGreen);
+    }
+
     private static void EnsureRealSmtpConfiguration(MailTestOptions options)
     {
         static bool IsExampleDomain(string value)
@@ -28,6 +71,102 @@ public sealed partial class MainForm
                 "Odesílatel nebo příjemce stále používá ukázkovou doménu example.com / example.net / example.org. Zadej skutečné e-mailové adresy.");
     }
 
+    private static string AddGmailAppPasswordHint(MailTestOptions options, string detail)
+    {
+        if (!options.SmtpHost.Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase)
+            || !options.UseAuthentication
+            || string.IsNullOrWhiteSpace(detail))
+            return detail;
+
+        var lower = detail.ToLowerInvariant();
+        var likelyAuthenticationFailure =
+            lower.Contains("auth")
+            || lower.Contains("535")
+            || lower.Contains("534")
+            || lower.Contains("5.7.8")
+            || lower.Contains("credential")
+            || lower.Contains("password")
+            || lower.Contains("username")
+            || lower.Contains("autentiz")
+            || lower.Contains("přihláš");
+
+        return likelyAuthenticationFailure
+            ? detail + Environment.NewLine + Environment.NewLine
+                + "Gmail SMTP: použij celou Gmail adresu a Heslo aplikace Google, nikoli běžné heslo účtu. "
+                + "Heslo aplikace vyžaduje zapnuté dvoufázové ověření a nemusí být dostupné u všech účtů."
+            : detail;
+    }
+
+    private DialogResult ShowDnsPolicyConfirmationWithCopy(string message)
+    {
+        using var dialog = new Form
+        {
+            Text = "Kontrola DNS – SPF / DMARC",
+            Width = 700,
+            Height = 390,
+            MinimumSize = new Size(540, 300),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoScaleMode = AutoScaleMode.Font,
+            Font = Font
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
+
+        var details = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            WordWrap = true,
+            Text = message
+        };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+
+        var no = new Button { Text = "Ne", Width = 90, Height = 30, DialogResult = DialogResult.No };
+        var yes = new Button { Text = "Ano, spustit test", Width = 135, Height = 30, DialogResult = DialogResult.Yes };
+        var copy = new Button { Text = "Kopírovat upozornění", Width = 155, Height = 30 };
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(message);
+                copy.Text = "Zkopírováno";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Text se nepodařilo zkopírovat: " + ex.Message,
+                    "Schránka", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+
+        buttons.Controls.Add(no);
+        buttons.Controls.Add(yes);
+        buttons.Controls.Add(copy);
+        layout.Controls.Add(details, 0, 0);
+        layout.Controls.Add(buttons, 0, 1);
+        dialog.Controls.Add(layout);
+        dialog.AcceptButton = yes;
+        dialog.CancelButton = no;
+        return dialog.ShowDialog(this);
+    }
+
     private MailTestOptions BuildOptions()
     {
         var recipients = txtTo.Text.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -39,11 +178,18 @@ public sealed partial class MainForm
         var security = Enum.Parse<SmtpSecurity>(cmbSecurity.SelectedItem?.ToString() ?? "StartTls", true);
         var authMethod = Enum.Parse<SmtpAuthMethod>(cmbAuthMethod.SelectedItem?.ToString() ?? "Auto", true);
         var ipVersion = Enum.Parse<IpVersionPreference>(cmbIpVersion.SelectedItem?.ToString() ?? "Any", true);
+        var smtpHost = txtHost.Text.Trim();
+        var smtpUsername = txtUser.Text.Trim();
+        // Google displays App Passwords in grouped form. Ignore pasted whitespace
+        // for Gmail SMTP only; never rewrite credentials for other providers.
+        var smtpPassword = smtpHost.Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase)
+            ? string.Concat(txtPass.Text.Where(ch => !char.IsWhiteSpace(ch)))
+            : txtPass.Text;
 
         return new MailTestOptions(
             txtFrom.Text.Trim(), recipients.ToList(),
-            txtHost.Text.Trim(), (int)numPort.Value, security,
-            chkAuth.Checked, txtUser.Text, txtPass.Text,
+            smtpHost, (int)numPort.Value, security,
+            chkAuth.Checked, smtpUsername, smtpPassword,
             (int)numCount.Value, (int)numInterval.Value,
             chkBatchMode.Checked, (int)numBatchSize.Value, (int)numBatchPause.Value,
             (int)numConcurrency.Value, txtSubject.Text, txtBody.Text, txtDisplayName.Text,
@@ -105,7 +251,11 @@ public sealed partial class MainForm
                 TargetMimeBytes: decimal.ToInt64(numCapacityTargetMiB.Value * 1024m * 1024m),
                 MaxMimeMessageBytes: decimal.ToInt64(numCapacityMaxMessageMiB.Value * 1024m * 1024m),
                 MaxMessagesPerMinute: (int)numCapacityMaxPerMinute.Value,
-                ValidateBeforeRun: chkCapacityStartupValidation.Checked));
+                ValidateBeforeRun: chkCapacityStartupValidation.Checked),
+            HideMessageBody: chkHideMessageBody.Checked,
+            HideSenderDisplayName: chkHideSenderDisplayName.Checked,
+            RandomizeMessageBody: chkRandomizeMessageBody.Checked,
+            RandomizeSenderDisplayName: chkRandomizeSenderDisplayName.Checked);
     }
 
     private void UpdateCapacityEstimate(MailTestOptions options)
@@ -201,7 +351,23 @@ public sealed partial class MainForm
             return;
         }
 
-        // Pre-flight: SPF + DMARC pro doménu odesílatele (DnsClient.NET)
+        // Fail-closed ochrana: pokud je zvolen lokální Tor SOCKS5 endpoint,
+        // před každým startem ověř skutečný Tor exit. Při neúspěchu se SMTP vůbec nespustí.
+        if (!await EnsureTorVerifiedBeforeStartAsync(options))
+        {
+            lblStatus.Text = "Připraveno — Tor nebyl ověřen";
+            return;
+        }
+
+        // Pre-flight SPF/DMARC používá systémový DNS resolver. V Tor režimu jej přeskočíme,
+        // protože by DNS dotaz odešel mimo SOCKS5 a mohl prozradit síťovou identitu.
+        // Obě kontroly se zobrazí společně v jednom kopírovatelném dialogu.
+        if (IsTorMode(options))
+        {
+            AppendLog("Tor režim: SPF/DMARC kontrola přes systémový DNS přeskočena, aby DNS dotaz nešel mimo Tor.", Color.DarkOrange);
+        }
+        else
+        {
         try
         {
             var domain = DnsPolicyChecker.ExtractDomain(txtFrom.Text.Trim());
@@ -209,46 +375,50 @@ public sealed partial class MainForm
             {
                 lblStatus.Text = $"Kontroluji SPF/DMARC pro {domain}…";
                 var policy = await DnsPolicyChecker.CheckAsync(domain);
+                var warnings = new List<string>();
+
                 if (!policy.HasSpf)
-                {
-                    var text = policy.SpfCheckFailed
-                        ? $"Nepodařilo se ověřit SPF záznam domény {domain} (DNS dotaz selhal).\n" +
-                          "Nejde o potvrzeně chybějící SPF — DNS prostě teď neodpověděl.\n\n" +
-                          "Chcete i přesto spustit test?"
-                        : $"Doména {domain} nemá platný SPF záznam (TXT v=spf1).\n" +
-                          "Bez SPF Gmail/Microsoft často zprávy zahodí nebo označí jako spam a poškodí reputaci IP/domény.\n\n" +
-                          "Chcete i přesto spustit test?";
-                    var r = MessageBox.Show(text,
-                        policy.SpfCheckFailed ? "SPF neověřeno" : "Varování: Chybí SPF",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
-                }
+                    warnings.Add(policy.SpfCheckFailed
+                        ? $"SPF – NEOVĚŘENO pro doménu {domain}: DNS dotaz selhal. To neznamená, že SPF záznam chybí."
+                        : $"SPF – CHYBÍ pro doménu {domain}: nebyl nalezen TXT záznam začínající v=spf1.");
+
                 if (!policy.HasDmarc)
+                    warnings.Add(policy.DmarcCheckFailed
+                        ? $"DMARC – NEOVĚŘENO pro doménu {domain}: DNS dotaz selhal. To neznamená, že DMARC politika chybí."
+                        : $"DMARC – CHYBÍ pro doménu {domain}: nebyl nalezen TXT záznam _dmarc.{domain} začínající v=DMARC1.");
+
+                if (warnings.Count > 0)
                 {
-                    var text = policy.DmarcCheckFailed
-                        ? $"Nepodařilo se ověřit DMARC politiku domény {domain} (DNS dotaz selhal).\n" +
-                          "Nejde o potvrzeně chybějící DMARC — DNS prostě teď neodpověděl.\n\n" +
-                          "Chcete i přesto spustit test?"
-                        : $"Doména {domain} nemá DMARC politiku (_dmarc.{domain}, TXT v=DMARC1).\n" +
-                          "Pro hromadné testy vůči Gmail/Yahoo je DMARC často vyžadován.\n\n" +
-                          "Chcete i přesto spustit test?";
-                    var r = MessageBox.Show(text,
-                        policy.DmarcCheckFailed ? "DMARC neověřeno" : "Varování: Chybí DMARC",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
+                    var message = string.Join(Environment.NewLine + Environment.NewLine, warnings)
+                        + Environment.NewLine + Environment.NewLine
+                        + "SPF/DMARC jsou DNS politiky domény uvedené v poli Od, nikoli SMTP serveru. "
+                        + "Chybějící záznam sám o sobě nedokazuje, že poskytovatel zprávu odmítne; "
+                        + "může však zhoršit ověřitelnost a doručitelnost zpráv."
+                        + Environment.NewLine + Environment.NewLine
+                        + "Chcete i přesto spustit test?";
+                    var r = ShowDnsPolicyConfirmationWithCopy(message);
+                    if (r != DialogResult.Yes) { lblStatus.Text = "Připraveno"; return; }
                 }
             }
         }
         catch (Exception ex)
         {
-            var r = MessageBox.Show(
-                $"Kontrola SPF/DMARC selhala ({ex.Message}).\nPokračovat bez ověření?",
-                "DNS kontrola", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (r == DialogResult.No) { lblStatus.Text = "Připraveno"; return; }
+            var message = $"Kontrola SPF/DMARC selhala: {ex.Message}"
+                + Environment.NewLine + Environment.NewLine
+                + "Kontrola DNS nedokázala určit stav politik domény. "
+                + "Nejde o potvrzení, že SPF nebo DMARC chybí."
+                + Environment.NewLine + Environment.NewLine
+                + "Chcete pokračovat bez ověření?";
+            var r = ShowDnsPolicyConfirmationWithCopy(message);
+            if (r != DialogResult.Yes) { lblStatus.Text = "Připraveno"; return; }
+        }
+
         }
 
         // Volitelná RBL kontrola source IP
-        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text))
+        if (IsTorMode(options) && chkRbl?.Checked == true)
+            AppendLog("Tor režim: RBL DNS kontrola přes systémový resolver přeskočena.", Color.DarkOrange);
+        if (chkRbl != null && chkRbl.Checked && !string.IsNullOrWhiteSpace(txtSourceIp.Text) && !IsTorMode(options))
         {
             try
             {
@@ -268,16 +438,26 @@ public sealed partial class MainForm
         // Take a real IMAP baseline before SMTP starts. Missing/unsupported metrics remain null.
         _mailboxRunBaseline = null;
         _mailboxLastSnapshot = null;
-        if (IsMailboxMonitorConfigured())
+        if (IsTorMode(options))
+        {
+            StopMailboxMonitorPolling();
+            _mailboxMonitorCts?.Cancel();
+            if (IsMailboxMonitorConfigured())
+                AppendLog("Tor režim: IMAP Mailbox Monitor je pozastaven, aby nevytvářel přímé spojení mimo SOCKS5.", Color.DarkOrange);
+        }
+        else if (IsMailboxMonitorConfigured())
             _mailboxRunBaseline = await RefreshMailboxMonitorAsync(enforceQuotaStop: false);
 
         _isRunning = true;
+        _torProtectedRunActive = IsTorMode(options);
         _mailboxQuotaStopTriggered = false;
         _lastRunReport = null;
         btnExportReport.Enabled = false;
         btnStart.Enabled = false;
         btnStop.Enabled = true;
         rtbLog.Clear();
+        gridMessageAudit?.Rows.Clear();
+        if (btnExportMessageAudit != null) btnExportMessageAudit.Enabled = false;
         smtpLogTab?.ClearLog();
         AppendLog("=== START TESTU ===", Color.Cyan);
         AppendLog($"SMTP cíl: {options.SmtpHost}:{options.Port} · {options.Security}", Color.LightGray);
@@ -322,7 +502,7 @@ public sealed partial class MainForm
             AppendLog($"IMAP výchozí stav již dosahuje limitu { (int)numMailboxStopPercent.Value } %. SMTP test nebude spuštěn.", Color.OrangeRed);
             _cts.Cancel();
         }
-        if (!_cts.IsCancellationRequested)
+        if (!_cts.IsCancellationRequested && !IsTorMode(options))
             StartMailboxMonitorPolling();
         _runner = new SmtpTestRunner();
         _runner.SetMailboxFeedbackBaseline(
@@ -339,10 +519,14 @@ public sealed partial class MainForm
             // check cancelled before scheduling, the runner must execute its cleanup/result path.
             var result = await Task.Run(async () =>
                 await _runner.RunAsync(options, progress, _cts.Token), CancellationToken.None);
+            if (result.Sent > 0)
+                await SaveRememberedSmtpCredentialsAsync(options);
 
             // Capture a final mailbox snapshot after any in-flight periodic poll completes.
             // This is observational evidence only; concurrent mailbox activity can affect deltas.
-            var finalMailboxSnapshot = await CaptureFinalMailboxSnapshotAsync();
+            var finalMailboxSnapshot = IsTorMode(options)
+                ? null
+                : await CaptureFinalMailboxSnapshotAsync();
             result = result with
             {
                 MailboxRunDelta = MailboxMonitorMath.CalculateRunDelta(_mailboxRunBaseline, finalMailboxSnapshot)
@@ -373,6 +557,24 @@ public sealed partial class MainForm
 
             AppendLog($"\n=== VÝSLEDEK ===", Color.Cyan);
             AppendLog($"Odesláno: {result.Sent}, Selhalo: {result.Failed}, Zrušeno: {result.Cancelled}", result.Failed > 0 ? Color.OrangeRed : Color.LightGreen);
+            if (result.MessageAudit is { Count: > 0 } auditRows)
+            {
+                gridMessageAudit.Rows.Clear();
+                foreach (var item in auditRows.OrderBy(x => x.MessageIndex))
+                {
+                    gridMessageAudit.Rows.Add(
+                        item.MessageIndex,
+                        item.Status,
+                        item.Recipient,
+                        item.SenderDisplayName,
+                        item.Subject,
+                        string.IsNullOrEmpty(item.Body) ? "[prázdné tělo]" : item.Body,
+                        item.Attempts,
+                        item.ResultDetail);
+                }
+                btnExportMessageAudit.Enabled = auditRows.Count > 0;
+                AppendLog($"Detailní přehled obsahu a výsledků {auditRows.Count} zpráv je na kartě „Přehled zpráv“.", Color.LightBlue);
+            }
             AppendLog($"Trvání: {result.Elapsed:hh\\:mm\\:ss\\.fff}, Throughput: {result.ThroughputPerSec:F2} msg/s", Color.LightGray);
             AppendLog($"SMTP SEND volání: {result.SmtpSendAttempts:N0}" +
                 (result.CapacitySendReservations.HasValue ? $"; kapacitní rezervace: {result.CapacitySendReservations.Value:N0}; rezervovaný MIME objem {FormatMailboxBytes(result.CapacityMimeBytesReserved)}." : "."), Color.LightBlue);
@@ -381,6 +583,8 @@ public sealed partial class MainForm
                 AppendLog($"IMAP změna během běhu: quota zprávy {FormatDelta(mailboxDelta.QuotaMessageCountDelta)}; quota objem {FormatByteDelta(mailboxDelta.QuotaStorageBytesDelta)}; INBOX {FormatDelta(mailboxDelta.InboxMessageCountDelta)}; Junk/Spam {FormatDelta(mailboxDelta.JunkMessageCountDelta)}.", Color.LightBlue);
                 AppendLog(mailboxDelta.Note, Color.DarkGray);
             }
+            else if (IsTorMode(options) && IsMailboxMonitorConfigured())
+                AppendLog("IMAP změna nebyla měřena: Mailbox Monitor je v Tor režimu záměrně vypnut kvůli přímému IMAP spojení.", Color.DarkOrange);
             else if (IsMailboxMonitorConfigured())
                 AppendLog("IMAP změnu během běhu nelze vyčíslit: chybí platný počáteční nebo konečný snímek či podporované metriky.", Color.Orange);
             AppendLog(RunObservability.FormatSummaryLine(RunObservability.FromReport(runReport)), Color.LightBlue);
@@ -435,6 +639,7 @@ public sealed partial class MainForm
         {
             StopMailboxMonitorPolling();
             _isRunning = false;
+            _torProtectedRunActive = false;
             btnStart.Enabled = true;
             btnStop.Enabled = false;
             _cts?.Dispose();
@@ -455,12 +660,33 @@ public sealed partial class MainForm
         if (_isRunning || _testConnectionCts != null)
             return;
 
+        if (string.IsNullOrWhiteSpace(txtTo.Text))
+        {
+            MessageBox.Show(
+                "Vyplň alespoň jednoho příjemce do pole Komu.",
+                "Chybí příjemce",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            txtTo.Focus();
+            txtTo.Select();
+            return;
+        }
+
         MailTestOptions options;
         try
         {
             var configured = BuildOptions();
             if (configured.Recipients.Count == 0)
-                throw new InvalidOperationException("Nejdříve zadej alespoň jednoho příjemce na kartě Zpráva.");
+            {
+                MessageBox.Show(
+                    "Vyplň alespoň jednoho příjemce do pole Komu.",
+                    "Chybí příjemce",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                txtTo.Focus();
+                txtTo.Select();
+                return;
+            }
             EnsureRealSmtpConfiguration(configured);
 
             // This is a single-message diagnostic, not a load test. Keep the selected
@@ -554,16 +780,18 @@ public sealed partial class MainForm
             var result = await Task.Run(
                 async () => await _runner.RunAsync(options, progress, _cts.Token),
                 CancellationToken.None);
+            if (result.Sent == 1)
+                await SaveRememberedSmtpCredentialsAsync(options);
 
             lblSentFailed.Text = $"OK:{result.Sent} FAIL:{result.Failed}";
             AppendLog(result.Sent == 1
                 ? "SMTP server přijal testovací zprávu (2xx). To samo o sobě nepotvrzuje doručení do Inboxu."
-                : $"Testovací odeslání selhalo: {result.LastError}", result.Sent == 1 ? Color.LightGreen : Color.Red);
+                : $"Testovací odeslání selhalo: {AddGmailAppPasswordHint(options, result.LastError)}", result.Sent == 1 ? Color.LightGreen : Color.Red);
 
             MessageBox.Show(
                 result.Sent == 1
                     ? $"SMTP server zprávu přijal.\nPříjemce: {recipient}\nDoba: {result.AvgSmtpSendMs:F0} ms\n\nZkontroluj také složku Spam/Junk."
-                    : $"SMTP server zprávu nepřijal.\n\n{result.LastError}",
+                    : $"SMTP server zprávu nepřijal.\n\n{AddGmailAppPasswordHint(options, result.LastError)}",
                 "Výsledek testovacího odeslání",
                 MessageBoxButtons.OK,
                 result.Sent == 1 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -574,8 +802,9 @@ public sealed partial class MainForm
         }
         catch (Exception ex)
         {
-            AppendLog($"Testovací odeslání skončilo chybou: {Validation.ExplainSmtpError(ex)}", Color.Red);
-            ShowErrorWithCopy(ex.Message, "SMTP odeslání selhalo", ex.ToString(), GuiErrorCodes.SmtpSend);
+            var detail = AddGmailAppPasswordHint(options, Validation.ExplainSmtpError(ex));
+            AppendLog($"Testovací odeslání skončilo chybou: {detail}", Color.Red);
+            ShowErrorWithCopy(AddGmailAppPasswordHint(options, ex.Message), "SMTP odeslání selhalo", ex.ToString(), GuiErrorCodes.SmtpSend);
         }
         finally
         {
@@ -615,7 +844,12 @@ public sealed partial class MainForm
                     TryAuthenticate: options.UseAuthentication,
                     DryRun: options.DryRun),
                 cts.Token);
-            var result = report.Summary + (string.IsNullOrEmpty(report.Error) ? string.Empty : Environment.NewLine + Environment.NewLine + report.Error);
+            var diagnosticError = string.IsNullOrEmpty(report.Error)
+                ? string.Empty
+                : AddGmailAppPasswordHint(options, report.Error);
+            var result = report.Summary + (string.IsNullOrEmpty(diagnosticError) ? string.Empty : Environment.NewLine + Environment.NewLine + diagnosticError);
+            if (report.Connected && string.IsNullOrWhiteSpace(report.Error))
+                await SaveRememberedSmtpCredentialsAsync(options);
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
                 MessageBox.Show(result, "SMTP / diagnostika", MessageBoxButtons.OK,
                     report.Connected || options.DryRun ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -627,7 +861,14 @@ public sealed partial class MainForm
         catch (Exception ex)
         {
             if (!cts.IsCancellationRequested && !_closeApproved && !IsDisposed)
-                ShowErrorWithCopy("Chyba při testu:\n" + ex.Message, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+            {
+                var detail = ex.Message;
+                if (txtHost.Text.Trim().Equals("smtp.gmail.com", StringComparison.OrdinalIgnoreCase))
+                    detail += Environment.NewLine + Environment.NewLine
+                        + "Gmail SMTP: použij celou Gmail adresu a Heslo aplikace Google, nikoli běžné heslo účtu. "
+                        + "Heslo aplikace vyžaduje zapnuté dvoufázové ověření a nemusí být dostupné u všech účtů.";
+                ShowErrorWithCopy("Chyba při testu:\n" + detail, "SMTP Test selhal", ex.ToString(), GuiErrorCodes.SmtpConnection);
+            }
         }
         finally
         {
