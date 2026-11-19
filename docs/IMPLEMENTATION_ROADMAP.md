@@ -102,8 +102,11 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 ## Phase 7 – SMTP Route Check
 
 - Trace the actual transport path used by the SMTP connection.
-- Add a **Relay Capability Check** for the configured SMTP provider: identify advertised capabilities (EHLO extensions), supported authentication mechanisms and TLS mode; inspect provider-documented sender/domain restrictions and distinguish observed protocol facts from documentation-based claims.
-- Report whether the relay accepts the configured envelope sender and visible From identity where this can be established through a controlled, user-authorized test; do not attempt spoofing or bypass provider policy.
+- Implement **Relay Capability Check** as a separate diagnostic, not as a modification of the existing sign-in or SMTP authentication flow.
+- In a non-authenticated protocol inspection, record the server greeting, EHLO extensions, advertised SASL mechanism names, STARTTLS support, negotiated TLS state/version/cipher where available, SMTPUTF8, SIZE limit, DSN, PIPELINING, 8BITMIME, CHUNKING/BINARYMIME and REQUIRETLS. Clearly mark that capabilities may change after authentication.
+- Keep authentication optional and out of the first implementation. Do not collect, persist, or replay credentials; do not alter Google OAuth or classic SMTP sign-in. If a later authenticated capability view is considered, it requires separate approval and must reuse no new login flow.
+- Separate facts observed from the SMTP session from provider-policy information sourced from official documentation. Do not infer that EHLO proves sender/domain authorization, reputation, inbox placement, rate limits or anonymity.
+- Report whether sender identity and envelope sender constraints are documented by the provider; only test acceptance with an explicitly controlled sender domain and recipient, and only after a separately approved implementation.
 - Explain which identity is visible to the relay, which sender identity is presented to recipients, and which metadata is added by the relay.
 - Distinguish configured proxy, direct connection and unsupported network paths.
 - Fail closed when the user explicitly requires a proxy/Tor route and the connection cannot be proven to use it; never silently fall back to direct.
