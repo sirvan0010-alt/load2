@@ -80,8 +80,11 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 - Add a deterministic audit over the final composed `MimeMessage` before SMTP submission.
 - Inspect From, Sender, Reply-To, To/Cc/Bcc exposure, Message-ID, custom headers and known identifying headers (for example X-Originating-IP, X-Mailer, User-Agent, X-Client-IP and X-Forwarded-For).
-- Use configurable expected sender domains and explicitly supplied protected addresses; do not guess that every Gmail/Seznam/Outlook address is necessarily personal.
-- Classify findings as Info/Warning/Critical, explain evidence and provide remediation.
+- Inspect both plain-text and HTML bodies for user-configured identifying strings, personal data patterns, hidden HTML content, external images/tracking pixels and tracking parameters in links. Report findings; do not silently rewrite message content.
+- Inspect attachment filenames and available document metadata (EXIF, PDF Author/Creator and Office document properties). Clearly distinguish metadata that can be read locally from metadata that cannot be reliably inspected.
+- Inspect SMTP envelope recipients and envelope sender separately from visible MIME headers. Verify that Bcc recipients are handled as envelope recipients and are not exposed as a visible Bcc header.
+- Use configurable expected sender domains, protected addresses and prohibited strings; do not guess that every Gmail/Seznam/Outlook address is necessarily personal.
+- Classify findings as Info/Warning/Critical, explain evidence and provide remediation. Default to reporting or blocking before send; never silently rewrite signed or sensitive content.
 - Distinguish headers authored by the application from headers added later by SMTP relays/receivers.
 - Do not claim to predict Received, Return-Path, DKIM, SPF, DMARC or Authentication-Results before delivery.
 
@@ -99,6 +102,9 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 ## Phase 7 – SMTP Route Check
 
 - Trace the actual transport path used by the SMTP connection.
+- Add a **Relay Capability Check** for the configured SMTP provider: identify advertised capabilities (EHLO extensions), supported authentication mechanisms and TLS mode; inspect provider-documented sender/domain restrictions and distinguish observed protocol facts from documentation-based claims.
+- Report whether the relay accepts the configured envelope sender and visible From identity where this can be established through a controlled, user-authorized test; do not attempt spoofing or bypass provider policy.
+- Explain which identity is visible to the relay, which sender identity is presented to recipients, and which metadata is added by the relay.
 - Distinguish configured proxy, direct connection and unsupported network paths.
 - Fail closed when the user explicitly requires a proxy/Tor route and the connection cannot be proven to use it; never silently fall back to direct.
 - Clearly distinguish the SMTP server RemoteEndPoint from the client's public egress IP.
@@ -116,15 +122,14 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** integration tests against a local SMTP test server and documented manual test with a domain/account the operator controls.
 
-## Phase 9 – Privacy-service comparison and safe interoperability
+## Phase 9 – Privacy-service comparison and interoperability
 
 - Build a documented capability matrix for legitimate privacy services and architectures, including email alias/forwarding providers (for example SimpleLogin and addy.io), browser/email masking services (for example Firefox Relay and DuckDuckGo Email Protection), self-hosted alias/relay options, encrypted mailbox providers and Tor as a network transport layer.
 - Compare what each option actually protects: primary-address exposure, sender identity, reply-from-alias, metadata visibility, content encryption, IP exposure, logging/retention, self-hosting, SMTP/API availability, domain control, abuse controls, deliverability and operational trust.
 - Distinguish an alias/forwarder from an outbound SMTP relay, disposable inbox, encrypted mailbox and network anonymizer; do not present them as interchangeable.
 - Verify each candidate against its official documentation and current terms before claiming SMTP/API integration. Add only documented, authorized integrations; otherwise provide configuration guidance and a clear boundary.
 - Add an interoperability test profile using a mailbox/domain controlled by the operator, with explicit recipient allowlists, conservative rate/volume caps, a hard stop, and no arbitrary recipient-list import.
-- Include a defensive email-abuse validation checklist: rate limiting, per-recipient quotas, duplicate suppression, unsubscribe/consent controls where applicable, bounce handling, abuse reporting and audit trail.
-- Do not implement email bombing, signup flooding, CAPTCHA/rate-limit evasion, sender spoofing, provider-limit bypass or mechanisms intended to conceal abusive bulk sending. Any load test must target an owned test system and be explicitly authorized.
+- Do not implement sender spoofing, provider-limit bypass or mechanisms intended to conceal abusive bulk sending.
 - Explain that Tor can conceal the client IP from the SMTP endpoint when the actual SMTP socket uses Tor, but it does not conceal account identity, message content, relay identity or provider-side records.
 
 **Acceptance:** sourced comparison matrix, threat-model notes, tested safe interoperability against controlled endpoints, and explicit abuse-prevention controls.
@@ -161,4 +166,4 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 ## Explicit exclusions
 
-The following are not part of this roadmap: changing Google OAuth, changing the division between Google OAuth and classic SMTP sign-in, spoofing third-party identities, hiding or falsifying SMTP routing/authentication evidence, bypassing provider rate limits, email bombing, signup flooding, CAPTCHA evasion, concealing abusive bulk sending, or sending unsolicited bulk mail.
+The following are not part of this roadmap: changing Google OAuth, changing the division between Google OAuth and classic SMTP sign-in, spoofing third-party identities, hiding or falsifying SMTP routing/authentication evidence, bypassing provider policies, concealing abusive bulk sending, or sending unsolicited bulk mail.
