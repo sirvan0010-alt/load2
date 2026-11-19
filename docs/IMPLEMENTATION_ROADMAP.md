@@ -56,8 +56,8 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 ## Phase 3 – GitHub module and dependency maintenance
 
-- Inventory direct and transitive NuGet dependencies, SDK/tool versions, GitHub Actions and any vendored modules.
-- Track upstream releases, security advisories, end-of-support notices, breaking changes and license changes.
+- Inventory direct and transitive NuGet dependencies, SDK/tool versions, Git submodules, vendored modules, GitHub Actions and reusable workflows.
+- Track upstream releases, security advisories, end-of-support notices, breaking changes and license changes across NuGet packages, Git submodules, reusable workflows and external modules.
 - Prioritize security fixes and supported patch/minor updates; group related upgrades into small pull requests with changelog and compatibility notes.
 - For major upgrades, review migration guides and API changes before implementation; do not batch unrelated major-version jumps.
 - Run restore, tests, analyzers, CodeQL, dependency review, architecture checks and Windows packaging for each update group.
