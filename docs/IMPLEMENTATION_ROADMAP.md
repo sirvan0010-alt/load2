@@ -116,7 +116,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** integration tests against a local SMTP test server and documented manual test with a domain/account the operator controls.
 
-## Phase 8 – Privacy-service comparison and safe interoperability
+## Phase 9 – Privacy-service comparison and safe interoperability
 
 - Build a documented capability matrix for legitimate privacy services and architectures, including email alias/forwarding providers (for example SimpleLogin and addy.io), browser/email masking services (for example Firefox Relay and DuckDuckGo Email Protection), self-hosted alias/relay options, encrypted mailbox providers and Tor as a network transport layer.
 - Compare what each option actually protects: primary-address exposure, sender identity, reply-from-alias, metadata visibility, content encryption, IP exposure, logging/retention, self-hosting, SMTP/API availability, domain control, abuse controls, deliverability and operational trust.
@@ -129,7 +129,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** sourced comparison matrix, threat-model notes, tested safe interoperability against controlled endpoints, and explicit abuse-prevention controls.
 
-## Phase 9 – Post-delivery forensic audit
+## Phase 10 – Post-delivery forensic audit
 
 - Retrieve a delivered test message only from a mailbox/server the operator controls (or accept an uploaded .eml).
 - Parse actual received headers and compare them with the pre-send MIME.
@@ -139,7 +139,7 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 **Acceptance:** fixture-based .eml tests plus optional controlled end-to-end test.
 
-## Phase 10 – Documentation, packaging and release
+## Phase 11 – Documentation, packaging and release
 
 - Update user guide and threat-model limitations.
 - Add screenshots only from the real updated application.
@@ -154,8 +154,10 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 4. Phase 3 review and update GitHub modules/dependencies.
 5. Phase 4 verify existing SMTP DPAPI persistence without touching sign-in flows.
 6. Phases 5–7 privacy, MIME and route diagnostics.
-7. Phase 8 compare privacy services and validate safe interoperability.
-8. Phase 9 post-delivery forensic validation and release preparation.
+7. Phase 8 alias/relay support.
+8. Phase 9 compare privacy services and validate safe interoperability.
+9. Phase 10 post-delivery forensic validation.
+10. Phase 11 documentation, packaging and release.
 
 ## Explicit exclusions
 
