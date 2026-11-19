@@ -127,16 +127,54 @@ No change in this roadmap may silently alter authentication behavior. Any unavoi
 
 ## Phase 9 – Privacy-service comparison and interoperability
 
-- Build a documented capability matrix for legitimate privacy services and architectures, including email alias/forwarding providers (for example SimpleLogin and addy.io), browser/email masking services (for example Firefox Relay and DuckDuckGo Email Protection), self-hosted alias/relay options, encrypted mailbox providers and Tor as a network transport layer.
-- Compare what each option actually protects: primary-address exposure, sender identity, reply-from-alias, metadata visibility, content encryption, IP exposure, logging/retention, self-hosting, SMTP/API availability, domain control, abuse controls, deliverability and operational trust.
-- Distinguish an alias/forwarder from an outbound SMTP relay, disposable inbox, encrypted mailbox and network anonymizer; do not present them as interchangeable.
-- Verify each candidate against its official documentation and current terms before claiming SMTP/API integration. Add only documented, authorized integrations; otherwise provide configuration guidance and a clear boundary.
-- Add an interoperability test profile using a mailbox/domain controlled by the operator, with explicit recipient allowlists, conservative rate/volume caps, a hard stop, and no arbitrary recipient-list import.
-- Do not implement sender spoofing, provider-limit bypass or mechanisms intended to conceal abusive bulk sending.
+### Evidence-based comparison: SimpleLogin and addy.io
+
+Treat both services as **email aliasing/forwarding relays**, not as anonymous SMTP accounts or general-purpose SMTP servers.
+
+| Capability | SimpleLogin | addy.io | MailLoadTester implication |
+|---|---|---|---|
+| Receive on alias and forward to mailbox | Yes | Yes | Not an SMTP send integration by itself |
+| Reply through alias | Yes, via a per-contact reverse alias | Yes, via alias reply routing | The alias provider rewrites/routes the reply; the user's mailbox is still the originating client |
+| Start a new conversation from alias | Yes; paid feature, create a reverse alias for the recipient | Yes; Lite/Pro, send to a special encoded address from a verified recipient | Provider-specific composition workflow, not ordinary SMTP credentials |
+| Alias management API | Official API documented; verify current supported endpoints and scopes before integration | Official REST API documents alias, recipient, domain and failed-delivery management | API may manage aliases; do not assume it is an API for arbitrary outbound message submission |
+| Custom domains | Supported on Premium | Supported on Lite/Pro tiers | Requires domain ownership and correct DNS |
+| Self-hosting | Open-source backend; documented Linux/Postfix/PostgreSQL deployment | Open-source application; documented Postfix, PHP, database, Redis and Rspamd deployment | High operational burden: domain, MX, outbound port 25, reverse DNS, SPF, DKIM, DMARC, TLS, monitoring and reputation |
+| Message retention | SimpleLogin security page describes encrypted database/backups and temporary bounced-message storage; verify current retention details before relying on them | Provider says message content is stored only for failed delivery when that option is enabled; logs still contain connection metadata/IPs | Never assume alias provider has zero visibility or zero logs |
+| Transport/security controls | Provider documents SPF/DKIM signing and TLS/domain protections | Provider documents STARTTLS/DANE, SPF/DKIM/DMARC and related protections | These protect transport/domain authenticity, not anonymity from the relay |
+| Content encryption | Optional PGP for mailbox forwarding is documented separately; not equivalent to end-to-end encryption for every recipient | Optional GPG/OpenPGP encryption for forwarded mail | Encryption is a separate property from address masking |
+| Provider trust | Hosted service operated by Proton AG; self-hosting reduces dependence on hosted operator but shifts trust to server operator | Hosted service operated by addy.io; self-hosting shifts trust and operational responsibility to the user | Make trust boundary and data path explicit |
+
+### Specific findings and design decisions
+
+- **SimpleLogin outbound flow:** replies use a per-contact reverse alias. Starting a new conversation requires creating a reverse alias for the intended contact and sending to that special address from the user's normal mailbox. The hosted service then sends from the alias. This is not equivalent to giving MailLoadTester an SMTP host/user/password for SimpleLogin.
+- **addy.io outbound flow:** the user composes in their normal mail client, uses a verified recipient address as From, and places an encoded special send-from address in To. addy.io validates the verified recipient and sends onward from the alias. New sends require Lite or Pro. This is also not a generic SMTP submission endpoint.
+- **API boundary:** addy.io's public API documents account, alias, recipient, domain and failed-delivery operations. Do not infer that this API accepts arbitrary MIME messages for outbound sending. For SimpleLogin, verify the current API scope and documented reverse-alias operations before implementing anything; do not reverse-engineer undocumented endpoints.
+- **Hosted-provider visibility:** the alias service necessarily processes routing information and message delivery. Address masking hides the mailbox address from the external recipient, not from the alias provider, and it does not conceal the user's upstream mailbox account from that mailbox provider.
+- **IP boundary:** Tor only protects the client-to-service network path if that particular connection uses Tor. It does not hide the identity/account authenticated to the mailbox provider, the alias-provider account, message content, custom-domain ownership, or server-side logs.
+- **Self-hosting is not automatically more anonymous:** it reduces reliance on the third-party alias operator but exposes the operator's hosting provider, IP, domain registration, DNS, reverse DNS, mail reputation and server logs as a new trust/identification surface. A home-hosted SMTP server may also have poor deliverability or blocked port 25.
+- **Deliverability/authentication:** forwarding and alias routing can interact with SPF, DKIM and DMARC. Do not chain alias/forwarding services casually. Preserve original authentication evidence and test real outcomes only with a domain and mailbox controlled by the operator.
+- **No credential harvesting:** integrations must not ask for or store the user's primary mailbox password. Any optional provider API token must be explicitly supplied, stored securely, scoped minimally, revocable, and never used to submit arbitrary mail.
+- **No direct send integration in the first iteration:** first implement documentation, provider capability profiles and a configuration/compatibility assistant. A provider-specific alias-management API integration is a later, separately reviewed feature. Do not modify the existing OAuth or classic SMTP sign-in paths.
+
+### Other services for comparison
+
+- Firefox Relay: primarily masks addresses and forwards incoming mail; paid reply-from-mask functionality is constrained by the service's reply workflow. Treat as an address-masking reference, not an SMTP relay.
+- DuckDuckGo Email Protection: primarily forwards masked addresses and removes supported tracking elements from incoming mail. Treat as a reference for tracker inspection, not outbound SMTP.
+- Proton Mail/Proton Pass: distinguish encrypted mailbox capabilities from Pass alias capabilities. Proton Mail Bridge/SMTP access and alias sending are separate product paths with plan and provider constraints.
+- Tor: network transport/privacy layer only; not an email identity or mail relay.
+
+### Implementation sequence
+
+1. Add a sourced provider capability matrix and threat-boundary explanation to the user documentation.
+2. Add provider profile metadata (capabilities, required plan, official docs URL, DNS requirements, API availability, known limitations and last-verified date) without storing provider credentials.
+3. Add a read-only compatibility assistant: validate entered domain/DNS records and explain whether the chosen provider flow is an alias, mailbox or SMTP relay. Do not probe or send to third-party recipients.
+4. Only after separate approval, consider a minimal alias-management API adapter for SimpleLogin or addy.io. Keep API-token storage separate from SMTP credentials and use least-privilege scopes.
+5. Any future end-to-end test must use an operator-controlled domain, mailbox and recipient and explicitly report which providers can observe the account, content and connection metadata.
+
+- Do not implement sender spoofing, provider-policy bypass or mechanisms intended to conceal abusive bulk sending.
 - Explain that Tor can conceal the client IP from the SMTP endpoint when the actual SMTP socket uses Tor, but it does not conceal account identity, message content, relay identity or provider-side records.
 
-**Acceptance:** sourced comparison matrix, threat-model notes, tested safe interoperability against controlled endpoints, and explicit abuse-prevention controls.
-
+**Acceptance:** sourced comparison matrix, clear provider trust boundaries, a documented no-direct-send decision for the first iteration, and tested read-only compatibility checks.
 ## Phase 10 – Post-delivery forensic audit
 
 - Retrieve a delivered test message only from a mailbox/server the operator controls (or accept an uploaded .eml).
